@@ -8,8 +8,13 @@ import * as utils from "./lib/utils.js";
 const { txt } = utils;
 
 ////////////////////////////////////////////////////////////////////////////////
-// Test utilities
+// Setup
 ////////////////////////////////////////////////////////////////////////////////
+
+// Before running tests, clear any existing test data and ensure test folders
+// exist
+utils.clearTestData();
+utils.createTestFolders();
 
 ////////////////////////////////////////////////////////////////////////////////
 // Sister core functionality tests
@@ -18,9 +23,6 @@ const { txt } = utils;
 test(txt.main("Initialization and saveData"), async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
-
-  utils.clearTestData();
-  utils.createTestFolders();
 
   const { pd, localDrivePath, corestorePath, logPath } =
     await utils.createSister("init-test", bootstrap, () =>
@@ -34,9 +36,9 @@ test(txt.main("Initialization and saveData"), async (t) => {
   t.pass(txt.pass("ready() completed"));
 
   const data = pd.getSaveData();
-  t.is(data.watchPath, localDrivePath, txt.pass("watchPath saved"));
-  t.is(data.corestorePath, corestorePath, txt.pass("corestorePath saved"));
-  t.is(data.logOpts.logFilePath, logPath, txt.pass("logFilePath saved"));
+  t.is(data.watchPath, localDrivePath, "watchPath saved");
+  t.is(data.corestorePath, corestorePath, "corestorePath saved");
+  t.is(data.logOpts.logFilePath, logPath, "logFilePath saved");
 });
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -47,9 +49,6 @@ test(txt.main("Join single-node sisterhood"), async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  utils.clearTestData();
-  utils.createTestFolders();
-
   const { pd } = await utils.createSister("net1", bootstrap);
   t.teardown(() => {
     pd.close();
@@ -57,20 +56,12 @@ test(txt.main("Join single-node sisterhood"), async (t) => {
   await pd.ready();
   await pd.joinNetwork();
 
-  if (!pd.connected) {
-    t.fail(txt.fail("Sister did not connect to network"));
-    return;
-  }
-
-  t.pass(txt.pass("Sister connected to network"));
+  t.ok(pd.connected, "Sister connected to network");
 });
 
 test("Connect two peers", async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
-
-  utils.clearTestData();
-  utils.createTestFolders();
 
   const [p1, p2] = await utils.createSisterhood("net-peer", bootstrap, 2);
   t.teardown(() => {
@@ -78,20 +69,17 @@ test("Connect two peers", async (t) => {
     p2.pd.close();
   });
   await utils.wait(1);
-  t.ok(p1.pd.connected && p2.pd.connected, txt.pass("both peers connected"));
+  t.ok(p1.pd.connected && p2.pd.connected, "both peers connected");
 
   const peers1 = p1.pd.listPeers();
   const peers2 = p2.pd.listPeers();
-  t.is(peers1.length, 1, txt.pass("p1 sees 1 peer"));
-  t.is(peers2.length, 1, txt.pass("p2 sees 1 peer"));
+  t.is(peers1.length, 1, "p1 sees 1 peer");
+  t.is(peers2.length, 1, "p2 sees 1 peer");
 });
 
 test(txt.main("Connect five peers"), async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
-
-  utils.clearTestData();
-  utils.createTestFolders();
 
   // Spin up 5 peers
   const peerObjs = await utils.createSisterhood("peer", bootstrap, 5);
@@ -105,13 +93,13 @@ test(txt.main("Connect five peers"), async (t) => {
 
   // Ensure all are connected
   for (const pd of pds) {
-    t.ok(pd.connected, txt.pass("peer is connected"));
+    t.ok(pd.connected, "peer is connected");
   }
 
   // Each peer should see 4 other peers
   for (const pd of pds) {
     const peers = pd.listPeers();
-    t.is(peers.length, 4, txt.pass("peer sees 4 other peers"));
+    t.is(peers.length, 4, "peer sees 4 other peers");
   }
 });
 
@@ -120,10 +108,6 @@ test(txt.main("Connect five peers"), async (t) => {
 ////////////////////////////////////////////////////////////////////////////////
 
 test(txt.main("NETWORK event on connect when files exist"), async (t) => {
-  // clear & recreate mock folders
-  utils.clearTestData();
-  utils.createTestFolders();
-
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -168,20 +152,13 @@ test(txt.main("NETWORK event on connect when files exist"), async (t) => {
   // Give it a moment to handshake & fire events
   await utils.wait(3);
 
-  if (!fired1 || !fired2) {
-    t.fail("NETWORK event not fired on peer connect");
-    return;
-  }
-
-  t.pass(txt.pass("NETWORK event fired on peer connect"));
+  t.ok(fired1, "NETWORK event fired on pd1");
+  t.ok(fired2, "NETWORK event fired on pd2");
 });
 
 test(txt.main("PEER event on sister connect"), async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
-
-  utils.clearTestData();
-  utils.createTestFolders();
 
   // Create two sisters, but only bring up the first
   const sisterA = await utils.createSister("sisterA", bootstrap);
@@ -205,19 +182,12 @@ test(txt.main("PEER event on sister connect"), async (t) => {
   await sisterB.pd.joinNetwork(sisterA.pd.networkKey);
   await utils.wait(1);
 
-  if (connectFired) {
-    t.pass(txt.pass("PEER event fired on sister connect"));
-  } else {
-    t.fail(txt.fail("PEER event did *not* fire on sister connect"));
-  }
+  t.ok(sisterA.pd.connected, "sisterA is connected");
 });
 
 test(txt.main("PEER event on sister disconnect"), async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
-
-  utils.clearTestData();
-  utils.createTestFolders();
 
   // Spin up two sisters in the same sisterhood
   const [p1, p2] = await utils.createSisterhood("peerDisc", bootstrap, 2);
@@ -242,19 +212,12 @@ test(txt.main("PEER event on sister disconnect"), async (t) => {
   await p2.pd.close();
   await utils.wait(1);
 
-  if (disconnectFired) {
-    t.pass(txt.pass("PEER event fired on sister disconnect"));
-  } else {
-    t.fail(txt.fail("PEER event did *not* fire on sister disconnect"));
-  }
+  t.ok(disconnectFired, "PEER event fired on p1 after p2 disconnects");
 });
 
 test(txt.main("LOCAL event on file addition"), async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
-
-  utils.clearTestData();
-  utils.createTestFolders();
 
   const { pd, localDrivePath } = await utils.createSister(
     "local-add",
@@ -279,9 +242,6 @@ test(txt.main("LOCAL event on file addition"), async (t) => {
 test(txt.main("LOCAL event on file deletion"), async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
-
-  utils.clearTestData();
-  utils.createTestFolders();
 
   // create a file before starting
   const name = "local-delete";
@@ -313,9 +273,6 @@ test(txt.main("LOCAL event on file modification"), async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  utils.clearTestData();
-  utils.createTestFolders();
-
   // create a file before starting
   const name = "local-modify";
   const { pd, localDrivePath } = await utils.createSister(
@@ -338,7 +295,7 @@ test(txt.main("LOCAL event on file modification"), async (t) => {
   fs.writeFileSync(filePath, "new content");
   await utils.wait(1);
 
-  t.ok(fired, txt.pass("LOCAL event fired on file modification"));
+  t.ok(fired, "LOCAL event fired on file modification");
 });
 
 test(
@@ -346,13 +303,10 @@ test(
   async (t) => {
     const { bootstrap } = await createTestnet();
 
-    utils.clearTestData();
-    utils.createTestFolders();
-
     // LOCAL
     await t.test(txt.sub("SYSTEM alongside LOCAL"), async (t) => {
       const { pd, localDrivePath } = await utils.createSister(
-        "event-local-",
+        "event-system-local",
         bootstrap
       );
       t.teardown(() => pd.close());
@@ -372,13 +326,17 @@ test(
       utils.createRandomFile(localDrivePath);
       await utils.wait(1);
 
-      t.ok(sawLocal, txt.pass("LOCAL hook fired"));
-      t.ok(sawSystem, txt.pass("SYSTEM also fired on LOCAL"));
+      t.ok(sawLocal, "LOCAL hook fired");
+      t.ok(sawSystem, "SYSTEM also fired on LOCAL");
     });
 
     // PEER
     await t.test(txt.sub("SYSTEM alongside PEER"), async (t) => {
-      const peers = await utils.createSisterhood("event-peer-", bootstrap, 2);
+      const peers = await utils.createSisterhood(
+        "event-system-peer",
+        bootstrap,
+        2
+      );
       const [p1, p2] = peers;
       t.teardown(() => {
         p1.pd.close();
@@ -397,14 +355,18 @@ test(
       // give them a moment to handshake
       await utils.wait(1);
 
-      t.ok(sawPeer, txt.pass("PEER hook fired on p1"));
-      t.ok(sawSystem, txt.pass("GENERAL also fired on PEER"));
+      t.ok(sawPeer, "PEER hook fired on p1");
+      t.ok(sawSystem, "SYSTEM also fired on PEER");
     });
 
     // NETWORK
     await t.test(txt.sub("GENERAL alongside NETWORK"), async (t) => {
       // both peers have index data already, so joining should emit NETWORK
-      const peers = await utils.createSisterhood("event-net-", bootstrap, 2);
+      const peers = await utils.createSisterhood(
+        "event-system-network",
+        bootstrap,
+        2
+      );
       const [p1, p2] = peers;
       t.teardown(() => {
         p1.pd.close();
@@ -423,8 +385,8 @@ test(
       // wait for the index exchange to complete
       await utils.wait(1);
 
-      t.ok(sawNetwork, txt.pass("NETWORK hook fired on p1"));
-      t.ok(sawSystem, txt.pass("GENERAL also fired on NETWORK"));
+      t.ok(sawNetwork, "NETWORK hook fired on p1");
+      t.ok(sawSystem, "SYSTEM also fired on NETWORK");
     });
   }
 );
