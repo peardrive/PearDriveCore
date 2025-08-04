@@ -391,29 +391,61 @@ export default class Sister {
     this.#log.info(`Emitting event: ${eventName}`, payload);
     if (!this._hooks[eventName]) return;
 
-    // Check if event is a built-in event and run GENERAL with it
-    if (
-      eventName === C.EVENT.NETWORK ||
-      eventName === C.EVENT.PEER ||
-      eventName === C.EVENT.NETWORK
-    ) {
-      this._hooks[C.EVENT.GENERAL]?.forEach((cb) => {
+    /**
+     * Prevent infinite loop by running errors thrown inside callbacks in
+     * child function
+     */
+    const emitError = (error) => {
+      this._hooks[C.EVENT.ERROR]?.forEach((cb) => {
         try {
-          cb({ type: eventName, payload });
+          cb(error);
         } catch (err) {
-          this.#log.error("Error in GENERAL hook for", eventName, err);
-          this._emitEvent(C.EVENT.ERROR, err);
+          this.#log.error("Error in ERROR hook for", eventName, err);
         }
       });
+    };
+
+    /**
+     * Run system events once when they are specifically called, and also
+     * run them when any other event is emitted.
+     */
+    const systemEvent = () => {
+      try {
+        this._hooks[C.EVENT.SYSTEM]?.forEach((cb) => {
+          try {
+            cb(payload);
+          } catch (err) {
+            this.#log.error("Error in SYSTEM hook for", eventName, err);
+            emitError(err);
+          }
+        });
+      } catch (err) {
+        this.#log.error("Error in SYSTEM hook for", eventName, err);
+        emitError(err);
+        return;
+      }
+    };
+
+    // Only run system events once
+    if (eventName === C.EVENT.SYSTEM) {
+      systemEvent();
+      return;
     }
 
+    // Only run error events once
+    if (eventName === C.EVENT.ERROR) {
+      emitError(payload);
+    }
+
+    systemEvent();
+
     // Run user-defined hooks
-    this._hooks[eventName].forEach((cb) => {
+    this._hooks[eventName]?.forEach((cb) => {
       try {
         cb(payload);
       } catch (err) {
         this.#log.error("Error in hook for", eventName, err);
-        this._emitEvent(C.EVENT.ERROR, err);
+        emitError(err);
       }
     });
   }

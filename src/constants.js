@@ -18,7 +18,7 @@ export const RPC = {
  */
 export const EVENT = {
   /** Any and all event updates */
-  GENERAL: "general",
+  SYSTEM: "system_update",
   /** Update from peer connection */
   PEER: "peer_event",
   /** Update from a file over the network */

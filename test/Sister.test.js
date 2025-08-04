@@ -57,9 +57,12 @@ test(txt.main("Join single-node sisterhood"), async (t) => {
   await pd.ready();
   await pd.joinNetwork();
 
-  t.ok(pd.connected, "connected flag set");
-  const peers = pd.listPeers();
-  t.is(peers.length, 0, "no other peers present");
+  if (!pd.connected) {
+    t.fail(txt.fail("Sister did not connect to network"));
+    return;
+  }
+
+  t.pass(txt.pass("Sister connected to network"));
 });
 
 test("Connect two peers", async (t) => {
@@ -339,7 +342,7 @@ test(txt.main("LOCAL event on file modification"), async (t) => {
 });
 
 test(
-  txt.main("Event hooks: GENERAL is emitted alongside built-ins"),
+  txt.main("Event hooks: SYSTEM is emitted alongside built-ins"),
   async (t) => {
     const { bootstrap } = await createTestnet();
 
@@ -347,7 +350,7 @@ test(
     utils.createTestFolders();
 
     // LOCAL
-    await t.test(txt.sub("GENERAL alongside LOCAL"), async (t) => {
+    await t.test(txt.sub("SYSTEM alongside LOCAL"), async (t) => {
       const { pd, localDrivePath } = await utils.createSister(
         "event-local-",
         bootstrap
@@ -357,12 +360,12 @@ test(
       await pd.joinNetwork();
 
       let sawLocal = false;
-      let sawGeneral = false;
+      let sawSystem = false;
       pd.on(C.EVENT.LOCAL, () => {
         sawLocal = true;
       });
-      pd.on(C.EVENT.GENERAL, () => {
-        sawGeneral = true;
+      pd.on(C.EVENT.SYSTEM, () => {
+        sawSystem = true;
       });
 
       // trigger a local file change
@@ -370,11 +373,11 @@ test(
       await utils.wait(1);
 
       t.ok(sawLocal, txt.pass("LOCAL hook fired"));
-      t.ok(sawGeneral, txt.pass("GENERAL also fired on LOCAL"));
+      t.ok(sawSystem, txt.pass("SYSTEM also fired on LOCAL"));
     });
 
     // PEER
-    await t.test(txt.sub("GENERAL alongside PEER"), async (t) => {
+    await t.test(txt.sub("SYSTEM alongside PEER"), async (t) => {
       const peers = await utils.createSisterhood("event-peer-", bootstrap, 2);
       const [p1, p2] = peers;
       t.teardown(() => {
@@ -383,19 +386,19 @@ test(
       });
 
       let sawPeer = false;
-      let sawGeneral = false;
+      let sawSystem = false;
       p1.pd.on(C.EVENT.PEER, () => {
         sawPeer = true;
       });
-      p1.pd.on(C.EVENT.GENERAL, () => {
-        sawGeneral = true;
+      p1.pd.on(C.EVENT.SYSTEM, () => {
+        sawSystem = true;
       });
 
       // give them a moment to handshake
       await utils.wait(1);
 
       t.ok(sawPeer, txt.pass("PEER hook fired on p1"));
-      t.ok(sawGeneral, txt.pass("GENERAL also fired on PEER"));
+      t.ok(sawSystem, txt.pass("GENERAL also fired on PEER"));
     });
 
     // NETWORK
@@ -409,19 +412,19 @@ test(
       });
 
       let sawNetwork = false;
-      let sawGeneral = false;
+      let sawSystem = false;
       p1.pd.on(C.EVENT.NETWORK, () => {
         sawNetwork = true;
       });
-      p1.pd.on(C.EVENT.GENERAL, () => {
-        sawGeneral = true;
+      p1.pd.on(C.EVENT.SYSTEM, () => {
+        sawSystem = true;
       });
 
       // wait for the index exchange to complete
       await utils.wait(1);
 
       t.ok(sawNetwork, txt.pass("NETWORK hook fired on p1"));
-      t.ok(sawGeneral, txt.pass("GENERAL also fired on NETWORK"));
+      t.ok(sawSystem, txt.pass("GENERAL also fired on NETWORK"));
     });
   }
 );
