@@ -1,0 +1,7 @@
+node_modules
+test/mock
+dist
+
+/* Ignore backup files */
+*.bak.*
+*.bak
