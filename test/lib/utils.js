@@ -5,6 +5,7 @@ import path from "path";
 import * as Ctest from "./constants.js";
 import * as C from "../../src/constants.js";
 import Sister from "../../src/Sister.js";
+import LocalFileIndex from "../../src/LocalFileIndex.js";
 
 /** Generate random string of given length */
 export function generateString(length = 8) {
@@ -162,10 +163,19 @@ export function areObjectsEqual(obj1, obj2) {
  * @param {string} name - Unique test identifier
  * @param {Uint8Array[]} bootstrap - DHT bootstrap nodes
  * @param {Function} [onError] - Optional error handler callback
+ * @param {Object} [indexOpts] - Optional index options
  *
  * @returns {Promise<Object>} - { pd, localDrivePath, corestorePath, logPath }
  */
-export async function createSister(name, bootstrap, onError = () => {}) {
+export async function createSister(
+  name,
+  bootstrap,
+  onError = () => {},
+  indexOpts = {
+    poll: true,
+    pollInterval: 500,
+  }
+) {
   // prepare directories
   const localDrivePath = path.join(Ctest.LD_DIR, name);
   const corestorePath = path.join(Ctest.CORESTORE_DIR, name);
@@ -184,6 +194,7 @@ export async function createSister(name, bootstrap, onError = () => {}) {
       logFilePath: logPath,
       logToConsole: false,
     },
+    indexOpts,
     onError,
   });
 
@@ -217,5 +228,56 @@ export async function createSisterhood(
     }
     peers.push(peer);
   }
+
+  await awaitAllConnected(peers.map((p) => p.pd));
   return peers;
+}
+
+/**
+ * Creates and initializes a LocalFileIndex instance with proper test paths
+ * @param {string} [name] - Optional unique test ID
+ */
+async function makeLocalFileIndex(
+  name = utils.generateString(),
+  poll = true,
+  pollInterval = 500
+) {
+  // Create directories
+  const localDrivePath = path.join(Ctest.LD_DIR, name);
+  const corestorePath = path.join(Ctest.CORESTORE_DIR, name);
+  const logPath = path.join(Ctest.LOG_DIR, `${name}.log`);
+  fs.mkdirSync(localDrivePath, { recursive: true });
+  fs.mkdirSync(corestorePath, { recursive: true });
+
+  // Create dependency objects
+  const log = new Logger({
+    logToFile: true,
+    logFilePath: logPath,
+  });
+  const indexOpts = {
+    poll,
+    pollInterval,
+  };
+
+  const store = new Corestore(corestorePath);
+
+  // create LocalFileIndex instance
+  const indexer = new LocalFileIndex({
+    store,
+    watchPath: localDrivePath,
+    name,
+    log,
+    emitEvent: (eventName, payload) => {
+      log.info(`Event emitted: ${eventName}`, payload);
+    },
+    indexOpts,
+  });
+
+  return {
+    indexer,
+    localDrivePath,
+    corestorePath,
+    logPath,
+    name,
+  };
 }

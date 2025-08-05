@@ -16,25 +16,25 @@ import { TransferManager } from "./TransferManager.js";
  * P2P networking system for node.js applications.
  ******************************************************************************/
 export default class Sister {
-  /** @private {Hyperswarm} */
+  /** @private {Hyperswarm} Hyperswarm object for peer discovery */
   _swarm;
-  /** @private {Corestore} */
+  /** @private {Corestore} Corestore for all hypercores */
   _store;
-  /** @private {Map<string, RPC>} */
+  /** @private {Map<string, RPC>} RPC Sister connections */
   _rpcConnections;
-  /** @private {Logger} */
+  /** @private {Logger} Logger */
   #log;
-  /** @private {IndexManager} */
+  /** @private {IndexManager} Index manager for watching network/local files */
   _indexManager;
-  /** @private {TransferManager} */
+  /** @private {TransferManager} Transfer manager for handling file downloads */
   _transferManager;
-  /** @private {string} */
+  /** @private {string} Absolute path to corestore */
   _corestorePath;
-  /** @private {string} */
+  /** @private {string} Path to Sister's local file storage */
   _watchPath;
-  /** @private {string} */
+  /** @private {string} Name of the local indexer */
   _indexName;
-  /** @private */
+  /** @private List of event callbacks*/
   _hooks;
 
   /**
@@ -63,7 +63,7 @@ export default class Sister {
   constructor({
     corestorePath,
     watchPath,
-    indexName = "local-file-indexer",
+    indexName = "local-file-index",
     swarmOpts = {},
     logOpts = {},
     indexOpts = {},
@@ -102,6 +102,7 @@ export default class Sister {
       log: this.#log,
       watchPath: watchPath,
       emitEvent: this._emitEvent,
+      indexOpts: this._indexOpts,
     });
     this._transferManager = new TransferManager({
       log: this.#log,
@@ -203,6 +204,40 @@ export default class Sister {
     this.#log.info("Sister closed.");
   }
 
+  /** Activate automatic polling for the local file index */
+  activateLocalFileSyncing() {
+    this.#log.info("Activating automatic polling for local files...");
+    this._indexManager.startPolling();
+    this._syncConfig();
+  }
+
+  /** Deactivate automatic polling for the local file index */
+  deactivateLocalFileSyncing() {
+    this.#log.info("Deactivating automatic polling for local files...");
+    this._indexManager.stopPolling();
+    this._syncConfig();
+  }
+
+  /**
+   * Poll the local file index once
+   *
+   * @returns {Promise<void>}
+   */
+  async syncLocalFilesOnce() {
+    if (this._indexOpts.poll) {
+      this.#log.warn(
+        "Can't manually sync local files, automatic syncing is enabled."
+      );
+    }
+
+    this.#log.info("Syncing local files...");
+    try {
+      await this._indexManager.localIndex.pollOnce();
+    } catch {
+      this.#log.warn("Could not sync local files, autopolling may be enabled.");
+    }
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Private functions
   //////////////////////////////////////////////////////////////////////////////
@@ -217,6 +252,11 @@ export default class Sister {
    * @private
    */
   _createRPC(conn) {
+    this.#log.info(
+      `Creating RPC for connection from ${utils.formatToStr(
+        conn.remotePublicKey
+      )}`
+    );
     const rpc = new RPC(conn, { valueEncoding: c.json });
     rpc.on("close", () => this._onDisconnect(conn));
 

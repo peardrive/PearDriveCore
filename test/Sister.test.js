@@ -33,7 +33,7 @@ test(txt.main("Initialization and saveData"), async (t) => {
   });
 
   await pd.ready();
-  t.pass(txt.pass("ready() completed"));
+  t.pass("ready() completed");
 
   const data = pd.getSaveData();
   t.is(data.watchPath, localDrivePath, "watchPath saved");
@@ -107,286 +107,189 @@ test(txt.main("Connect five peers"), async (t) => {
 // Sister Event Emitter tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("NETWORK event on connect when files exist"), async (t) => {
+test(txt.main("NETWORK events"), async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  // Create two Sister instances but don't join yet
-  const pd1 = await utils.createSister("net-event-1", bootstrap, () => {
-    t.fail("onError called");
-  });
-  const pd2 = await utils.createSister("net-event-2", bootstrap, () => {
-    t.fail("onError called");
-  });
-
+  const [sisterA, sisterB] = await utils.createSisterhood(
+    "network-events",
+    bootstrap,
+    2
+  );
   t.teardown(async () => {
-    await pd1.pd.close();
-    await pd2.pd.close();
+    sisterA.pd.close();
+    sisterB.pd.close();
   });
 
-  // Initialize both
-  await pd1.pd.ready();
-  await pd2.pd.ready();
-
-  // Track NETWORK events
-  let fired1 = false;
-  let fired2 = false;
-  pd1.pd.on(C.EVENT.NETWORK, () => {
-    fired1 = true;
+  let networkAFired = false;
+  let systemAFired = false;
+  let networkBFired = false;
+  let systemBFired = false;
+  sisterA.pd.on(C.EVENT.NETWORK, () => {
+    networkAFired = true;
   });
-  pd2.pd.on(C.EVENT.NETWORK, () => {
-    fired2 = true;
+  sisterA.pd.on(C.EVENT.SYSTEM, () => {
+    systemAFired = true;
+  });
+  sisterB.pd.on(C.EVENT.NETWORK, () => {
+    networkBFired = true;
+  });
+  sisterB.pd.on(C.EVENT.SYSTEM, () => {
+    systemBFired = true;
   });
 
-  // Create a file in pd1's local drive
-  const filePath = path.join(pd1.localDrivePath, "test-file.txt");
-  fs.writeFileSync(filePath, "Heyyy sister!");
-  // Create a file in pd2' local drive
-  const filePath2 = path.join(pd2.localDrivePath, "test-file2.txt");
-  fs.writeFileSync(filePath2, "Purr!");
+  //
+  // Test NETWORK event on file addition
+  //
 
-  // Now join the swarm
-  await pd1.pd.joinNetwork();
-  await pd2.pd.joinNetwork(pd1.pd.networkKey);
+  utils.createRandomFile(sisterA.localDrivePath);
+  await sisterA.pd.syncLocalFilesOnce();
+  await utils.wait(1);
 
-  // Give it a moment to handshake & fire events
-  await utils.wait(3);
+  t.ok(networkBFired, "NETWORK event fired on sisterB after file addition");
+  t.ok(systemBFired, "SYSTEM event fired on sisterB after file addition");
 
-  t.ok(fired1, "NETWORK event fired on pd1");
-  t.ok(fired2, "NETWORK event fired on pd2");
+  //
+  // Test NETWORK event on file modification
+  //
+
+  networkBFired = false;
+  systemBFired = false;
+
+  const modifiedContent = "modified content";
+  const filePath = path.join(sisterA.localDrivePath, "to-modify.txt");
+  fs.writeFileSync(filePath, modifiedContent);
+  await sisterA.pd.syncLocalFilesOnce();
+  await utils.wait(1);
+
+  t.ok(networkBFired, "NETWORK event fired on sisterB after file modification");
+  t.ok(systemBFired, "SYSTEM event fired on sisterB after file modification");
+
+  //
+  // Test NETWORK event on file deletion
+  //
+
+  networkBFired = false;
+  systemBFired = false;
+
+  fs.unlinkSync(filePath);
+  await sisterA.pd.syncLocalFilesOnce();
+  await utils.wait(1);
+
+  t.ok(networkBFired, "NETWORK event fired on sisterB after file deletion");
+  t.ok(systemBFired, "SYSTEM event fired on sisterB after file deletion");
 });
 
-test(txt.main("PEER event on sister connect"), async (t) => {
+test(txt.main("PEER events"), async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  // Create two sisters, but only bring up the first
   const sisterA = await utils.createSister("sisterA", bootstrap);
   const sisterB = await utils.createSister("sisterB", bootstrap);
   t.teardown(async () => {
     await sisterA.pd.close();
     await sisterB.pd.close();
   });
-
   await sisterA.pd.ready();
   await sisterB.pd.ready();
 
-  // Listen for PEER event on A
-  let connectFired = false;
+  let peerAFired = false;
+  let systemAFired = false;
+  let peerBFired = false;
+  let systemBFired = false;
   sisterA.pd.on(C.EVENT.PEER, () => {
-    connectFired = true;
+    peerAFired = true;
+  });
+  sisterA.pd.on(C.EVENT.SYSTEM, () => {
+    systemAFired = true;
+  });
+  sisterB.pd.on(C.EVENT.PEER, () => {
+    peerBFired = true;
+  });
+  sisterB.pd.on(C.EVENT.SYSTEM, () => {
+    systemBFired = true;
   });
 
-  // Now join B into A’s network
+  //
+  // Test PEER event on connect
+  //
   await sisterA.pd.joinNetwork();
   await sisterB.pd.joinNetwork(sisterA.pd.networkKey);
-  await utils.wait(1);
+  await utils.awaitAllConnected([sisterA.pd, sisterB.pd]);
 
-  t.ok(sisterA.pd.connected, "sisterA is connected");
+  t.ok(peerAFired, "PEER event fired on sisterA");
+  t.ok(systemAFired, "SYSTEM event fired on sisterA");
+  t.ok(peerBFired, "PEER event fired on sisterB");
+  t.ok(systemBFired, "SYSTEM event fired on sisterB");
+
+  //
+  // Test PEER event on disconnect
+  //
+  // Only look at peer A, because B will be removed from A's peer list
+  peerAFired = false;
+  systemAFired = false;
+  await sisterB.pd.close();
+  await utils.wait(1);
+  t.ok(peerAFired, "PEER event fired on sisterA after sisterB disconnects");
+  t.ok(systemAFired, "SYSTEM event fired on sisterA after sisterB disconnects");
 });
 
-test(txt.main("PEER event on sister disconnect"), async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
-
-  // Spin up two sisters in the same sisterhood
-  const [p1, p2] = await utils.createSisterhood("peerDisc", bootstrap, 2);
-  t.teardown(async () => {
-    await p1.pd.close();
-    await p2.pd.close();
-  });
-
-  // Listen for PEER on p1
-  let disconnectFired = false;
-  p1.pd.on(C.EVENT.PEER, (peerId) => {
-    // after shutdown, p1.listPeers() will no longer include p2
-    if (!p1.pd.listPeers().find((p) => p.publicKey === peerId)) {
-      disconnectFired = true;
-    }
-  });
-
-  // Give them a moment to connect
-  await utils.wait(1);
-
-  // Now tear down p2
-  await p2.pd.close();
-  await utils.wait(1);
-
-  t.ok(disconnectFired, "PEER event fired on p1 after p2 disconnects");
-});
-
-test(txt.main("LOCAL event on file addition"), async (t) => {
+test(txt.main("LOCAL events"), async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
   const { pd, localDrivePath } = await utils.createSister(
-    "local-add",
+    "local-events",
     bootstrap,
-    (err) => t.fail(txt.fail("onError called"), err)
+    (err) => t.fail(txt.fail("onError called"), err),
+    { poll: false, pollInterval: 500 }
   );
   t.teardown(() => pd.close());
   await pd.ready();
 
-  let fired = false;
+  //
+  // Test file addition event
+  //
+
+  let localFired = false;
+  let systemFired = false;
   pd.on(C.EVENT.LOCAL, () => {
-    fired = true;
+    localFired = true;
+  });
+  pd.on(C.EVENT.SYSTEM, () => {
+    systemFired = true;
   });
 
-  // create a new file
-  utils.createRandomFile(localDrivePath);
-  await utils.wait(1);
+  const file = utils.createRandomFile(localDrivePath);
+  await pd.syncLocalFilesOnce();
 
-  t.ok(fired, txt.pass("LOCAL event fired on file addition"));
+  t.ok(localFired, "LOCAL event fired on file addition");
+  t.ok(systemFired, "SYSTEM event fired on file addition");
+
+  //
+  // Test file modification event
+  //
+
+  localFired = false;
+  systemFired = false;
+
+  const modifiedContent = "modified content";
+  fs.writeFileSync(file.path, modifiedContent);
+  await pd.syncLocalFilesOnce();
+
+  t.ok(localFired, "LOCAL event fired on file modification");
+  t.ok(systemFired, "SYSTEM event fired on file modification");
+
+  //
+  // Test file deletion event
+  //
+
+  localFired = false;
+  systemFired = false;
+
+  fs.unlinkSync(file.path);
+  await pd.syncLocalFilesOnce();
+
+  t.ok(localFired, "LOCAL event fired on file deletion");
+  t.ok(systemFired, "SYSTEM event fired on file deletion");
 });
-
-test(txt.main("LOCAL event on file deletion"), async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
-
-  // create a file before starting
-  const name = "local-delete";
-  const { pd, localDrivePath } = await utils.createSister(
-    name,
-    bootstrap,
-    (err) => t.fail(txt.fail("onError called"), err)
-  );
-  // make an initial file
-  const filePath = path.join(localDrivePath, "to-delete.txt");
-  fs.writeFileSync(filePath, "delete me");
-
-  t.teardown(() => pd.close());
-  await pd.ready();
-
-  let fired = false;
-  pd.on(C.EVENT.LOCAL, () => {
-    fired = true;
-  });
-
-  // remove the file
-  fs.unlinkSync(filePath);
-  await utils.wait(2);
-
-  t.ok(fired, txt.pass("LOCAL event fired on file deletion"));
-});
-
-test(txt.main("LOCAL event on file modification"), async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
-
-  // create a file before starting
-  const name = "local-modify";
-  const { pd, localDrivePath } = await utils.createSister(
-    name,
-    bootstrap,
-    (err) => t.fail(txt.fail("onError called"), err)
-  );
-  const filePath = path.join(localDrivePath, "to-modify.txt");
-  fs.writeFileSync(filePath, "original content");
-
-  t.teardown(() => pd.close());
-  await pd.ready();
-
-  let fired = false;
-  pd.on(C.EVENT.LOCAL, () => {
-    fired = true;
-  });
-
-  // modify the file
-  fs.writeFileSync(filePath, "new content");
-  await utils.wait(1);
-
-  t.ok(fired, "LOCAL event fired on file modification");
-});
-
-test(
-  txt.main("Event hooks: SYSTEM is emitted alongside built-ins"),
-  async (t) => {
-    const { bootstrap } = await createTestnet();
-
-    // LOCAL
-    await t.test(txt.sub("SYSTEM alongside LOCAL"), async (t) => {
-      const { pd, localDrivePath } = await utils.createSister(
-        "event-system-local",
-        bootstrap
-      );
-      t.teardown(() => pd.close());
-      await pd.ready();
-      await pd.joinNetwork();
-
-      let sawLocal = false;
-      let sawSystem = false;
-      pd.on(C.EVENT.LOCAL, () => {
-        sawLocal = true;
-      });
-      pd.on(C.EVENT.SYSTEM, () => {
-        sawSystem = true;
-      });
-
-      // trigger a local file change
-      utils.createRandomFile(localDrivePath);
-      await utils.wait(1);
-
-      t.ok(sawLocal, "LOCAL hook fired");
-      t.ok(sawSystem, "SYSTEM also fired on LOCAL");
-    });
-
-    // PEER
-    await t.test(txt.sub("SYSTEM alongside PEER"), async (t) => {
-      const peers = await utils.createSisterhood(
-        "event-system-peer",
-        bootstrap,
-        2
-      );
-      const [p1, p2] = peers;
-      t.teardown(() => {
-        p1.pd.close();
-        p2.pd.close();
-      });
-
-      let sawPeer = false;
-      let sawSystem = false;
-      p1.pd.on(C.EVENT.PEER, () => {
-        sawPeer = true;
-      });
-      p1.pd.on(C.EVENT.SYSTEM, () => {
-        sawSystem = true;
-      });
-
-      // give them a moment to handshake
-      await utils.wait(1);
-
-      t.ok(sawPeer, "PEER hook fired on p1");
-      t.ok(sawSystem, "SYSTEM also fired on PEER");
-    });
-
-    // NETWORK
-    await t.test(txt.sub("GENERAL alongside NETWORK"), async (t) => {
-      // both peers have index data already, so joining should emit NETWORK
-      const peers = await utils.createSisterhood(
-        "event-system-network",
-        bootstrap,
-        2
-      );
-      const [p1, p2] = peers;
-      t.teardown(() => {
-        p1.pd.close();
-        p2.pd.close();
-      });
-
-      let sawNetwork = false;
-      let sawSystem = false;
-      p1.pd.on(C.EVENT.NETWORK, () => {
-        sawNetwork = true;
-      });
-      p1.pd.on(C.EVENT.SYSTEM, () => {
-        sawSystem = true;
-      });
-
-      // wait for the index exchange to complete
-      await utils.wait(1);
-
-      t.ok(sawNetwork, "NETWORK hook fired on p1");
-      t.ok(sawSystem, "SYSTEM also fired on NETWORK");
-    });
-  }
-);

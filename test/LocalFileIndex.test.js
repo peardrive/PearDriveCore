@@ -9,50 +9,6 @@ import * as utils from "./lib/utils.js";
 import * as Ctest from "./lib/constants.js";
 
 ////////////////////////////////////////////////////////////////////////////////
-// Test setup functions
-////////////////////////////////////////////////////////////////////////////////
-
-/**
- * Creates and initializes a LocalFileIndex instance with proper test paths
- * @param {string} [name] - Optional unique test ID
- */
-async function makeLocalFileIndex(name = utils.generateString()) {
-  // Create directories
-  const localDrivePath = path.join(Ctest.LD_DIR, name);
-  const corestorePath = path.join(Ctest.CORESTORE_DIR, name);
-  const logPath = path.join(Ctest.LOG_DIR, `${name}.log`);
-  fs.mkdirSync(localDrivePath, { recursive: true });
-  fs.mkdirSync(corestorePath, { recursive: true });
-
-  // Create dependency objects
-  const log = new Logger({
-    logToFile: true,
-    logFilePath: logPath,
-  });
-
-  const store = new Corestore(corestorePath);
-
-  // create LocalFileIndex instance
-  const indexer = new LocalFileIndex({
-    store,
-    watchPath: localDrivePath,
-    name,
-    log,
-    emitEvent: (eventName, payload) => {
-      log.info(`Event emitted: ${eventName}`, payload);
-    },
-  });
-
-  return {
-    indexer,
-    localDrivePath,
-    corestorePath,
-    logPath,
-    name,
-  };
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // Test cases for LocalFileIndex
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -61,7 +17,9 @@ test("LocalFileIndex: buildIndex creates entries in Hyperbee", async (t) => {
   utils.createTestFolders();
 
   // Set up indexer
-  const { indexer, localDrivePath } = await makeLocalFileIndex("test-index");
+  const { indexer, localDrivePath } = await utils.makeLocalFileIndex(
+    "test-index"
+  );
   for (let i = 0; i < 3; i++) {
     utils.createRandomFile(localDrivePath, 10);
   }
@@ -85,7 +43,9 @@ test("LocalFileIndex: polling detects new file", async (t) => {
   utils.clearTestData();
   utils.createTestFolders();
 
-  const { indexer, localDrivePath } = await makeLocalFileIndex("poll-test");
+  const { indexer, localDrivePath } = await utils.makeLocalFileIndex(
+    "poll-test"
+  );
 
   // Add initial 5 files
   for (let i = 0; i < 5; i++) {

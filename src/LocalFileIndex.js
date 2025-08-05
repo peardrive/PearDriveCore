@@ -12,6 +12,8 @@ import * as C from "./constants.js";
 export default class LocalFileIndex {
   /** Logger instance */
   #log;
+  /** Automatic polling interval function */
+  #poller;
 
   /**
    * @param {Object} opts
@@ -19,19 +21,23 @@ export default class LocalFileIndex {
    * @param {import('corestore')} opts.store - Corestore instance
    * @param {string} opts.watchPath - Path to watch for local files
    * @param {Function} opts.emitEvent - Optional function to emit events
+   * @param {Object} opts.indexOpts - Index options
    * @param {string} [opts.name] - Optional core name
-   *    (defauls to 'local-file-indexer)
+   *    (defauls to 'local-file-index)
    */
   constructor({
     log,
     store,
     watchPath,
     emitEvent,
-    name = "local-file-indexer",
+    indexOpts,
+    name = "local-file-index",
   }) {
     // Logger setup
     this.#log = log;
     this.#log.info("Initializing LocalFileIndex...");
+
+    this.#poller = null;
 
     /** Event emitter */
     this._emitEvent = emitEvent;
@@ -50,6 +56,8 @@ export default class LocalFileIndex {
     this.fileWatchers = new Map();
     /** The hyperbee for file indexer */
     this.bee = null;
+    /** Index options */
+    this._indexOpts = indexOpts;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -91,6 +99,7 @@ export default class LocalFileIndex {
     return {
       watchPath: this.watchPath,
       localFileIndexName: this.name,
+      logOpts: {},
     };
   }
 
@@ -140,19 +149,32 @@ export default class LocalFileIndex {
     return this.bee.key;
   }
 
-  /** Poll intermittently for new files in the local folder */
-  startPolling(interval = 500) {
-    if (this.poller) return;
-
-    this.poller = setInterval(async () => this.#pollAndSync(), interval);
+  /** Poll local files once */
+  pollOnce() {
+    this.#log.info("Polling local files once...");
+    return this.#pollAndSync();
   }
 
-  /** Stop polling for new files */
-  stopPolling() {
-    if (!this.poller) return;
+  /** Poll automatically for new files in the local folder */
+  startPolling() {
+    if (this.#poller) return;
+    this.#log.info("Starting automatic polling for local files...");
 
-    clearInterval(this.poller);
-    this.poller = null;
+    this._indexOpts.poll = true;
+    this.#poller = setInterval(
+      async () => this.#pollAndSync(),
+      this._indexOpts.pollInterval
+    );
+  }
+
+  /** Stop automatic polling for new files in the local folder */
+  stopPolling() {
+    if (!this.#poller) return;
+    this.#log.info("Stopping automatic polling for local files...");
+
+    this._indexOpts.poll = false;
+    clearInterval(this.#poller);
+    this.#poller = null;
   }
 
   //////////////////////////////////////////////////////////////////////////////

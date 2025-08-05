@@ -12,10 +12,6 @@ export class IndexManager {
   _store;
   /** @private {Logger} */
   #log;
-  /** @private {LocalFileIndex} */
-  localIndex;
-  /** @private {Map<string, Hyperbee>} */
-  remoteIndexes;
 
   /**
    * @param {Object} opts
@@ -23,16 +19,19 @@ export class IndexManager {
    * @param {Logger}    opts.log - Logger for informational output
    * @param {string}    opts.watchPath - Path to watch for local files
    * @param {any} opts.emitEvent - Function to emit events
+   * @param {Object} indexOpts - Options for the local file index
    */
-  constructor({ store, log, watchPath, emitEvent }) {
+  constructor({ store, log, watchPath, emitEvent, indexOpts }) {
     this._store = store;
     this._emitEvent = emitEvent;
+    this._indexOpts = indexOpts;
     this.#log = log;
     this.localIndex = new LocalFileIndex({
       store,
       log,
       watchPath,
       emitEvent: this._emitEvent,
+      indexOpts,
     });
     this.remoteIndexes = new Map();
   }
@@ -104,6 +103,8 @@ export class IndexManager {
     return {
       localFileIndexName: this.localIndex.name,
       watchPath: this.localIndex.watchPath,
+      poll: this.localIndex.poll,
+      pollInterval: this.localIndex.pollInterval,
     };
   }
 
