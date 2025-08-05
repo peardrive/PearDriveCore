@@ -20,10 +20,11 @@ utils.createTestFolders();
 // Sister core functionality tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("Initialization and saveData"), async (t) => {
+test(txt.main("Initialization"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
+  // Test initialization
   const { pd, localDrivePath, corestorePath, logPath } =
     await utils.createSister("init-test", bootstrap, () =>
       t.fail("onError called")
@@ -35,17 +36,25 @@ test(txt.main("Initialization and saveData"), async (t) => {
   await pd.ready();
   t.pass("ready() completed");
 
+  // Ensure valid save data
   const data = pd.getSaveData();
   t.is(data.watchPath, localDrivePath, "watchPath saved");
   t.is(data.corestorePath, corestorePath, "corestorePath saved");
   t.is(data.logOpts.logFilePath, logPath, "logFilePath saved");
+
+  // Close the Sister instance
+  await pd.close();
+  t.pass("close() completed");
+
+  // Create a new Sister instance with the same save data
+  console.log("TODO test loading from save data");
 });
 
 ////////////////////////////////////////////////////////////////////////////////
 // Network connectivity tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("Join single-node sisterhood"), async (t) => {
+test(txt.main("Create one-node sisterhood"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -59,7 +68,7 @@ test(txt.main("Join single-node sisterhood"), async (t) => {
   t.ok(pd.connected, "Sister connected to network");
 });
 
-test("Connect two peers", async (t) => {
+test(txt.main("Create two-node sisterhood"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -77,7 +86,7 @@ test("Connect two peers", async (t) => {
   t.is(peers2.length, 1, "p2 sees 1 peer");
 });
 
-test(txt.main("Connect five peers"), async (t) => {
+test(txt.main("Create five-node sisterhood"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -107,7 +116,7 @@ test(txt.main("Connect five peers"), async (t) => {
 // Sister Event Emitter tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("NETWORK events"), async (t) => {
+test(txt.main("NETWORK events"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -180,7 +189,7 @@ test(txt.main("NETWORK events"), async (t) => {
   t.ok(systemBFired, "SYSTEM event fired on sisterB after file deletion");
 });
 
-test(txt.main("PEER events"), async (t) => {
+test(txt.main("PEER events"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -234,7 +243,7 @@ test(txt.main("PEER events"), async (t) => {
   t.ok(systemAFired, "SYSTEM event fired on sisterA after sisterB disconnects");
 });
 
-test(txt.main("LOCAL events"), async (t) => {
+test(txt.main("LOCAL events"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -292,4 +301,12 @@ test(txt.main("LOCAL events"), async (t) => {
 
   t.ok(localFired, "LOCAL event fired on file deletion");
   t.ok(systemFired, "SYSTEM event fired on file deletion");
+});
+
+///////////////////////////////////////////////////////////////////////////////
+// Sisterhood communication tests
+///////////////////////////////////////////////////////////////////////////////
+
+test(txt.main("Custom RPC request"), async (t) => {
+  // TODO
 });

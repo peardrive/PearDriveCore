@@ -4,7 +4,7 @@ export const RPC = {
   PEER_UPDATE: "peer_update",
   NETWORK_NICKNAME_SEND: "network_nickname_send",
   NETWORK_NICKNAME_REQUEST: "network_nickname_request",
-  CUSTOM: "custom_message",
+  CUSTOM_REQUEST: "custom_request",
 
   LOCAL_INDEX_KEY_SEND: "local_index_key_send",
   LOCAL_INDEX_KEY_REQUEST: "local_index_key_request",

@@ -11,7 +11,7 @@
     "lint": "eslint ./src",
     "test": "brittle test/*.test.js",
     "test-index": "brittle test/LocalFileIndex.test.js",
-    "test-sister": "brittle test/Sister.test.js",
+    "test-sis": "brittle test/Sister.test.js",
     "build-code": "javascript-obfuscator src --output dist && tsc",
     "build-meta": "cp README.md dist && cp package.json dist && cp package-lock.json dist",
     "build-docs": "typedoc",

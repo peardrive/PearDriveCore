@@ -277,6 +277,15 @@ export default class Sister {
       );
       return this._onLocalIndexKeyRequest(conn);
     });
+    rpc.respond(C.RPC.CUSTOM_REQUEST, async (payload) => {
+      this.#log.info(
+        `Handling CUSTOM_REQUEST from ${utils.formatToStr(
+          conn.remotePublicKey
+        )}`
+      );
+      // Custom request handling can be added here
+      return this._onCustomRequest(conn, payload);
+    });
 
     return rpc;
   }
@@ -488,6 +497,16 @@ export default class Sister {
         emitError(err);
       }
     });
+  }
+
+  async _onCustomRequest(conn, payload) {
+    this.#log.info(
+      `Handling CUSTOM_REQUEST from ${utils.formatToStr(conn.remotePublicKey)}`
+    );
+    // Custom request handling can be added here
+    // For now, just log the payload
+    this.#log.info("Custom request payload:", payload);
+    return { status: "success", message: "Custom request handled" };
   }
 
   /**

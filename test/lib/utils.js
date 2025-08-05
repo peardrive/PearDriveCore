@@ -113,7 +113,7 @@ export function createTestFolders() {
 /** Text formats for test suite logs */
 export const txt = {
   /** Primary test format */
-  main: (text) => chalk.bold.underline(text),
+  main: (text) => chalk.bold(text),
   /** Subtest format */
   sub: (text) => chalk.gray(text),
   /** Passed test format */
