@@ -1,3 +1,17 @@
+/*!
+ * Copyright (C) 2025 Jenna Baudelaire
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+/**
+ * @remarks Manages the indexing of all files locally and on the network.
+ */
+
 import Hyperbee from "hyperbee";
 import * as C from "./constants.js";
 import LocalFileIndex from "./LocalFileIndex.js";

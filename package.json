@@ -1,8 +1,8 @@
 {
   "name": "@hopets/sisterjs",
   "version": "1.0.0",
-  "main": "./dist/PearDrive.js",
-  "module": "./dist/PearDrive.js",
+  "main": "./dist/Sister.js",
+  "module": "./dist/Sister.js",
   "type": "module",
   "license": "AGPL-3.0-only",
   "author": "Jenna Baudelaire (GitHub HopeTS) <jennabaudelaire@pm.me>",
@@ -12,11 +12,9 @@
     "test": "brittle test/*.test.js",
     "test-index": "brittle test/LocalFileIndex.test.js",
     "test-sis": "brittle test/Sister.test.js",
-    "generate-dts": "tsc",
     "clear-dist": "rm -rf dist",
-    "make-dist": "tsc && cp -R src/. dist/ && cp package.json dist/",
+    "make-dist": "tsc && cp -R src/. dist/",
     "build-code": "npm run clear-dist && npm run make-dist",
-    "build-meta": "cp README.md dist && cp package.json dist && cp package-lock.json dist",
     "build-docs": "typedoc",
     "build": "npm run build-code && npm run build-meta && npm run build-docs",
     "deploy": "npm run build && npm publish"
@@ -49,12 +47,14 @@
   },
   "exports": {
     ".": {
-      "import": "./dist/PearDrive.js",
-      "require": "./dist/PearDrive.js"
+      "import": "./dist/Sister.js",
+      "require": "./dist/Sister.js"
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "devDependencies": {
     "@eslint/js": "^9.16.0",

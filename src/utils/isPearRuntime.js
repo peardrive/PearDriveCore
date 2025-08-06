@@ -1,3 +1,12 @@
+/*!
+ * Copyright (C) 2025 Jenna Baudelaire
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/**
+ * @remarks Determines whether the current environment is a Pear runtime.
+ */
+
 /**
  * Determine whether environment is Pear runtime
  *

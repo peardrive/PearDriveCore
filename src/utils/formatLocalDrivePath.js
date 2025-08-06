@@ -1,8 +1,17 @@
+/*!
+ * Copyright (C) 2025 Jenna Baudelaire
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/**
+ * @remarks Convert a raw absolute path to a path that will be properly
+ *  handled
+ */
+
 import path from "path";
 
 /**
- * Convert a raw absolute path to a path that will be properly handled by
- * localdrive and watch-drive
+ * Convert a raw absolute path to a path that will be properly handled
  *
  * @param {String} inputPath - Absolute path to localdrive
  * @param {String} root - Root path of project

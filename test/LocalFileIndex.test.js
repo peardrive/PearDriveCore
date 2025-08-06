@@ -2,9 +2,9 @@ import test from "brittle";
 import Corestore from "corestore";
 import fs from "fs";
 import path from "path";
+import Logger from "@hopets/logger";
 
 import LocalFileIndex from "../src/LocalFileIndex.js";
-import Logger from "../src/Logger.js";
 import * as utils from "./lib/utils.js";
 import * as Ctest from "./lib/constants.js";
 

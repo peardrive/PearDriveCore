@@ -1,12 +1,26 @@
+/*!
+ * Copyright (C) 2025 Jenna Baudelaire
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+/**
+ * @remarks P2P networking system for node.js applications.
+ */
+
 import Hyperswarm from "hyperswarm";
 import Corestore from "corestore";
 import RPC from "protomux-rpc";
 import c from "compact-encoding";
-import Logger from "./Logger.js";
+import Hyperbee from "hyperbee";
+import Logger from "@hopets/logger";
+
 import * as C from "./constants.js";
 import * as utils from "./utils/index.js";
-import Hyperbee from "hyperbee";
-
 import { IndexManager } from "./IndexManager.js";
 import { TransferManager } from "./TransferManager.js";
 
@@ -14,7 +28,10 @@ import { TransferManager } from "./TransferManager.js";
 export const purse = utils;
 
 /** Built-in events, attach callbacks to these events with the on() function */
-export const events = C.EVENT;
+export const EVENT = C.EVENT;
+
+/** RPC event names SisterJS uses */
+export const RPC_EVENT = C.RPC;
 
 /*******************************************************************************
  * Sister.js
@@ -42,6 +59,12 @@ export default class Sister {
   _indexName;
   /** @private List of event callbacks*/
   _hooks;
+  /** @private Stored indexer options */
+  _indexOpts;
+  /** @private Stored hyperswarm options */
+  _swarmOpts;
+  /** @private Logger options */
+  _logOpts;
 
   /**
    * @param {Object} opts
@@ -71,7 +94,9 @@ export default class Sister {
     watchPath,
     indexName = "local-file-index",
     swarmOpts = {},
-    logOpts = {},
+    logOpts = {
+      logToConsole: true,
+    },
     indexOpts = {},
   }) {
     this._emitEvent = this._emitEvent.bind(this);
@@ -90,7 +115,7 @@ export default class Sister {
     };
 
     // Set up logging
-    this.#log = new Logger(logOpts);
+    this.#log = new Logger(this._logOpts);
     this.#log.info("Initializing Sister...");
 
     // Set up corestore and swarm
@@ -569,6 +594,11 @@ export default class Sister {
     }
   }
 
+  /**
+   * Handler for messages from sisters
+   *
+   * @private
+   */
   async _onMessage(conn, rawPayload) {
     try {
       const { type, payload } = JSON.parse(rawPayload);
@@ -597,7 +627,7 @@ export default class Sister {
   }
 
   /**
-   * Send an RPC message to a connected peer.
+   * Send an RPC message to a connected sister.
    *
    * @param {string} peerId – Hex-encoded public key of the peer
    * @param {string} type – RPC method name (e.g. C.RPC.LOCAL_INDEX_KEY_SEND)

@@ -2,12 +2,12 @@ import fs from "fs";
 import chalk from "chalk";
 import path from "path";
 import Corestore from "corestore";
+import Logger from "@hopets/logger";
 
 import * as Ctest from "./constants.js";
 import * as C from "../../src/constants.js";
 import Sister from "../../src/Sister.js";
 import LocalFileIndex from "../../src/LocalFileIndex.js";
-import Logger from "../../src/Logger.js";
 
 /** Generate random string of given length */
 export function generateString(length = 8) {

@@ -20,7 +20,7 @@ utils.createTestFolders();
 // Sister core functionality tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("Initialization"), { stealth: true }, async (t) => {
+test(txt.main("Initialization"), async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
