@@ -1,11 +1,13 @@
 import fs from "fs";
 import chalk from "chalk";
 import path from "path";
+import Corestore from "corestore";
 
 import * as Ctest from "./constants.js";
 import * as C from "../../src/constants.js";
 import Sister from "../../src/Sister.js";
 import LocalFileIndex from "../../src/LocalFileIndex.js";
+import Logger from "../../src/Logger.js";
 
 /** Generate random string of given length */
 export function generateString(length = 8) {
@@ -237,7 +239,7 @@ export async function createSisterhood(
  * Creates and initializes a LocalFileIndex instance with proper test paths
  * @param {string} [name] - Optional unique test ID
  */
-async function makeLocalFileIndex(
+export async function makeLocalFileIndex(
   name = utils.generateString(),
   poll = true,
   pollInterval = 500

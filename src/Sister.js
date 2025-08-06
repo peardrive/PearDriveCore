@@ -10,6 +10,12 @@ import Hyperbee from "hyperbee";
 import { IndexManager } from "./IndexManager.js";
 import { TransferManager } from "./TransferManager.js";
 
+/** The utils toolbox SisterJS uses */
+export const purse = utils;
+
+/** Built-in events, attach callbacks to these events with the on() function */
+export const events = C.EVENT;
+
 /*******************************************************************************
  * Sister.js
  * ---
@@ -145,11 +151,12 @@ export default class Sister {
   /**
    * Wire up hooks for events here.
    */
-  on(event, callback) {
-    if (!this._hooks[event]) {
-      this._hooks[event] = [];
+  on(event, cb) {
+    this.#log.info(`Registering hook for event: ${event}`);
+    if (this._hooks[event]) {
+      this.#log.warn(`Overriding existing hook for event: ${event}`);
     }
-    this._hooks[event].push(callback);
+    this._hooks[event] = cb;
   }
 
   /**
@@ -181,18 +188,86 @@ export default class Sister {
   }
 
   /**
-   * List all connected peers with their public key and remote index key.
+   * Send a message to a given peer. Whatever the type you set for the message,
+   * it must have a callback hook on the receiving peer using the on() method.
+   * If the peer has a callback set that returns something, this function
+   * will return that value.
    *
-   * @returns {Array<{publicKey: string, hyperbeeKey: string|null}>}
+   * @param {Uint8Array | ArrayBuffer | string} peerId - Hex-encoded public key
+   *  of the peer
+   *
+   * @param {string} type - Type of the message, this can be any string except
+   *  the reserved RPC types.
+   *
+   * @param {any} payload - Data to send to the peer
+   *
+   * @returns {Promise<any>} - Response from the peer
+   *
+   * @throws {Error} If no RPC connection is found for the peer
+   */
+  async sendMessage(peerId, type, payload) {
+    // Get RPC connection for the peer
+    const rpc = this._rpcConnections.get(utils.formatToStr(peerId));
+    if (!rpc) {
+      const err = new Error(`No RPC connection found for peer ${peerId}`);
+      this.#log.error(err);
+      this._emitEvent(C.EVENT.ERROR, err);
+      throw err;
+    }
+
+    try {
+      this.#log.info(`Sending "${type}" to ${peerId} with payload`, payload);
+      const response = await rpc.request(
+        C.RPC.MESSAGE,
+        JSON.stringify({
+          type,
+          payload,
+        })
+      );
+      this.#log.info(
+        `Received response for "${type}" from ${peerId}:`,
+        response
+      );
+      return response;
+    } catch (err) {
+      this.#log.error(`RPC request "${type}" to ${peerId} failed`, err);
+      (this._hooks[C.EVENT.ERROR] || []).forEach((cb) => cb(err));
+      throw err;
+    }
+  }
+
+  /**
+   * List all connected peers with their public key and remote index key. This
+   * funtion returns the raw buffer keys, if you want the stringified keys,
+   * use listPeersStringified() instead.
+   *
+   * @returns {Array<{publicKey: ArrayBuffer, hyperbeeKey: ArrayBuffer|null}>}
    */
   listPeers() {
     const peers = [];
-    for (const [peerId, rpc] of this._rpcConnections.entries()) {
+    // TODO fix this
+    for (const [peerId, _rpc] of this._rpcConnections.entries()) {
       const bee = this._indexManager.remoteIndexes.get(peerId);
-      const hyperbeeKey = bee ? bee.core.key.toString("hex") : null;
+      const hyperbeeKey = bee ? bee.core.key : null;
       peers.push({ publicKey: peerId, hyperbeeKey });
     }
     return peers;
+  }
+
+  /**
+   * List all connected peers with their public key and remote index key. This
+   * function returns the stringified keys, if you want the raw buffer keys,
+   * use listPeers() instead.
+   *
+   * @returns {Array<{publicKey: string, hyperbeeKey: string|null}>}
+   */
+  listPeersStringified() {
+    return this.listPeers().map((peer) => ({
+      publicKey: utils.formatToStr(peer.publicKey),
+      hyperbeeKey: peer.hyperbeeKey
+        ? utils.formatToStr(peer.hyperbeeKey)
+        : null,
+    }));
   }
 
   /** Close Sister gracefully */
@@ -277,14 +352,12 @@ export default class Sister {
       );
       return this._onLocalIndexKeyRequest(conn);
     });
-    rpc.respond(C.RPC.CUSTOM_REQUEST, async (payload) => {
+    rpc.respond(C.RPC.MESSAGE, async (payload) => {
       this.#log.info(
-        `Handling CUSTOM_REQUEST from ${utils.formatToStr(
-          conn.remotePublicKey
-        )}`
+        `Handling MESSAGE from ${utils.formatToStr(conn.remotePublicKey)}`
       );
       // Custom request handling can be added here
-      return this._onCustomRequest(conn, payload);
+      return this._onMessage(conn, payload);
     });
 
     return rpc;
@@ -373,7 +446,7 @@ export default class Sister {
     let peerKeyHex;
     try {
       this.#log.info(`Requesting LOCAL_INDEX_KEY from ${peerId}…`);
-      peerKeyHex = await this._sendMessageToPeer(
+      peerKeyHex = await this._sendInternalMessageToPeer(
         peerId,
         C.RPC.LOCAL_INDEX_KEY_REQUEST,
         null
@@ -398,7 +471,10 @@ export default class Sister {
       await this._indexManager.addBee(peerId, bee);
       this.#log.info(`Registered remote index for ${peerId}`);
     } catch (err) {
-      this.#log.error(`Error registering remote index for ${peerId}`, err);
+      this.#log.error(
+        `Error registering remote i_sendMesndex for ${peerId}`,
+        err
+      );
       return;
     }
     this._transferManager.handlePeerConnected(peerId, rpc);
@@ -445,13 +521,13 @@ export default class Sister {
      * child function
      */
     const emitError = (error) => {
-      this._hooks[C.EVENT.ERROR]?.forEach((cb) => {
-        try {
-          cb(error);
-        } catch (err) {
-          this.#log.error("Error in ERROR hook for", eventName, err);
-        }
-      });
+      const cb = this._hooks[C.EVENT.ERROR];
+      if (!cb) return;
+      try {
+        cb(error);
+      } catch (err) {
+        this.#log.error("Error in ERROR hook for", eventName, err);
+      }
     };
 
     /**
@@ -459,15 +535,10 @@ export default class Sister {
      * run them when any other event is emitted.
      */
     const systemEvent = () => {
+      const cb = this._hooks[C.EVENT.SYSTEM];
+      if (!cb) return;
       try {
-        this._hooks[C.EVENT.SYSTEM]?.forEach((cb) => {
-          try {
-            cb(payload);
-          } catch (err) {
-            this.#log.error("Error in SYSTEM hook for", eventName, err);
-            emitError(err);
-          }
-        });
+        cb(payload);
       } catch (err) {
         this.#log.error("Error in SYSTEM hook for", eventName, err);
         emitError(err);
@@ -475,38 +546,54 @@ export default class Sister {
       }
     };
 
-    // Only run system events once
+    // Only run system and error callbacks once
     if (eventName === C.EVENT.SYSTEM) {
       systemEvent();
       return;
     }
-
-    // Only run error events once
     if (eventName === C.EVENT.ERROR) {
       emitError(payload);
+      return;
     }
 
     systemEvent();
 
     // Run user-defined hooks
-    this._hooks[eventName]?.forEach((cb) => {
-      try {
-        cb(payload);
-      } catch (err) {
-        this.#log.error("Error in hook for", eventName, err);
-        emitError(err);
-      }
-    });
+    const cb = this._hooks[eventName];
+    if (!cb) return;
+    try {
+      cb(payload);
+    } catch (err) {
+      this.#log.error("Error in hook for", eventName, err);
+      emitError(err);
+    }
   }
 
-  async _onCustomRequest(conn, payload) {
-    this.#log.info(
-      `Handling CUSTOM_REQUEST from ${utils.formatToStr(conn.remotePublicKey)}`
-    );
-    // Custom request handling can be added here
-    // For now, just log the payload
-    this.#log.info("Custom request payload:", payload);
-    return { status: "success", message: "Custom request handled" };
+  async _onMessage(conn, rawPayload) {
+    try {
+      const { type, payload } = JSON.parse(rawPayload);
+      this.#log.info(
+        `Received MESSAGE of type "${type}" from ${conn.remotePublicKey}`
+      );
+      this.#log.debug("MESSAGE Payload:", payload);
+
+      const cb = this._hooks[type];
+      if (!cb) {
+        this.#log.warn(
+          `No handler for message type "${type}" from ${conn.remotePublicKey}`
+        );
+        return { status: "error", message: `No handler for type "${type}"` };
+      }
+
+      const response = await cb(payload);
+      return response;
+    } catch (err) {
+      this.#log.error(
+        `Error handling MESSAGE from ${conn.remotePublicKey}`,
+        err
+      );
+      this._emitEvent(C.EVENT.ERROR, err);
+    }
   }
 
   /**
@@ -520,12 +607,12 @@ export default class Sister {
    *
    * @private
    */
-  async _sendMessageToPeer(peerId, type, payload) {
+  async _sendInternalMessageToPeer(peerId, type, payload) {
     const rpc = this._rpcConnections.get(peerId);
     if (!rpc) {
       const err = new Error(`No RPC connection found for peer ${peerId}`);
       this.#log.error(err);
-      (this._hooks[C.EVENT.ERROR] || []).forEach((cb) => cb(err));
+      this._emitEvent(C.EVENT.ERROR, err);
       throw err;
     }
 

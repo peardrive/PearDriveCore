@@ -307,6 +307,27 @@ test(txt.main("LOCAL events"), { stealth: true }, async (t) => {
 // Sisterhood communication tests
 ///////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("Custom RPC request"), async (t) => {
-  // TODO
+test(txt.main("Custom message"), { stealth: true }, async (t) => {
+  const testnet = await createTestnet();
+  const { bootstrap } = testnet;
+
+  const peers = await utils.createSisterhood("rpc-test", bootstrap, 2);
+  const [sisterA, sisterB] = peers;
+  t.teardown(async () => {
+    await sisterA.pd.close();
+    await sisterB.pd.close();
+  });
+
+  let customRequestReceived = false;
+  sisterB.pd.on("custom_message", (_payload) => {
+    customRequestReceived = true;
+    return true;
+  });
+
+  const peerId = sisterA.pd.listPeers()[0].publicKey;
+  const response = await sisterA.pd.sendMessage(peerId, "custom_message", {
+    data: "test",
+  });
+  t.ok(customRequestReceived, "Custom request received by sisterB");
+  t.is(response, true, "Custom response received by sisterA");
 });
