@@ -1,4 +1,4 @@
-# Sister.js (alpha)
+# PearDrive Core
 
 > A simple node.js p2p communication system for messaging and file transfer
 
@@ -21,42 +21,43 @@
 > using npm.
 
 ```bash
-npm install @hopets/sisterjs
+npm install @peardrive/core
 ```
 
 ---
 
 ## 🔨 Tutorial / Examples
 
-### Creating a Sister (Sister.js instance)
+### Creating a PearDrive (PearDrive Core instance)
 
 ```javascript
-import Sister, { EVENT, purse } from "@hopets/sisterjs";
+import PearDrive, { EVENT, lib } from "@peardrive/core";
 import path from "path";
 import fs from "fs";
 
 async function main() {
-  // Choose where Sister stores its data and what folder to watch for files
-  const corestorePath = path.resolve(".sister/corestore-A");
-  const watchPath = path.resolve(".sister/files-A");
+  // Choose where PearDrive stores its data and what folder to watch for files
+  const corestorePath = path.resolve(".PearDrive/corestore-A");
+  const watchPath = path.resolve(".PearDrive/files-A");
   await fs.mkdir(corestorePath, { recursive: true });
   await fs.mkdir(watchPath, { recursive: true });
 
   // Create the instance
-  const sister = new Sister({
+  const peardrive = new PearDrive({
     corestorePath,
     watchPath,
     logOpts: { logToConsole: true },
     indexOpts: { poll: true, pollInterval: 500 },
   });
 
-  await sister.ready();
+  await peardrive.ready();
 
   // Join (or create) a network. If you pass a hex string/Buffer,
-  // multiple Sisters can meet on the same “topic”.
+  // multiple PearDrives can meet on the same “topic”.
   // Here we generate one and print it so another process can reuse it.
-  const networkKey = purse.generateSeed(); // Uint8Array
-  await sister.joinNetwork(networkKey);
+  // If you are making a new network, you can call joinNetwork without arguments
+  const networkKey = lib.formatToStr(lib.generateSeed());
+  await peardrive.joinNetwork(networkKey);
 
   console.log("Your public key:", sister.publicKeyStr);
   console.log(
@@ -65,16 +66,16 @@ async function main() {
   );
 
   // Basic events
-  sister.on(EVENT.PEER, (peerId) => console.log("Peer event:", peerId));
-  sister.on(EVENT.NETWORK, () => console.log("Network file index changed"));
-  sister.on(EVENT.LOCAL, () => console.log("Local file index changed"));
-  sister.on(EVENT.ERROR, (err) => console.error("Sister ERROR:", err));
+  peardrive.on(EVENT.PEER, (peerId) => console.log("Peer event:", peerId));
+  peardrive.on(EVENT.NETWORK, () => console.log("Network file index changed"));
+  peardrive.on(EVENT.LOCAL, () => console.log("Local file index changed"));
+  peardrive.on(EVENT.ERROR, (err) => console.error("Sister ERROR:", err));
 
   // Optional: seed a test file
   await fs.writeFile(path.join(watchPath, "hello.txt"), "hi from A\n");
 
   // List local files
-  const local = await sister.listLocalFiles();
+  const local = await peardrive.listLocalFiles();
   console.log("Local index key:", purse.formatToStr(local.key));
   console.log("Local files:", local.files);
 }
@@ -86,31 +87,31 @@ main().catch((e) => {
 });
 ```
 
-### Creating a Sisterhood (Connecting sister.js peers, creating a network)
+### Creating a network (Connecting PearDrive Core peers, creating a network)
 
 ```javascript
 const NETWORK_KEY = purse.formatToStr(purse.generateSeed());
 
 async function mainA() {
-  const corestorePath = path.resolve(".sister/corestore-A");
-  const watchPath = path.resolve(".sister/files-A");
+  const corestorePath = path.resolve(".pd/corestore-A");
+  const watchPath = path.resolve(".pd/files-A");
   await fs.mkdir(corestorePath, { recursive: true });
   await fs.mkdir(watchPath, { recursive: true });
 
-  const sisterA = new Sister({
+  const pdA = new PearDrive({
     networkKey: NETWORK_KEY,
     corestorePath,
     watchPath,
   });
-  await sisterA.ready();
+  await pdA.ready();
 
-  await sisterA.joinNetwork();
+  await pdA.joinNetwork();
 
-  console.log("A pubkey:", sisterA.publicKeyStr);
-  console.log("NETWORK_KEY (give to Peer B):", purse.formatToStr(networkKey));
+  console.log("A pubkey:", pdA.publicKeyStr);
+  console.log("NETWORK_KEY (give to Peer B):", lib.formatToStr(networkKey));
 
-  sisterA.on(EVENT.PEER, (peerId) => console.log("[A] Peer:", peerId));
-  sisterA.on(EVENT.ERROR, console.error);
+  pdA.on(EVENT.PEER, (peerId) => console.log("[A] Peer:", peerId));
+  pdA.on(EVENT.ERROR, console.error);
 
   // Put a file in A's watch dir
   await fs.writeFile(path.join(watchPath, "from-A.txt"), "hello from A\n");
@@ -118,85 +119,85 @@ async function mainA() {
 
 mainA().catch(console.error);
 
-async function main() {
-  const corestorePath = path.resolve(".sister/corestore-B");
-  const watchPath = path.resolve(".sister/files-B");
+async function mainB() {
+  const corestorePath = path.resolve(".pd/corestore-B");
+  const watchPath = path.resolve(".pd/files-B");
   await fs.mkdir(corestorePath, { recursive: true });
   await fs.mkdir(watchPath, { recursive: true });
 
-  const sisterB = new Sister({
+  const pdB = new PearDrive({
     networkKey: NETWORK_KEY,
     corestorePath,
     watchPath,
   });
-  await sisterB.ready();
+  await pdB.ready();
 
-  await sisterB.joinNetwork();
+  await pdB.joinNetwork();
 
-  console.log("B pubkey:", sisterB.publicKeyStr);
+  console.log("B pubkey:", pdB.publicKeyStr);
 
-  sisterB.on(EVENT.PEER, (peerId) => console.log("[B] Peer:", peerId));
-  sisterB.on(EVENT.NETWORK, () => console.log("[B] network index changed"));
-  sisterB.on(EVENT.ERROR, console.error);
+  pdB.on(EVENT.PEER, (peerId) => console.log("[B] Peer:", peerId));
+  pdB.on(EVENT.NETWORK, () => console.log("[B] network index changed"));
+  pdB.on(EVENT.ERROR, console.error);
 
   // Wait a moment for discovery
   setTimeout(async () => {
     // See remote files
-    const nonLocal = await sisterB.listNonLocalFiles();
+    const nonLocal = await pdB.listNonLocalFiles();
     console.log("[B] Non-local files (by peer):", nonLocal);
   }, 1500);
 }
 
-main().catch(console.error);
+mainB().catch(console.error);
 ```
 
 ### Tapping into events / seeing network information
 
 ```javascript
-const sister = new Sister({
+const pd = new PearDrive({
   corestorePath: "./core-A",
   watchPath: "./files-A",
 });
-await sister.ready();
-await sister.joinNetwork("...hex-network-key...");
+await pd.ready();
+await pd.joinNetwork("...hex-network-key...");
 
 // Events
-sister.on(EVENT.PEER, (peerId) => {
+pd.on(EVENT.PEER, (peerId) => {
   console.log("Peer connected/disconnected:", peerId);
 });
 
-sister.on(EVENT.LOCAL, () => {
+pd.on(EVENT.LOCAL, () => {
   console.log("Local files updated");
 });
 
-sister.on(EVENT.NETWORK, () => {
+pd.on(EVENT.NETWORK, () => {
   console.log("Network files changed");
 });
 
-sister.on(EVENT.ERROR, (err) => {
+pd.on(EVENT.ERROR, (err) => {
   console.error("Sister error:", err);
 });
 
 // Inspect file indices
-const local = await sister.listLocalFiles();
+const local = await pd.listLocalFiles();
 console.log("Local index key:", local.key, "files:", local.files);
 
-const nonLocal = await sister.listNonLocalFiles(); // Map(peerId => {key, files})
+const nonLocal = await pd.listNonLocalFiles(); // Map(peerId => {key, files})
 console.log("Non-local:", nonLocal);
 
-const all = await sister.listNetworkFiles(); // Map including "local"
+const all = await pd.listNetworkFiles(); // Map including "local"
 console.log("All network files:", all);
 ```
 
 ```javascript
 // Viewing files
 
-const sister = new Sister(opts);
-await sister.ready();
-await sister.joinNetwork();
+const pd = new PearDrive(opts);
+await pd.ready();
+await pd.joinNetwork();
 
 // View the files on the current peer (with example output)
-const localFiles = await sister.listLocalFiles();
+const localFiles = await pd.listLocalFiles();
 localFiles = {
   key: 'dfb13b6fa4c5da126be447ad6d45e9417b217e889fb58b3094b15cc4a5f7c2bc',
   files: [
@@ -225,7 +226,7 @@ localFiles = {
 }
 
 // View the files on other peers (with example Map output)
-const nonLocalFiles = await sister.listNonLocalFiles();
+const nonLocalFiles = await pd.listNonLocalFiles();
 nonLocalFiles = {
   '82bbbb4a9d37a030ce8a049631f4f6fbf1dbc17e27d33d042963b1c07696ff57' => {
     key: /* Buffer, stringified version is the map entry key */,
@@ -256,7 +257,7 @@ nonLocalFiles = {
 }
 
 // View the files on all peers
-const listNetworkFiles = await sister.listNetworkFiles();
+const listNetworkFiles = await pd.listNetworkFiles();
 networkFiles = {
   '82bbbb4a9d37a030ce8a049631f4f6fbf1dbc17e27d33d042963b1c07696ff57' => {
     key: /* Buffer, stringified version is the map entry key */,
@@ -317,18 +318,18 @@ networkFiles = {
 ### Messaging
 
 ```javascript
-sisterB.on("custom_message", async (payload) => {
+pdB.on("custom_message", async (payload) => {
   console.log("[B] got custom_message:", payload);
   // Return anything serializable — it becomes the response
   return { ok: true, echo: payload };
 });
 
-const peers = sisterA.listPeersStringified();
+const peers = pdA.listPeersStringified();
 const peerId = peers[0]?.publicKey;
 if (!peerId) throw new Error("No peers yet");
 
 // Send the message
-const res = await sisterA.sendMessage(peerId, "custom_message", {
+const res = await pdA.sendMessage(peerId, "custom_message", {
   ping: Date.now(),
 });
 console.log("[A] response:", res);
@@ -338,12 +339,12 @@ console.log("[A] response:", res);
 
 ```javascript
 // 1) Discover a peer and a file you want
-const peers = sisterB.listPeersStringified();
+const peers = pdB.listPeersStringified();
 const peerId = peers[0]?.publicKey; // choose one
 if (!peerId) throw new Error("No peers discovered yet");
 
 // For demo, list a remote peer's files
-const nonLocal = await sisterB.listNonLocalFiles();
+const nonLocal = await pdB.listNonLocalFiles();
 // Map: peerId => { key:<hyperbee key>, files: [
 //  { path, size, modified, hash }, ...
 // ] }
@@ -353,13 +354,13 @@ if (!wanted) throw new Error("Remote peer has no files (yet)");
 
 // 2) Download it. The file will be written into *this* peer's watchPath under
 // the same relative path.
-await sisterB.downloadFileFromPeer(somePeerId, wanted);
-console.log("Downloaded", wanted, "to", sisterB.watchPath);
+await pdB.downloadFileFromPeer(somePeerId, wanted);
+console.log("Downloaded", wanted, "to", pdB.watchPath);
 ```
 
 ### React Native (for mobile apps)
 
-// TODO
+PearDrive works in Bare runtime, so you can follow [this guide](docs.pears.com/guides/making-a-bare-mobile-app) to get started
 
 ---
 
@@ -368,7 +369,3 @@ console.log("Downloaded", wanted, "to", sisterB.watchPath);
 ### 1.0.0
 
 - Initial release
-
-## ❤️ Credits
-
-- Sister.JS developed by [Jenna Baudelaire](https://github.com/HopeTS)
