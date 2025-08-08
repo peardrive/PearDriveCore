@@ -5,7 +5,7 @@
  */
 
 /**
- * @remarks Determines whether a given path is within the root of the Sister
+ * @remarks Determines whether a given path is within the root of the PearDrive
  *  process.
  *
  * @protected
@@ -13,7 +13,7 @@
 
 import process from "process";
 
-/** Determine whether a path is within the root of the Sister process
+/** Determine whether a path is within the root of the PearDrive process
  *
  * @param {string} path - The path to check
  *
