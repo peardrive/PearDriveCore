@@ -22,7 +22,6 @@ import Logger from "@hopets/logger";
 import * as C from "./constants.js";
 import * as utils from "./utils/index.js";
 import { IndexManager } from "./IndexManager.js";
-import { TransferManager } from "./TransferManager.js";
 
 /** The utils toolbox SisterJS uses */
 export const purse = utils;
@@ -49,8 +48,6 @@ export default class Sister {
   #log;
   /** @private {IndexManager} Index manager for watching network/local files */
   _indexManager;
-  /** @private {TransferManager} Transfer manager for handling file downloads */
-  _transferManager;
   /** @private {string} Absolute path to corestore */
   _corestorePath;
   /** @private {string} Path to Sister's local file storage */
@@ -65,6 +62,12 @@ export default class Sister {
   _swarmOpts;
   /** @private Logger options */
   _logOpts;
+  /** @private {Map} Writable hyperdrives (for downloading files) */
+  _downloadDrives;
+  /** @private {Map} Readable hyperdrives (for uploading files) */
+  _uploadDrives;
+  /** @private {Object} In-progress downloads meta-data */
+  _inProgress;
 
   /**
    * @param {Object} opts
@@ -122,6 +125,9 @@ export default class Sister {
     this._swarm = new Hyperswarm(swarmOpts);
     this._store = new Corestore(corestorePath);
     this._rpcConnections = new Map();
+    this._uploadDrives = new Map();
+    this._downloadDrives = new Map();
+    this._inProgress = {};
 
     // Save data
     this._corestorePath = corestorePath;
@@ -134,14 +140,39 @@ export default class Sister {
       watchPath: watchPath,
       emitEvent: this._emitEvent,
       indexOpts: this._indexOpts,
-    });
-    this._transferManager = new TransferManager({
-      log: this.#log,
-      store: this._store,
-      emitEvent: this._emitEvent,
+      uploadDrives: this._uploadDrives,
+      downloadDrives: this._downloadDrives,
+      inProgress: this._inProgress,
     });
 
     this._swarm.on("connection", this._onConnection.bind(this));
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Getters
+  //////////////////////////////////////////////////////////////////////////////
+
+  /** Get the absolute path to the local file storage for this Sister */
+  get watchPath() {
+    return this._watchPath;
+  }
+
+  /**
+   * Get the public key for RPC connections to the sisterhood (Buffer)
+   *
+   * @returns {ArrayBuffer} - Public key as ArrayBuffer
+   */
+  get publicKey() {
+    return this._swarm.keyPair.publicKey;
+  }
+
+  /** Get the public key for RPC connections to the sisterhood (String) */
+  get publicKeyStr() {
+    return utils.formatToStr(this.publicKey);
+  }
+
+  get inProgressDownloads() {
+    return { ...this._inProgress };
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -179,7 +210,7 @@ export default class Sister {
   on(event, cb) {
     this.#log.info(`Registering hook for event: ${event}`);
     if (this._hooks[event]) {
-      this.#log.warn(`Overriding existing hook for event: ${event}`);
+      this.#log.warn(`Overwriting existing hook for event: ${event}`);
     }
     this._hooks[event] = cb;
   }
@@ -210,6 +241,39 @@ export default class Sister {
     });
     await discovery.flushed();
     this.connected = true;
+  }
+
+  /**
+   * Download a file from a remote peer over RPC.
+   *
+   * @param {string | Uint8Array | ArrayBuffer} peerId - Hex string identifier
+   *  of the peer
+   * @param {string} filePath - Path of the file on the remote peer
+   */
+  async downloadFileFromPeer(peerId, filePath) {
+    this.#log.info(`Downloading file "${filePath}" from peer ${peerId}...`);
+
+    try {
+      // Create a hyperdrive on peer, get the key
+      const peerDownloadKey = await this._sendFileRequest(peerId, filePath);
+      if (typeof peerDownloadKey !== "string") {
+        throw new Error(
+          `Invalid peer download key type: ${typeof peerDownloadKey}`
+        );
+      }
+
+      // Handle download
+      this._indexManager.markTransfer(filePath, "download", peerId);
+      await this._indexManager.createDownloadDrive(filePath, peerDownloadKey);
+      await this._indexManager.executeDownload(filePath);
+
+      // Cleanup
+      await this._indexManager.unmarkTransfer(filePath, "download", peerId);
+      await this._sendFileRelease(peerId, filePath);
+    } catch (err) {
+      this.#log.error(`Error downloading file from peer ${peerId}`, err);
+      throw err;
+    }
   }
 
   /**
@@ -338,9 +402,87 @@ export default class Sister {
     }
   }
 
+  /** List files available locally */
+  async listLocalFiles() {
+    return await this._indexManager.getLocalIndexInfo();
+  }
+
+  /** List files currently available over the network */
+  async listNetworkFiles() {
+    return await this._indexManager.getSisterhoodIndexInfo();
+  }
+
+  /** List files currently available over the network not downloaded locally */
+  async listNonLocalFiles() {
+    return await this._indexManager.getNonlocalSisterhoodIndexInfo();
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Private functions
   //////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Send FILE_REQUEST to peer
+   *
+   * @param {string |Uint8Array | ArrayBuffer} peerId - Peer ID to send request
+   *  to
+   * @param {string} filePath - Path of the file to request on remote peer
+   *
+   * @returns {Promise<string>} - Peer download drive key
+   *
+   * @private
+   */
+  async _sendFileRequest(peerId, filePath) {
+    try {
+      const peerIdStr = utils.formatToStr(peerId);
+      this.#log.info(
+        `Sending FILE_REQUEST to peer ${peerIdStr} for file ${filePath}`
+      );
+      const peerDownloadInfoRaw = await this._sendInternalMessageToPeer(
+        peerIdStr,
+        C.RPC.FILE_REQUEST,
+        filePath
+      );
+      const peerDownloadInfoBuf = Buffer.from(peerDownloadInfoRaw, "hex");
+      const peerDownloadInfo = utils.formatToStr(peerDownloadInfoBuf);
+      return peerDownloadInfo;
+    } catch (err) {
+      this.#log.error(`Error sending file request to peer ${peerId}`, err);
+      throw err;
+    }
+  }
+
+  /**
+   * Send FILE_RELEASE to peer
+   *
+   * @param {string | Uint8Array | ArrayBuffer} peerId - Peer ID to send request
+   *
+   * @param {string} filePath - Path of the file to release on remote peer
+   *
+   * @return {Promise<boolean>} - True if the release was successful
+   *
+   * @private
+   */
+  async _sendFileRelease(peerId, filePath) {
+    try {
+      const peerIdStr = utils.formatToStr(peerId);
+      this.#log.info(
+        `Sending FILE_RELEASE to peer ${peerIdStr} for file ${filePath}`
+      );
+      const response = await this._sendInternalMessageToPeer(
+        peerIdStr,
+        C.RPC.FILE_RELEASE,
+        filePath
+      );
+      if (response !== true) {
+        throw new Error("File release failed on peer");
+      }
+      return true;
+    } catch (err) {
+      this.#log.error(`Error sending file release to peer ${peerId}`, err);
+      throw err;
+    }
+  }
 
   /**
    * Wrap a Hyperswarm connection in an RPC instance.
@@ -376,6 +518,18 @@ export default class Sister {
         )}`
       );
       return this._onLocalIndexKeyRequest(conn);
+    });
+    rpc.respond(C.RPC.FILE_REQUEST, async (payload) => {
+      this.#log.info(
+        `Handling FILE_REQUEST from ${utils.formatToStr(conn.remotePublicKey)}`
+      );
+      return this._onFileRequest(conn, payload);
+    });
+    rpc.respond(C.RPC.FILE_RELEASE, async (payload) => {
+      this.#log.info(
+        `Handling FILE_RELEASE from ${utils.formatToStr(conn.remotePublicKey)}`
+      );
+      return this._onFileRelease(conn, payload);
     });
     rpc.respond(C.RPC.MESSAGE, async (payload) => {
       this.#log.info(
@@ -496,13 +650,9 @@ export default class Sister {
       await this._indexManager.addBee(peerId, bee);
       this.#log.info(`Registered remote index for ${peerId}`);
     } catch (err) {
-      this.#log.error(
-        `Error registering remote i_sendMesndex for ${peerId}`,
-        err
-      );
+      this.#log.error(`Error registering remote index for ${peerId}`, err);
       return;
     }
-    this._transferManager.handlePeerConnected(peerId, rpc);
 
     // Emit peer update event
     this._emitEvent(C.EVENT.PEER, peerId);
@@ -518,11 +668,11 @@ export default class Sister {
    */
   _onDisconnect(conn) {
     const peerId = utils.formatToStr(conn.remotePublicKey);
+    this.#log.info(`Peer ${peerId} disconnected.`);
 
     // Graceful teardown
     this._rpcConnections.delete(peerId);
     this._indexManager.handlePeerDisconnected(peerId);
-    this._transferManager.handlePeerDisconnected(peerId);
 
     // Emit peer update event
     this._emitEvent(C.EVENT.PEER, peerId);
@@ -591,6 +741,70 @@ export default class Sister {
     } catch (err) {
       this.#log.error("Error in hook for", eventName, err);
       emitError(err);
+    }
+  }
+
+  /**
+   * Handler for file download requests from peers.
+   *
+   * @private
+   */
+  async _onFileRequest(conn, payload) {
+    this.#log.info(
+      `Handling FILE_REQUEST from ${utils.formatToStr(conn.remotePublicKey)}`
+    );
+
+    try {
+      // Validate file path
+      if (!payload || typeof payload !== "string") {
+        throw new Error("Invalid file path in FILE_REQUEST");
+      }
+
+      this._indexManager.markTransfer(payload, "upload", conn.remotePublicKey);
+      const response = await this._indexManager.createUploadDrive(payload);
+
+      return response;
+    } catch (err) {
+      this.#log.error(
+        `Error handling file request from ${utils.formatToStr(
+          conn.remotePublicKey
+        )}`,
+        err
+      );
+      this._emitEvent(C.EVENT.ERROR, err);
+      return;
+    }
+  }
+
+  /**
+   * Handler for file release requests from peers.
+   *
+   * @private
+   */
+  async _onFileRelease(conn, payload) {
+    this.#log.info(
+      `Handling FILE_RELEASE from ${utils.formatToStr(conn.remotePublicKey)}`
+    );
+
+    try {
+      // Validate file path
+      if (!payload || typeof payload !== "string") {
+        throw new Error("Invalid file path in FILE_RELEASE");
+      }
+
+      const peerId = utils.formatToStr(conn.remotePublicKey);
+      await this._indexManager.unmarkTransfer(payload, "upload", peerId);
+
+      return true;
+    } catch (err) {
+      this.#log.error(
+        `Error handling file release from ${utils.formatToStr(
+          conn.remotePublicKey
+        )}`,
+        err
+      );
+      this._emitEvent(C.EVENT.ERROR, err);
+      return false;
     }
   }
 

@@ -6,6 +6,8 @@
 /**
  * @remarks Determines whether a given path is within the root of the Sister
  *  process.
+ *
+ * @protected
  */
 
 import process from "process";
@@ -15,6 +17,8 @@ import process from "process";
  * @param {string} path - The path to check
  *
  * @return {boolean} - True if the path is within the root, false otherwise
+ *
+ * @protected
  */
 export function pathInRoot(path) {
   return path.startsWith(process.cwd());

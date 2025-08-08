@@ -10,6 +10,8 @@
 
 /**
  * @remarks Handles watching and indexing local files.
+ *
+ * @protected
  */
 
 import fs from "fs";
@@ -22,6 +24,8 @@ import * as C from "./constants.js";
 
 /**
  * Handles watching and indexing local files.
+ *
+ * @protected
  */
 export default class LocalFileIndex {
   /** Logger instance */
@@ -36,8 +40,11 @@ export default class LocalFileIndex {
    * @param {string} opts.watchPath - Path to watch for local files
    * @param {Function} opts.emitEvent - Optional function to emit events
    * @param {Object} opts.indexOpts - Index options
+   * @param {Map<string, HyperDrive} - opts.downloadDrives - Map of download
+   *  drives
+   * @param {Map<string, HyperDrive} - opts.uploadDrives - Map of upload drives
    * @param {string} [opts.name] - Optional core name
-   *    (defauls to 'local-file-index)
+   *  (defauls to 'local-file-index)
    */
   constructor({
     log,
@@ -45,6 +52,8 @@ export default class LocalFileIndex {
     watchPath,
     emitEvent,
     indexOpts,
+    uploadDrives,
+    downloadDrives,
     name = "local-file-index",
   }) {
     // Logger setup
@@ -72,6 +81,10 @@ export default class LocalFileIndex {
     this.bee = null;
     /** Index options */
     this._indexOpts = indexOpts;
+    /** Upload drives */
+    this._uploadDrives = uploadDrives;
+    /** Download drives */
+    this._downloadDrives = downloadDrives;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -191,6 +204,56 @@ export default class LocalFileIndex {
     this.#poller = null;
   }
 
+  /**
+   * Get local file metadata and bee metadata
+   *
+   * @return {Promise<{key: string, files: Map<any, any>}>} - Local file info
+   * and bee metadata
+   *
+   * @throws {Error} If bee is not initialized
+   */
+  async getIndexInfo() {
+    this.#log.info("Retrieving local file info...");
+
+    if (!this.bee) {
+      this.#log.error("Local index bee is not initialized.");
+      throw new Error("Local index bee is not initialized.");
+    }
+
+    const files = [];
+    for await (const { key, value } of this.bee.createReadStream()) {
+      files.push({ key: utils.formatToStr(key), ...value });
+    }
+
+    return {
+      key: utils.formatToStr(this.getKey()),
+      files,
+    };
+  }
+
+  /**
+   * Get file metadata for a given file path
+   *
+   * @param {string} filePath - relative path to the file
+   *
+   * @returns {Promise<Object | null>} - File metadata object
+   */
+  async getFileMetadata(filePath) {
+    this.#log.info(`Retrieving metadata for file: ${filePath}`);
+
+    if (!this.bee) {
+      this.#log.error("Local index bee is not initialized.");
+      throw new Error("Local index bee is not initialized.");
+    }
+
+    const beeEntry = await this.bee.get(filePath);
+    if (!beeEntry) {
+      this.#log.warn(`File not found in index: ${filePath}`);
+      return null;
+    }
+    return beeEntry.value;
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Private functions
   //////////////////////////////////////////////////////////////////////////////
@@ -226,6 +289,10 @@ export default class LocalFileIndex {
     // Check for deleted files
     for (const storedPath of storedFiles.keys()) {
       if (!currentFiles.has(storedPath)) {
+        if (this.#isBusy(storedPath)) {
+          this.#log.info("Busy file not deleted!", storedPath);
+          continue;
+        }
         this.#log.info("File deleted:", storedPath);
         await this.bee.del(storedPath);
         this._emitEvent(C.EVENT.LOCAL, null);
@@ -261,6 +328,13 @@ export default class LocalFileIndex {
       // If it's a file, add to map
       else if (stat.isFile()) {
         const relativePath = path.relative(relativeBase, fullPath);
+
+        // Ensure file isn't busy (in the middle of an upload/download)
+        if (this.#isBusy(relativePath)) {
+          this.#log.info("Skipping busy file:", relativePath);
+          continue;
+        }
+
         const hash = await this.#hashFile(fullPath);
         outMap.set(relativePath, {
           path: relativePath,
@@ -270,5 +344,17 @@ export default class LocalFileIndex {
         });
       }
     }
+  }
+
+  /**
+   * Determine if a file is busy at given path
+   *
+   * @param {string} path - (Relative) path to the file
+   *
+   * @return {boolean} - True if file is busy, false otherwise
+   */
+  #isBusy(path) {
+    const dPath = utils.asDrivePath(path);
+    return this._uploadDrives.has(dPath) || this._downloadDrives.has(dPath);
   }
 }

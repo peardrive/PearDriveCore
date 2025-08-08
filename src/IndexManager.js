@@ -10,16 +10,24 @@
 
 /**
  * @remarks Manages the indexing of all files locally and on the network.
+ *
+ * @protected
  */
 
 import Hyperbee from "hyperbee";
+import Hyperdrive from "hyperdrive";
+import fs from "fs";
+
 import * as C from "./constants.js";
+import * as utils from "./utils/index.js";
 import LocalFileIndex from "./LocalFileIndex.js";
 
 /*******************************************************************************
  * IndexManager
  * ---
  * Manages the peer-to-peer synchronization of file-index Hyperbees.
+ *
+ * @protected
  ******************************************************************************/
 export class IndexManager {
   /** @private {Corestore} */
@@ -34,8 +42,23 @@ export class IndexManager {
    * @param {string}    opts.watchPath - Path to watch for local files
    * @param {any} opts.emitEvent - Function to emit events
    * @param {Object} indexOpts - Options for the local file index
+   * @param {Map<string, RPC>} rpcConnections - Map of peer IDs to RPC instances
+   * @param {Map<string, Hyperdrive>} uploadDrives - Map of writable hyperdrives
+   * @param {Map<string, Hyperdrive>} downloadDrives - Map of readable
+   *  hyperdrives
+   * @param {Object} inProgress - Map of in-progress downloads
    */
-  constructor({ store, log, watchPath, emitEvent, indexOpts }) {
+  constructor({
+    store,
+    log,
+    watchPath,
+    emitEvent,
+    indexOpts,
+    rpcConnections,
+    uploadDrives,
+    downloadDrives,
+    inProgress = {},
+  }) {
     this._store = store;
     this._emitEvent = emitEvent;
     this._indexOpts = indexOpts;
@@ -46,8 +69,16 @@ export class IndexManager {
       watchPath,
       emitEvent: this._emitEvent,
       indexOpts,
+      uploadDrives,
+      downloadDrives,
     });
+    /** @protected {Map<string, Hyperbee>} }All nonlocal sisters hyperbees */
     this.remoteIndexes = new Map();
+    this.watchPath = watchPath;
+    this._rpcConnections = rpcConnections;
+    this._uploadDrives = uploadDrives;
+    this._downloadDrives = downloadDrives;
+    this._inProgress = inProgress;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -103,16 +134,15 @@ export class IndexManager {
 
   /**
    * Clean up when a peer disconnects by removing its Hyperbee.
+   *
    * @param {string} peerId - Hex string identifier of the peer
    */
   handlePeerDisconnected(peerId) {
     this.remoteIndexes.delete(peerId);
-    this.#log.info(`🗑️ Remote index removed for peer ${peerId}`);
+    this.#log.info(`Remote index removed for peer ${peerId}`);
   }
 
-  /**
-   * Get save data as JSON
-   */
+  /** Get save data as JSON */
   getSaveData() {
     return {
       localFileIndexName: this.localIndex.name,
@@ -122,10 +152,398 @@ export class IndexManager {
     };
   }
 
+  /** Get current local file index info */
+  getLocalFileIndexInfo() {
+    if (!this.localIndex.bee) {
+      this.#log.error("Local index bee is not initialized.");
+      throw new Error("Local index bee is not initialized.");
+    }
+
+    return {
+      key: this.localIndex.getKey(),
+      name: this.localIndex.name,
+      watchPath: this.localIndex.watchPath,
+    };
+  }
+
   /** Close IndexManager gracefully */
   async close() {
     this.#log.info("Closing IndexManager...");
     await this.localIndex.close();
+
+    // TODO finish closing hyperdrives
     this.#log.info("IndexManager closed.");
+  }
+
+  async getLocalIndexInfo() {
+    return this.localIndex.getIndexInfo();
+  }
+
+  /**
+   * Get file metadata / bee metadata for a given sister
+   *
+   * @returns {
+   *  Promise<Map<string, { key: HyperbeeKey, files: Object[] }>>
+   * }
+   */
+  async getSisterIndexInfo(sisterId) {
+    this.#log.info(`Retrieving index info for sister ${sisterId}...`);
+    if (!this.remoteIndexes.has(sisterId)) {
+      this.#log.error(`No remote index found for sister ${sisterId}`);
+      throw new Error(`No remote index found for sister ${sisterId}`);
+    }
+
+    const files = [];
+    const bee = this.remoteIndexes.get(sisterId);
+    for await (const { _key, value } of bee.createReadStream()) {
+      files.push(value);
+    }
+
+    return {
+      key: bee.key,
+      files,
+    };
+  }
+
+  /**
+   * Get file metadata / bee metadata for sisterhood, including self. There will
+   * be a "local" entry for the local index and entries for each remote sister
+   * with the keys being their hyperbee keys.
+   *
+   * @returns {
+   *  Promise<Map<string, { key: HyperbeeKey, files: Object[] }>>
+   * }
+   */
+  async getSisterhoodIndexInfo() {
+    this.#log.info("Retrieving sisterhood index info...");
+
+    if (this.remoteIndexes.size === 0) {
+      this.#log.warn("No remote indexes available in sisterhood.");
+      return new Map().set("local", await this.localIndex.getIndexInfo());
+    }
+
+    const sisterhoodInfo = await this.getNonlocalSisterhoodIndexInfo();
+    const self = await this.localIndex.getIndexInfo();
+    sisterhoodInfo.set("local", self);
+    return sisterhoodInfo;
+  }
+
+  /** Get local file metadata and bee metadata for nonlocal sisters */
+  async getNonlocalSisterhoodIndexInfo() {
+    this.#log.info("Retrieving nonlocal sister index info...");
+
+    if (this.remoteIndexes.size === 0) {
+      this.#log.warn("No remote indexes available in sisterhood.");
+      return new Map();
+    }
+
+    const nonlocalInfo = new Map();
+    for (const [sisterId, bee] of this.remoteIndexes.entries()) {
+      const files = [];
+      for await (const { _key, value } of bee.createReadStream()) {
+        files.push(value);
+      }
+      nonlocalInfo.set(sisterId, { key: bee.key, files });
+    }
+
+    return nonlocalInfo;
+  }
+
+  /**
+   * Create and configure the hyperdrive for uploading a file to a remote
+   * sister.
+   *
+   * @param {string} path - Local file path to upload
+   * @param {string | Uint8Array | ArrayBuffer} [driveKey] - Optional drive key.
+   *  This should only be used when finishing an unfinished upload.
+   *
+   * @returns {Promise<string>} - Key to the writable hyperdrive
+   */
+  async createUploadDrive(path, driveKey) {
+    this.#log.info(`Creating upload drive for file: ${path}`);
+
+    // Ensure the path is found in the local index
+    const fileInfo = await this.localIndex.getFileMetadata(path);
+    if (!fileInfo) {
+      this.#log.error(`File not found in local index: ${path}`);
+      throw new Error(`File not found in local index: ${path}`);
+    }
+
+    // Create / load the hyperdrive
+    let drive;
+    if (driveKey) {
+      const keyStr = utils.formatToStr(driveKey);
+      this.#log.info(`Resuming upload with drive key: ${keyStr}`);
+      drive = new Hyperdrive(this._store, driveKey);
+    } else {
+      this.#log.info(`Creating new upload drive for file: ${path}`);
+      drive = new Hyperdrive(this._store);
+    }
+    await drive.ready();
+    this._uploadDrives.set(utils.asDrivePath(path), drive);
+
+    // Load the drive with the file
+    const absPath = utils.createAbsPath(path, this.watchPath);
+    const data = fs.readFileSync(absPath);
+    const drivePath = utils.asDrivePath(path);
+    await drive.put(drivePath, data);
+
+    this.#log.info(`Upload drive created for file: ${path}`);
+    return drive.key;
+  }
+
+  /**
+   * Create and configure the hyperdrive for downloading a file from a remote
+   * sister.
+   *
+   * @param {string} path - Remote file path to download
+   * @param {string | Uint8Array | ArrayBuffer} driveKey - Drive key.
+   *
+   * @returns {Promise<Hyperdrive>} - Readable hyperdrive
+   */
+  async createDownloadDrive(path, driveKey) {
+    this.#log.info(`Creating download drive for file: ${path}`);
+
+    try {
+      // Create / load the hyperdrive
+      const keyStr = utils.formatToStr(driveKey);
+      const drive = new Hyperdrive(this._store, keyStr);
+      await drive.ready();
+      this._downloadDrives.set(utils.asDrivePath(path), drive);
+      return drive;
+    } catch (err) {
+      this.#log.error(`Failed to create download drive for file: ${path}`, err);
+      throw err;
+    }
+  }
+
+  /**
+   * Close and delete a download drive.
+   *
+   * @param {string} path - Local file path to close the download drive for
+   *
+   * @param {boolean} [force=false] - Whether to force close the drive
+   *
+   * @return {Promise<void>}
+   */
+  async closeDownloadDrive(path, force = false) {
+    this.#log.info(`Closing download drive for file: ${path}`);
+
+    const dPath = utils.asDrivePath(path);
+    const drive = this._downloadDrives.get(dPath);
+    if (!drive) {
+      this.#log.warn(`No download drive found for file: ${path}`);
+      return;
+    }
+
+    // Check if the drive is still in use
+    if (this.hasActiveDownloads(dPath) && !force) {
+      this.#log.warn(
+        `Cannot close download drive for ${path} while downloads in progress`
+      );
+      return;
+    }
+
+    try {
+      await drive.close();
+      this._downloadDrives.delete(dPath);
+      this.#log.info(`Download drive closed for file: ${path}`);
+    } catch (err) {
+      this.#log.error(`Failed to close download drive for file: ${path}`, err);
+      throw err;
+    }
+  }
+
+  /**
+   * Close and delete an upload drive.
+   *
+   * @param {string} path - Local file path to close the upload drive for
+   *
+   * @param {boolean} [force=false] - Whether to force close the drive
+   *
+   * @return {Promise<void>}
+   */
+  async closeUploadDrive(path, force = false) {
+    this.#log.info(`Closing upload drive for file: ${path}`);
+
+    const dPath = utils.asDrivePath(path);
+
+    const drive = this._uploadDrives.get(dPath);
+    if (!drive) {
+      this.#log.warn(`No upload drive found for file: ${path}`);
+      return;
+    }
+
+    // Check if the drive is still in use
+    if (this.hasActiveUploads(dPath) && !force) {
+      this.#log.warn(
+        `Cannot close upload drive for ${path} while uploads in progress`
+      );
+      return;
+    }
+
+    try {
+      await drive.close();
+      this._uploadDrives.delete(dPath);
+      this.#log.info(`Upload drive closed for file: ${path}`);
+    } catch (err) {
+      this.#log.error(`Failed to close upload drive for file: ${path}`, err);
+      throw err;
+    }
+  }
+
+  /**
+   * Execute a download from a given path through the corresponding upload
+   * and download drives.
+   *
+   * @param {string} path - Local file path to download
+   */
+  async executeDownload(path) {
+    this.#log.info(`Executing download for file: ${path}`);
+
+    // Ensure download drive exists and has the file
+    const downDrive = this._downloadDrives.get(utils.asDrivePath(path));
+    if (downDrive === undefined) {
+      this.#log.error(`No download drive found for file: ${path}`);
+      throw new Error(`No download drive found for file: ${path}`);
+    }
+
+    try {
+      this.#log.info(`Download starting for ${path}`);
+
+      const readStream = downDrive.createReadStream(utils.asDrivePath(path), {
+        timeout: 10000,
+      });
+      const writeStream = fs.createWriteStream(
+        utils.createAbsPath(path, this.watchPath)
+      );
+
+      await new Promise((resolve, reject) => {
+        writeStream.on("error", reject);
+        readStream.on("error", reject);
+        writeStream.on("close", () => {
+          this.#log.info(`Download completed for ${path}`);
+          resolve();
+        });
+        readStream.pipe(writeStream);
+      });
+    } catch (err) {
+      this.#log.error(`Failed to execute download for file: ${path}`, err);
+      throw err;
+    }
+  }
+
+  /**
+   * Check if a file path has active uploads/downloads
+   *
+   * @param {string} path - The file path to check
+   *
+   * @returns {boolean}
+   */
+  hasActiveTransfers(path) {
+    const pathKey = utils.asDrivePath(path);
+    return (
+      !!this._inProgress[pathKey] &&
+      Object.keys(this._inProgress[pathKey]).length > 0
+    );
+  }
+
+  /**
+   * Check if a file path has active uploads
+   *
+   * @param {string} path - The file path to check
+   *
+   * @returns {boolean}
+   */
+  hasActiveUploads(path) {
+    const pathKey = utils.asDrivePath(path);
+    return (
+      !!this._inProgress[pathKey] &&
+      Object.values(this._inProgress[pathKey]).some(
+        (entry) => entry.direction === "upload"
+      )
+    );
+  }
+
+  /**
+   * Check if a file path has active downloads
+   *
+   * @param {string} path - The file path to check
+   *
+   * @returns {boolean}
+   */
+  hasActiveDownloads(path) {
+    const pathKey = utils.asDrivePath(path);
+    return (
+      !!this._inProgress[pathKey] &&
+      Object.values(this._inProgress[pathKey]).some(
+        (entry) => entry.direction === "download"
+      )
+    );
+  }
+
+  /**
+   * Mark a transfer occurring
+   *
+   * @param {string} path - The file path being transferred
+   * @param {string} direction - The direction of the transfer ("upload" or
+   *  "download")
+   * @param {string | Uint8Array | ArrayBuffer} peerId - The ID of the peer
+   *  involved in the transfer
+   */
+  markTransfer(path, direction, peerId) {
+    this.#log.debug(
+      `Marking transfer for ${path} (${direction}) with peer 
+      ${utils.formatToStr(peerId)}`
+    );
+    const pathKey = utils.asDrivePath(path);
+    const tmpEntries =
+      this._inProgress[pathKey] ||
+      (this._inProgress[pathKey] = Object.create(null));
+    const tmpEntry = { direction, startedAt: Date.now() };
+    this._inProgress[pathKey][utils.formatToStr(peerId)] = tmpEntry;
+  }
+
+  /**
+   * Unmark a transfer that has completed
+   *
+   * @param {string} path - The file path that was transferred
+   * @param {string} direction - The direction of the transfer ("upload" or
+   * "download")
+   * @param {string | Uint8Array | ArrayBuffer} peerId - The ID of the peer
+   * involved in the transfer
+   */
+  async unmarkTransfer(path, direction, peerId) {
+    this.#log.debug(
+      `Unmarking transfer for ${path} (${direction}) with peer 
+      ${utils.formatToStr(peerId)}`
+    );
+
+    const pathKey = utils.asDrivePath(path);
+    if (!this._inProgress[pathKey]) {
+      this.#log.warn(
+        `No in-progress transfers found for ${path} (${direction}) with peer 
+        ${utils.formatToStr(peerId)}`
+      );
+      return;
+    }
+
+    delete this._inProgress[pathKey][utils.formatToStr(peerId)];
+
+    if (Object.keys(this._inProgress[pathKey]).length === 0) {
+      delete this._inProgress[pathKey];
+      this.#log.debug(`All transfers for ${path} completed, closing drive`);
+      if (direction === "download") {
+        await this.closeDownloadDrive(path, true);
+      }
+      if (direction === "upload") {
+        await this.closeUploadDrive(path, true);
+      }
+    } else {
+      this.#log.debug(`Transfers still in progress for ${path}`);
+    }
+
+    this.#log.info(`Transfer for ${path} (${direction}) with peer 
+      ${utils.formatToStr(peerId)} unmarked`);
   }
 }

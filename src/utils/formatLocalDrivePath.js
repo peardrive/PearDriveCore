@@ -6,6 +6,8 @@
 /**
  * @remarks Convert a raw absolute path to a path that will be properly
  *  handled
+ *
+ * @protected
  */
 
 import path from "path";
@@ -17,6 +19,8 @@ import path from "path";
  * @param {String} root - Root path of project
  *
  * @returns {String} LocalDrive path
+ *
+ * @protected
  */
 export function formatLocalDrivePath(inputPath, root) {
   // Normalize root and input paths

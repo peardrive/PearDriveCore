@@ -20,7 +20,7 @@ utils.createTestFolders();
 // Sister core functionality tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("Initialization"), async (t) => {
+test(txt.main("Sister: Initialization"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -54,69 +54,81 @@ test(txt.main("Initialization"), async (t) => {
 // Network connectivity tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("Create one-node sisterhood"), { stealth: true }, async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
+test(
+  txt.main("Sister: Create one-node sisterhood"),
+  { stealth: true },
+  async (t) => {
+    const testnet = await createTestnet();
+    const { bootstrap } = testnet;
 
-  const { pd } = await utils.createSister("net1", bootstrap);
-  t.teardown(() => {
-    pd.close();
-  });
-  await pd.ready();
-  await pd.joinNetwork();
+    const { pd } = await utils.createSister("net1", bootstrap);
+    t.teardown(() => {
+      pd.close();
+    });
+    await pd.ready();
+    await pd.joinNetwork();
 
-  t.ok(pd.connected, "Sister connected to network");
-});
-
-test(txt.main("Create two-node sisterhood"), { stealth: true }, async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
-
-  const [p1, p2] = await utils.createSisterhood("net-peer", bootstrap, 2);
-  t.teardown(() => {
-    p1.pd.close();
-    p2.pd.close();
-  });
-  await utils.wait(1);
-  t.ok(p1.pd.connected && p2.pd.connected, "both peers connected");
-
-  const peers1 = p1.pd.listPeers();
-  const peers2 = p2.pd.listPeers();
-  t.is(peers1.length, 1, "p1 sees 1 peer");
-  t.is(peers2.length, 1, "p2 sees 1 peer");
-});
-
-test(txt.main("Create five-node sisterhood"), { stealth: true }, async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
-
-  // Spin up 5 peers
-  const peerObjs = await utils.createSisterhood("peer", bootstrap, 5);
-  await utils.wait(1);
-  const pds = peerObjs.map((p) => p.pd);
-
-  // Teardown all peers
-  t.teardown(async () => {
-    for (const pd of pds) await pd.close();
-  });
-
-  // Ensure all are connected
-  for (const pd of pds) {
-    t.ok(pd.connected, "peer is connected");
+    t.ok(pd.connected, "Sister connected to network");
   }
+);
 
-  // Each peer should see 4 other peers
-  for (const pd of pds) {
-    const peers = pd.listPeers();
-    t.is(peers.length, 4, "peer sees 4 other peers");
+test(
+  txt.main("Sister: Create two-node sisterhood"),
+  { stealth: true },
+  async (t) => {
+    const testnet = await createTestnet();
+    const { bootstrap } = testnet;
+
+    const [p1, p2] = await utils.createSisterhood("net-peer", bootstrap, 2);
+    t.teardown(() => {
+      p1.pd.close();
+      p2.pd.close();
+    });
+    await utils.wait(1);
+    t.ok(p1.pd.connected && p2.pd.connected, "both peers connected");
+
+    const peers1 = p1.pd.listPeers();
+    const peers2 = p2.pd.listPeers();
+    t.is(peers1.length, 1, "p1 sees 1 peer");
+    t.is(peers2.length, 1, "p2 sees 1 peer");
   }
-});
+);
+
+test(
+  txt.main("Sister: Create five-node sisterhood"),
+  { stealth: true },
+  async (t) => {
+    const testnet = await createTestnet();
+    const { bootstrap } = testnet;
+
+    // Spin up 5 peers
+    const peerObjs = await utils.createSisterhood("peer", bootstrap, 5);
+    await utils.wait(1);
+    const pds = peerObjs.map((p) => p.pd);
+
+    // Teardown all peers
+    t.teardown(async () => {
+      for (const pd of pds) await pd.close();
+    });
+
+    // Ensure all are connected
+    for (const pd of pds) {
+      t.ok(pd.connected, "peer is connected");
+    }
+
+    // Each peer should see 4 other peers
+    for (const pd of pds) {
+      const peers = pd.listPeers();
+      t.is(peers.length, 4, "peer sees 4 other peers");
+    }
+  }
+);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Sister Event Emitter tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("NETWORK events"), { stealth: true }, async (t) => {
+test(txt.main("Sister: NETWORK events"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -189,7 +201,7 @@ test(txt.main("NETWORK events"), { stealth: true }, async (t) => {
   t.ok(systemBFired, "SYSTEM event fired on sisterB after file deletion");
 });
 
-test(txt.main("PEER events"), { stealth: true }, async (t) => {
+test(txt.main("Sister: PEER events"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -243,7 +255,7 @@ test(txt.main("PEER events"), { stealth: true }, async (t) => {
   t.ok(systemAFired, "SYSTEM event fired on sisterA after sisterB disconnects");
 });
 
-test(txt.main("LOCAL events"), { stealth: true }, async (t) => {
+test(txt.main("Sister: LOCAL events"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -307,7 +319,7 @@ test(txt.main("LOCAL events"), { stealth: true }, async (t) => {
 // Sisterhood communication tests
 ///////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("Custom message"), { stealth: true }, async (t) => {
+test(txt.main("Sister: Custom message"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -324,10 +336,169 @@ test(txt.main("Custom message"), { stealth: true }, async (t) => {
     return true;
   });
 
-  const peerId = sisterA.pd.listPeers()[0].publicKey;
+  const peerId = sisterA.pd.listPeersStringified()[0].publicKey;
   const response = await sisterA.pd.sendMessage(peerId, "custom_message", {
     data: "test",
   });
   t.ok(customRequestReceived, "Custom request received by sisterB");
   t.is(response, true, "Custom response received by sisterA");
 });
+
+////////////////////////////////////////////////////////////////////////////////
+// File viewing tests
+////////////////////////////////////////////////////////////////////////////////
+
+test(txt.main("Sister: List local files"), { stealth: true }, async (t) => {
+  const testnet = await createTestnet();
+  const { bootstrap } = testnet;
+
+  const { pd, localDrivePath } = await utils.createSister(
+    "list-local-files",
+    bootstrap,
+    (err) => {
+      t.fail(txt.fail("onError called"), err);
+    },
+    { poll: false, pollInterval: 500 }
+  );
+  t.teardown(() => pd.close());
+  await pd.ready();
+
+  // Create some files
+  const files = [];
+  for (let i = 0; i < 5; i++) {
+    files.push(utils.createRandomFile(localDrivePath, 10));
+  }
+  await pd.syncLocalFilesOnce();
+
+  // List local files
+  const localFiles = await pd.listLocalFiles();
+  t.is(
+    localFiles.files.length,
+    files.length,
+    "Listed correct number of local files"
+  );
+  for (const file of files) {
+    t.ok(
+      localFiles.files.some((f) => f.path === file.name),
+      `File ${file.name} is listed`
+    );
+  }
+});
+
+test(txt.main("Sister: List network files"), { stealth: true }, async (t) => {
+  const testnet = await createTestnet();
+  const { bootstrap } = testnet;
+
+  const [sisterA, sisterB] = await utils.createSisterhood(
+    "list-network-files",
+    bootstrap,
+    2
+  );
+  t.teardown(async () => {
+    await sisterA.pd.close();
+    await sisterB.pd.close();
+  });
+
+  // Create files on sisterA
+  const filesA = [];
+  for (let i = 0; i < 5; i++) {
+    filesA.push(utils.createRandomFile(sisterA.pd.watchPath, 10));
+  }
+  await sisterA.pd.syncLocalFilesOnce();
+
+  // Create files on sisterB
+  const filesB = [];
+  for (let i = 0; i < 3; i++) {
+    filesB.push(utils.createRandomFile(sisterB.pd.watchPath, 10));
+  }
+  await sisterB.pd.syncLocalFilesOnce();
+
+  // Test file indexing on sisterB
+  const sisterAkey = sisterA.pd.publicKeyStr;
+  const networkFilesB = await sisterB.pd.listNetworkFiles();
+
+  t.is(
+    networkFilesB.get("local").files.length,
+    filesB.length,
+    "Listed correct number of local network files"
+  );
+  t.is(
+    networkFilesB.get(sisterAkey).files.length,
+    filesA.length,
+    "Listed correct number of remote network files"
+  );
+  for (const file of networkFilesB.get("local").files) {
+    t.ok(
+      filesB.some((f) => f.name === file.path),
+      `File ${file.path} is listed in local network files`
+    );
+  }
+  for (const file of networkFilesB.get(sisterAkey).files) {
+    t.ok(
+      filesA.some((f) => f.name === file.path),
+      `File ${file.path} is listed in remote network files`
+    );
+  }
+
+  // Test file indexing on sisterA
+  const sisterBkey = sisterB.pd.publicKeyStr;
+  const networkFilesA = await sisterA.pd.listNetworkFiles();
+  t.is(
+    networkFilesA.get("local").files.length,
+    filesA.length,
+    "Listed correct number of local network files"
+  );
+  t.is(
+    networkFilesA.get(sisterBkey).files.length,
+    filesB.length,
+    "Listed correct number of remote network files"
+  );
+  for (const file of networkFilesA.get("local").files) {
+    t.ok(
+      filesA.some((f) => f.name === file.path),
+      `File ${file.path} is listed in local network files`
+    );
+  }
+  for (const file of networkFilesA.get(sisterBkey).files) {
+    t.ok(
+      filesB.some((f) => f.name === file.path),
+      `File ${file.path} is listed in remote network files`
+    );
+  }
+});
+
+solo(
+  txt.main("Sister: Test file downloading"),
+  { stealth: false },
+  async (t) => {
+    const testnet = await createTestnet();
+    const { bootstrap } = testnet;
+
+    // TODO
+
+    const [sisterA, sisterB] = await utils.createSisterhood(
+      "file-download-test",
+      bootstrap,
+      2,
+      (err) => t.fail(txt.fail("onError called"), err),
+      { poll: false, pollInterval: 500 }
+    );
+    t.teardown(async () => {
+      await sisterA.pd.close();
+      await sisterB.pd.close();
+    });
+
+    // Create a file on sisterA
+    const fileA = utils.createRandomFile(sisterA.pd.watchPath, 10);
+    await sisterA.pd.syncLocalFilesOnce();
+    await sisterB.pd.syncLocalFilesOnce();
+
+    // Download the file from sisterB
+    await sisterB.pd.downloadFileFromPeer(sisterA.pd.publicKeyStr, fileA.name);
+    utils.wait(1);
+    await sisterB.pd.syncLocalFilesOnce();
+
+    // Check the downloaded file
+    console.log("Downloaded files", await sisterB.pd.listLocalFiles());
+  }
+);

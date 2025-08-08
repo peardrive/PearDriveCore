@@ -5,6 +5,8 @@
 
 /**
  * @remarks Array buffer to string (Only use when necessary!)
+ *
+ * @protected
  */
 
 import b4a from "b4a";
@@ -15,6 +17,8 @@ import b4a from "b4a";
  * @param {Uint8Array | ArrayBuffer} buffer key buffer
  *
  * @returns {string} Stringified version of key
+ *
+ * @protected
  */
 export function bufferToStr(buffer) {
   return b4a.toString(buffer, "hex");

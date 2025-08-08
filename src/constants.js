@@ -33,6 +33,7 @@ export const RPC = {
 
   FILE_REQUEST: "file_request",
   FILE_SEND: "file_send",
+  FILE_RELEASE: "file_release",
 };
 
 /**

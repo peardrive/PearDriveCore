@@ -205,10 +205,13 @@ export async function createSister(
 
 /**
  * Creates a sisterhood of n Sister peers, each with its own storage folders.
+ *
  * @param {string} baseName - Base name for each peer's folders
  * @param {Array} bootstrap - DHT bootstrap nodes
  * @param {number} n - Number of peers to create
  * @param {Function} [onError] - Optional error callback
+ * @param {Object} [indexOpts] - Optional index options
+ *
  * @returns {Promise<Object[]>} - Array of sister descriptor objects { pd,
  *  localDrivePath, corestorePath, logPath }
  */
@@ -216,12 +219,16 @@ export async function createSisterhood(
   baseName,
   bootstrap,
   n,
-  onError = () => {}
+  onError = () => {},
+  indexOpts = {
+    poll: true,
+    pollInterval: 500,
+  }
 ) {
   const peers = [];
   for (let i = 0; i < n; i++) {
     const name = `${baseName}${i}`;
-    const peer = await createSister(name, bootstrap, onError);
+    const peer = await createSister(name, bootstrap, onError, indexOpts);
     await peer.pd.ready();
     if (i === 0) {
       await peer.pd.joinNetwork();
@@ -273,6 +280,8 @@ export async function makeLocalFileIndex(
       log.info(`Event emitted: ${eventName}`, payload);
     },
     indexOpts,
+    uploadDrives: new Map(),
+    downloadDrives: new Map(),
   });
 
   return {
