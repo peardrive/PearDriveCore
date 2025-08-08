@@ -6,7 +6,7 @@ import Logger from "@hopets/logger";
 
 import * as Ctest from "./constants.js";
 import * as C from "../../src/constants.js";
-import Sister from "../../src/Sister.js";
+import PearDrive from "../../src/PearDrive.js";
 import LocalFileIndex from "../../src/LocalFileIndex.js";
 
 /** Generate random string of given length */
@@ -73,7 +73,7 @@ export function createCorestorePath(folderName) {
   return folderPath;
 }
 
-/** Resolves when given array of Sisters are all connected */
+/** Resolves when given array of PearDrives are all connected */
 export async function awaitAllConnected(instances, timeout = 60000) {
   let connected = false;
   const startTime = Date.now();
@@ -160,7 +160,7 @@ export function areObjectsEqual(obj1, obj2) {
 }
 
 /**
- * Creates and initializes a Sister instance with isolated mock-data folders.
+ * Creates and initializes a PearDrive instance with isolated mock-data folders.
  *
  * @param {string} name - Unique test identifier
  * @param {Uint8Array[]} bootstrap - DHT bootstrap nodes
@@ -185,8 +185,8 @@ export async function createPearDrive(
   fs.mkdirSync(localDrivePath, { recursive: true });
   fs.mkdirSync(corestorePath, { recursive: true });
 
-  // instantiate Sister
-  const pd = new Sister({
+  // instantiate PearDrive
+  const pd = new PearDrive({
     watchPath: localDrivePath,
     corestorePath,
     indexName: name,
@@ -204,7 +204,7 @@ export async function createPearDrive(
 }
 
 /**
- * Creates a sisterhood of n Sister peers, each with its own storage folders.
+ * Creates a network of n PearDrive peers, each with its own storage folders.
  *
  * @param {string} baseName - Base name for each peer's folders
  * @param {Array} bootstrap - DHT bootstrap nodes
@@ -212,7 +212,7 @@ export async function createPearDrive(
  * @param {Function} [onError] - Optional error callback
  * @param {Object} [indexOpts] - Optional index options
  *
- * @returns {Promise<Object[]>} - Array of sister descriptor objects { pd,
+ * @returns {Promise<Object[]>} - Array of PearDrive descriptor objects { pd,
  *  localDrivePath, corestorePath, logPath }
  */
 export async function createNetwork(

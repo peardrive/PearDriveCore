@@ -51,4 +51,6 @@ export const EVENT = {
   LOCAL: "local_update",
   /** Any error thrown in PearDrive */
   ERROR: "error_update",
+  /** Download progress info */
+  DOWNLOAD_PROGRESS: "download_progress",
 };
