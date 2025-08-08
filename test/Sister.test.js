@@ -17,16 +17,16 @@ utils.clearTestData();
 utils.createTestFolders();
 
 ////////////////////////////////////////////////////////////////////////////////
-// Sister core functionality tests
+// PearDrive core functionality tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("Sister: Initialization"), { stealth: true }, async (t) => {
+test(txt.main("PearDrive: Initialization"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
   // Test initialization
   const { pd, localDrivePath, corestorePath, logPath } =
-    await utils.createSister("init-test", bootstrap, () =>
+    await utils.createPearDrive("init-test", bootstrap, () =>
       t.fail("onError called")
     );
   t.teardown(() => {
@@ -42,11 +42,11 @@ test(txt.main("Sister: Initialization"), { stealth: true }, async (t) => {
   t.is(data.corestorePath, corestorePath, "corestorePath saved");
   t.is(data.logOpts.logFilePath, logPath, "logFilePath saved");
 
-  // Close the Sister instance
+  // Close the PearDrive instance
   await pd.close();
   t.pass("close() completed");
 
-  // Create a new Sister instance with the same save data
+  // Create a new PearDrive instance with the same save data
   console.log("TODO test loading from save data");
 });
 
@@ -55,31 +55,31 @@ test(txt.main("Sister: Initialization"), { stealth: true }, async (t) => {
 ////////////////////////////////////////////////////////////////////////////////
 
 test(
-  txt.main("Sister: Create one-node sisterhood"),
+  txt.main("PearDrive: Create one-node network"),
   { stealth: true },
   async (t) => {
     const testnet = await createTestnet();
     const { bootstrap } = testnet;
 
-    const { pd } = await utils.createSister("net1", bootstrap);
+    const { pd } = await utils.createPearDrive("net1", bootstrap);
     t.teardown(() => {
       pd.close();
     });
     await pd.ready();
     await pd.joinNetwork();
 
-    t.ok(pd.connected, "Sister connected to network");
+    t.ok(pd.connected, "PearDrive connected to network");
   }
 );
 
 test(
-  txt.main("Sister: Create two-node sisterhood"),
+  txt.main("PearDrive: Create two-node network"),
   { stealth: true },
   async (t) => {
     const testnet = await createTestnet();
     const { bootstrap } = testnet;
 
-    const [p1, p2] = await utils.createSisterhood("net-peer", bootstrap, 2);
+    const [p1, p2] = await utils.createNetwork("net-peer", bootstrap, 2);
     t.teardown(() => {
       p1.pd.close();
       p2.pd.close();
@@ -95,14 +95,14 @@ test(
 );
 
 test(
-  txt.main("Sister: Create five-node sisterhood"),
+  txt.main("PearDrive: Create five-node network"),
   { stealth: true },
   async (t) => {
     const testnet = await createTestnet();
     const { bootstrap } = testnet;
 
     // Spin up 5 peers
-    const peerObjs = await utils.createSisterhood("peer", bootstrap, 5);
+    const peerObjs = await utils.createNetwork("peer", bootstrap, 5);
     await utils.wait(1);
     const pds = peerObjs.map((p) => p.pd);
 
@@ -125,37 +125,37 @@ test(
 );
 
 ////////////////////////////////////////////////////////////////////////////////
-// Sister Event Emitter tests
+// Network Event Emitter tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("Sister: NETWORK events"), { stealth: true }, async (t) => {
+test(txt.main("PearDrive: NETWORK events"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  const [sisterA, sisterB] = await utils.createSisterhood(
+  const [pearDriveA, pearDriveB] = await utils.createNetwork(
     "network-events",
     bootstrap,
     2
   );
   t.teardown(async () => {
-    sisterA.pd.close();
-    sisterB.pd.close();
+    pearDriveA.pd.close();
+    pearDriveB.pd.close();
   });
 
   let networkAFired = false;
   let systemAFired = false;
   let networkBFired = false;
   let systemBFired = false;
-  sisterA.pd.on(C.EVENT.NETWORK, () => {
+  pearDriveA.pd.on(C.EVENT.NETWORK, () => {
     networkAFired = true;
   });
-  sisterA.pd.on(C.EVENT.SYSTEM, () => {
+  pearDriveA.pd.on(C.EVENT.SYSTEM, () => {
     systemAFired = true;
   });
-  sisterB.pd.on(C.EVENT.NETWORK, () => {
+  pearDriveB.pd.on(C.EVENT.NETWORK, () => {
     networkBFired = true;
   });
-  sisterB.pd.on(C.EVENT.SYSTEM, () => {
+  pearDriveB.pd.on(C.EVENT.SYSTEM, () => {
     systemBFired = true;
   });
 
@@ -163,12 +163,12 @@ test(txt.main("Sister: NETWORK events"), { stealth: true }, async (t) => {
   // Test NETWORK event on file addition
   //
 
-  utils.createRandomFile(sisterA.localDrivePath);
-  await sisterA.pd.syncLocalFilesOnce();
+  utils.createRandomFile(pearDriveA.localDrivePath);
+  await pearDriveA.pd.syncLocalFilesOnce();
   await utils.wait(1);
 
-  t.ok(networkBFired, "NETWORK event fired on sisterB after file addition");
-  t.ok(systemBFired, "SYSTEM event fired on sisterB after file addition");
+  t.ok(networkBFired, "NETWORK event fired on pearDriveB after file addition");
+  t.ok(systemBFired, "SYSTEM event fired on pearDriveB after file addition");
 
   //
   // Test NETWORK event on file modification
@@ -178,13 +178,19 @@ test(txt.main("Sister: NETWORK events"), { stealth: true }, async (t) => {
   systemBFired = false;
 
   const modifiedContent = "modified content";
-  const filePath = path.join(sisterA.localDrivePath, "to-modify.txt");
+  const filePath = path.join(pearDriveA.localDrivePath, "to-modify.txt");
   fs.writeFileSync(filePath, modifiedContent);
-  await sisterA.pd.syncLocalFilesOnce();
+  await pearDriveA.pd.syncLocalFilesOnce();
   await utils.wait(1);
 
-  t.ok(networkBFired, "NETWORK event fired on sisterB after file modification");
-  t.ok(systemBFired, "SYSTEM event fired on sisterB after file modification");
+  t.ok(
+    networkBFired,
+    "NETWORK event fired on pearDriveB after file modification"
+  );
+  t.ok(
+    systemBFired,
+    "SYSTEM event fired on pearDriveB after file modification"
+  );
 
   //
   // Test NETWORK event on file deletion
@@ -194,54 +200,54 @@ test(txt.main("Sister: NETWORK events"), { stealth: true }, async (t) => {
   systemBFired = false;
 
   fs.unlinkSync(filePath);
-  await sisterA.pd.syncLocalFilesOnce();
+  await pearDriveA.pd.syncLocalFilesOnce();
   await utils.wait(1);
 
-  t.ok(networkBFired, "NETWORK event fired on sisterB after file deletion");
-  t.ok(systemBFired, "SYSTEM event fired on sisterB after file deletion");
+  t.ok(networkBFired, "NETWORK event fired on pearDriveB after file deletion");
+  t.ok(systemBFired, "SYSTEM event fired on pearDriveB after file deletion");
 });
 
-test(txt.main("Sister: PEER events"), { stealth: true }, async (t) => {
+test(txt.main("PearDrive: PEER events"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  const sisterA = await utils.createSister("sisterA", bootstrap);
-  const sisterB = await utils.createSister("sisterB", bootstrap);
+  const pearDriveA = await utils.createPearDrive("pearDriveA", bootstrap);
+  const pearDriveB = await utils.createPearDrive("pearDriveB", bootstrap);
   t.teardown(async () => {
-    await sisterA.pd.close();
-    await sisterB.pd.close();
+    await pearDriveA.pd.close();
+    await pearDriveB.pd.close();
   });
-  await sisterA.pd.ready();
-  await sisterB.pd.ready();
+  await pearDriveA.pd.ready();
+  await pearDriveB.pd.ready();
 
   let peerAFired = false;
   let systemAFired = false;
   let peerBFired = false;
   let systemBFired = false;
-  sisterA.pd.on(C.EVENT.PEER, () => {
+  pearDriveA.pd.on(C.EVENT.PEER, () => {
     peerAFired = true;
   });
-  sisterA.pd.on(C.EVENT.SYSTEM, () => {
+  pearDriveA.pd.on(C.EVENT.SYSTEM, () => {
     systemAFired = true;
   });
-  sisterB.pd.on(C.EVENT.PEER, () => {
+  pearDriveB.pd.on(C.EVENT.PEER, () => {
     peerBFired = true;
   });
-  sisterB.pd.on(C.EVENT.SYSTEM, () => {
+  pearDriveB.pd.on(C.EVENT.SYSTEM, () => {
     systemBFired = true;
   });
 
   //
   // Test PEER event on connect
   //
-  await sisterA.pd.joinNetwork();
-  await sisterB.pd.joinNetwork(sisterA.pd.networkKey);
-  await utils.awaitAllConnected([sisterA.pd, sisterB.pd]);
+  await pearDriveA.pd.joinNetwork();
+  await pearDriveB.pd.joinNetwork(pearDriveA.pd.networkKey);
+  await utils.awaitAllConnected([pearDriveA.pd, pearDriveB.pd]);
 
-  t.ok(peerAFired, "PEER event fired on sisterA");
-  t.ok(systemAFired, "SYSTEM event fired on sisterA");
-  t.ok(peerBFired, "PEER event fired on sisterB");
-  t.ok(systemBFired, "SYSTEM event fired on sisterB");
+  t.ok(peerAFired, "PEER event fired on pearDriveA");
+  t.ok(systemAFired, "SYSTEM event fired on pearDriveA");
+  t.ok(peerBFired, "PEER event fired on pearDriveB");
+  t.ok(systemBFired, "SYSTEM event fired on pearDriveB");
 
   //
   // Test PEER event on disconnect
@@ -249,17 +255,23 @@ test(txt.main("Sister: PEER events"), { stealth: true }, async (t) => {
   // Only look at peer A, because B will be removed from A's peer list
   peerAFired = false;
   systemAFired = false;
-  await sisterB.pd.close();
+  await pearDriveB.pd.close();
   await utils.wait(1);
-  t.ok(peerAFired, "PEER event fired on sisterA after sisterB disconnects");
-  t.ok(systemAFired, "SYSTEM event fired on sisterA after sisterB disconnects");
+  t.ok(
+    peerAFired,
+    "PEER event fired on pearDriveA after pearDriveB disconnects"
+  );
+  t.ok(
+    systemAFired,
+    "SYSTEM event fired on pearDriveA after pearDriveB disconnects"
+  );
 });
 
-test(txt.main("Sister: LOCAL events"), { stealth: true }, async (t) => {
+test(txt.main("PearDrive: LOCAL events"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  const { pd, localDrivePath } = await utils.createSister(
+  const { pd, localDrivePath } = await utils.createPearDrive(
     "local-events",
     bootstrap,
     (err) => t.fail(txt.fail("onError called"), err),
@@ -316,43 +328,43 @@ test(txt.main("Sister: LOCAL events"), { stealth: true }, async (t) => {
 });
 
 ///////////////////////////////////////////////////////////////////////////////
-// Sisterhood communication tests
+// Network communication tests
 ///////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("Sister: Custom message"), { stealth: true }, async (t) => {
+test(txt.main("PearDrive: Custom message"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  const peers = await utils.createSisterhood("rpc-test", bootstrap, 2);
-  const [sisterA, sisterB] = peers;
+  const peers = await utils.createNetwork("rpc-test", bootstrap, 2);
+  const [pearDriveA, pearDriveB] = peers;
   t.teardown(async () => {
-    await sisterA.pd.close();
-    await sisterB.pd.close();
+    await pearDriveA.pd.close();
+    await pearDriveB.pd.close();
   });
 
   let customRequestReceived = false;
-  sisterB.pd.on("custom_message", (_payload) => {
+  pearDriveB.pd.on("custom_message", (_payload) => {
     customRequestReceived = true;
     return true;
   });
 
-  const peerId = sisterA.pd.listPeersStringified()[0].publicKey;
-  const response = await sisterA.pd.sendMessage(peerId, "custom_message", {
+  const peerId = pearDriveA.pd.listPeersStringified()[0].publicKey;
+  const response = await pearDriveA.pd.sendMessage(peerId, "custom_message", {
     data: "test",
   });
-  t.ok(customRequestReceived, "Custom request received by sisterB");
-  t.is(response, true, "Custom response received by sisterA");
+  t.ok(customRequestReceived, "Custom request received by pearDriveB");
+  t.is(response, true, "Custom response received by pearDriveA");
 });
 
 ////////////////////////////////////////////////////////////////////////////////
 // File viewing tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("Sister: List local files"), { stealth: true }, async (t) => {
+test(txt.main("PearDrive: List local files"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  const { pd, localDrivePath } = await utils.createSister(
+  const { pd, localDrivePath } = await utils.createPearDrive(
     "list-local-files",
     bootstrap,
     (err) => {
@@ -385,90 +397,94 @@ test(txt.main("Sister: List local files"), { stealth: true }, async (t) => {
   }
 });
 
-test(txt.main("Sister: List network files"), { stealth: true }, async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
+test(
+  txt.main("PearDrive: List network files"),
+  { stealth: true },
+  async (t) => {
+    const testnet = await createTestnet();
+    const { bootstrap } = testnet;
 
-  const [sisterA, sisterB] = await utils.createSisterhood(
-    "list-network-files",
-    bootstrap,
-    2
-  );
-  t.teardown(async () => {
-    await sisterA.pd.close();
-    await sisterB.pd.close();
-  });
-
-  // Create files on sisterA
-  const filesA = [];
-  for (let i = 0; i < 5; i++) {
-    filesA.push(utils.createRandomFile(sisterA.pd.watchPath, 10));
-  }
-  await sisterA.pd.syncLocalFilesOnce();
-
-  // Create files on sisterB
-  const filesB = [];
-  for (let i = 0; i < 3; i++) {
-    filesB.push(utils.createRandomFile(sisterB.pd.watchPath, 10));
-  }
-  await sisterB.pd.syncLocalFilesOnce();
-
-  // Test file indexing on sisterB
-  const sisterAkey = sisterA.pd.publicKeyStr;
-  const networkFilesB = await sisterB.pd.listNetworkFiles();
-
-  t.is(
-    networkFilesB.get("local").files.length,
-    filesB.length,
-    "Listed correct number of local network files"
-  );
-  t.is(
-    networkFilesB.get(sisterAkey).files.length,
-    filesA.length,
-    "Listed correct number of remote network files"
-  );
-  for (const file of networkFilesB.get("local").files) {
-    t.ok(
-      filesB.some((f) => f.name === file.path),
-      `File ${file.path} is listed in local network files`
+    const [pearDriveA, pearDriveB] = await utils.createNetwork(
+      "list-network-files",
+      bootstrap,
+      2
     );
-  }
-  for (const file of networkFilesB.get(sisterAkey).files) {
-    t.ok(
-      filesA.some((f) => f.name === file.path),
-      `File ${file.path} is listed in remote network files`
-    );
-  }
+    t.teardown(async () => {
+      await pearDriveA.pd.close();
+      await pearDriveB.pd.close();
+    });
 
-  // Test file indexing on sisterA
-  const sisterBkey = sisterB.pd.publicKeyStr;
-  const networkFilesA = await sisterA.pd.listNetworkFiles();
-  t.is(
-    networkFilesA.get("local").files.length,
-    filesA.length,
-    "Listed correct number of local network files"
-  );
-  t.is(
-    networkFilesA.get(sisterBkey).files.length,
-    filesB.length,
-    "Listed correct number of remote network files"
-  );
-  for (const file of networkFilesA.get("local").files) {
-    t.ok(
-      filesA.some((f) => f.name === file.path),
-      `File ${file.path} is listed in local network files`
+    // Create files on pearDriveA
+    const filesA = [];
+    for (let i = 0; i < 5; i++) {
+      filesA.push(utils.createRandomFile(pearDriveA.pd.watchPath, 10));
+    }
+    await pearDriveA.pd.syncLocalFilesOnce();
+
+    // Create files on pearDriveB
+    const filesB = [];
+    for (let i = 0; i < 3; i++) {
+      filesB.push(utils.createRandomFile(pearDriveB.pd.watchPath, 10));
+    }
+    await pearDriveB.pd.syncLocalFilesOnce();
+
+    // Test file indexing on pearDriveB
+    const pearDriveAkey = pearDriveA.pd.publicKeyStr;
+    const networkFilesB = await pearDriveB.pd.listNetworkFiles();
+
+    t.is(
+      networkFilesB.get("local").files.length,
+      filesB.length,
+      "Listed correct number of local network files"
     );
-  }
-  for (const file of networkFilesA.get(sisterBkey).files) {
-    t.ok(
-      filesB.some((f) => f.name === file.path),
-      `File ${file.path} is listed in remote network files`
+    t.is(
+      networkFilesB.get(pearDriveAkey).files.length,
+      filesA.length,
+      "Listed correct number of remote network files"
     );
+    for (const file of networkFilesB.get("local").files) {
+      t.ok(
+        filesB.some((f) => f.name === file.path),
+        `File ${file.path} is listed in local network files`
+      );
+    }
+    for (const file of networkFilesB.get(pearDriveAkey).files) {
+      t.ok(
+        filesA.some((f) => f.name === file.path),
+        `File ${file.path} is listed in remote network files`
+      );
+    }
+
+    // Test file indexing on pearDriveA
+    const pearDriveBkey = pearDriveB.pd.publicKeyStr;
+    const networkFilesA = await pearDriveA.pd.listNetworkFiles();
+    t.is(
+      networkFilesA.get("local").files.length,
+      filesA.length,
+      "Listed correct number of local network files"
+    );
+    t.is(
+      networkFilesA.get(pearDriveBkey).files.length,
+      filesB.length,
+      "Listed correct number of remote network files"
+    );
+    for (const file of networkFilesA.get("local").files) {
+      t.ok(
+        filesA.some((f) => f.name === file.path),
+        `File ${file.path} is listed in local network files`
+      );
+    }
+    for (const file of networkFilesA.get(pearDriveBkey).files) {
+      t.ok(
+        filesB.some((f) => f.name === file.path),
+        `File ${file.path} is listed in remote network files`
+      );
+    }
   }
-});
+);
 
 test(
-  txt.main("Sister: Test file downloading"),
+  txt.main("PearDrive: Test file downloading"),
   { stealth: false },
   async (t) => {
     const testnet = await createTestnet();
@@ -476,7 +492,7 @@ test(
 
     // TODO
 
-    const [sisterA, sisterB] = await utils.createSisterhood(
+    const [pearDriveA, pearDriveB] = await utils.createNetwork(
       "file-download-test",
       bootstrap,
       2,
@@ -484,18 +500,21 @@ test(
       { poll: false, pollInterval: 500 }
     );
     t.teardown(async () => {
-      await sisterA.pd.close();
-      await sisterB.pd.close();
+      await pearDriveA.pd.close();
+      await pearDriveB.pd.close();
     });
 
-    // Create a file on sisterA
-    const fileA = utils.createRandomFile(sisterA.pd.watchPath, 10);
-    await sisterA.pd.syncLocalFilesOnce();
-    await sisterB.pd.syncLocalFilesOnce();
+    // Create a file on pearDriveA
+    const fileA = utils.createRandomFile(pearDriveA.pd.watchPath, 10);
+    await pearDriveA.pd.syncLocalFilesOnce();
+    await pearDriveB.pd.syncLocalFilesOnce();
 
-    // Download the file from sisterB
-    await sisterB.pd.downloadFileFromPeer(sisterA.pd.publicKeyStr, fileA.name);
+    // Download the file from pearDriveB
+    await pearDriveB.pd.downloadFileFromPeer(
+      pearDriveA.pd.publicKeyStr,
+      fileA.name
+    );
     utils.wait(1);
-    await sisterB.pd.syncLocalFilesOnce();
+    await pearDriveB.pd.syncLocalFilesOnce();
   }
 );

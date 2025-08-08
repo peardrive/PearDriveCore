@@ -11,14 +11,14 @@
 
 /**
  * @remarks
- *  Core constants used throughout SisterJS:
+ *  Core constants used throughout PearDrive:
  *   - `EVENTS` (hook event names)
  *   - `RPC` (RPC method identifiers)
  *   - any other shared values (default options, codes, etc.)
- *  You can imports these constants from SisterJS root
+ *  You can imports these constants from PearDrive root
  *
  * @example
- *  import {EVENT, RPC_EVENT} from "@hopets/sisterjs";
+ *  import {EVENT, RPC_EVENT} from "@peardrive/core";
  */
 
 /** Message types for RPC */
@@ -49,6 +49,6 @@ export const EVENT = {
   NETWORK: "network_update",
   /** Update on a file on the local filesystem */
   LOCAL: "local_update",
-  /** Any error thrown in Sister */
+  /** Any error thrown in PearDrive */
   ERROR: "error_update",
 };

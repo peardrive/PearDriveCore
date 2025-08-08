@@ -1,17 +1,17 @@
 {
-  "name": "@hopets/sisterjs",
+  "name": "@peardrive/core",
   "version": "1.0.0",
-  "main": "./dist/Sister.js",
-  "module": "./dist/Sister.js",
+  "main": "./dist/PearDrive.js",
+  "module": "./dist/PearDrive.js",
   "type": "module",
   "license": "AGPL-3.0-only",
-  "author": "Jenna Baudelaire (GitHub HopeTS) <jennabaudelaire@pm.me>",
+  "author": "PearDrive Team",
   "scripts": {
     "dev": "pear run -d -t .",
     "lint": "eslint ./src",
     "test": "brittle test/*.test.js",
     "test-index": "brittle test/LocalFileIndex.test.js",
-    "test-sis": "brittle test/Sister.test.js",
+    "test-sis": "brittle test/PearDrive.test.js",
     "clear-dist": "rm -rf dist",
     "make-dist": "tsc && cp -R src/. dist/",
     "build-code": "npm run clear-dist && npm run make-dist",
@@ -47,8 +47,8 @@
   },
   "exports": {
     ".": {
-      "import": "./dist/Sister.js",
-      "require": "./dist/Sister.js"
+      "import": "./dist/PearDrive.js",
+      "require": "./dist/PearDrive.js"
     }
   },
   "files": [

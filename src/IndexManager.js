@@ -73,7 +73,7 @@ export class IndexManager {
       uploadDrives,
       downloadDrives,
     });
-    /** @protected {Map<string, Hyperbee>} }All nonlocal sisters hyperbees */
+    /** @protected {Map<string, Hyperbee>} }All nonlocal PearDrives hyperbees */
     this.remoteIndexes = new Map();
     this.watchPath = watchPath;
     this._rpcConnections = rpcConnections;
@@ -100,7 +100,7 @@ export class IndexManager {
   /**
    * Add a remote peer’s Hyperbee into this manager.
    * Subscribes to its append events so that on each new batch
-   * you fire a NETWORK update back to Sister.
+   * you fire a NETWORK update back to PearDrive.
    *
    * @param {string} peerId – Hex string of the peer’s public key
    *
@@ -181,21 +181,21 @@ export class IndexManager {
   }
 
   /**
-   * Get file metadata / bee metadata for a given sister
+   * Get file metadata / bee metadata for a given PearDrive
    *
    * @returns {
    *  Promise<Map<string, { key: HyperbeeKey, files: Object[] }>>
    * }
    */
-  async getSisterIndexInfo(sisterId) {
-    this.#log.info(`Retrieving index info for sister ${sisterId}...`);
-    if (!this.remoteIndexes.has(sisterId)) {
-      this.#log.error(`No remote index found for sister ${sisterId}`);
-      throw new Error(`No remote index found for sister ${sisterId}`);
+  async getPearDriveIndexInfo(pdId) {
+    this.#log.info(`Retrieving index info for peardrive ${pdId}...`);
+    if (!this.remoteIndexes.has(pdId)) {
+      this.#log.error(`No remote index found for peardrive ${pdId}`);
+      throw new Error(`No remote index found for peardrive ${pdId}`);
     }
 
     const files = [];
-    const bee = this.remoteIndexes.get(sisterId);
+    const bee = this.remoteIndexes.get(pdId);
     for await (const { _key, value } of bee.createReadStream()) {
       files.push(value);
     }
@@ -207,44 +207,44 @@ export class IndexManager {
   }
 
   /**
-   * Get file metadata / bee metadata for sisterhood, including self. There will
-   * be a "local" entry for the local index and entries for each remote sister
-   * with the keys being their hyperbee keys.
+   * Get file metadata / bee metadata for network, including self. There will
+   * be a "local" entry for the local index and entries for each remote
+   * peardrive with the keys being their hyperbee keys.
    *
    * @returns {
    *  Promise<Map<string, { key: HyperbeeKey, files: Object[] }>>
    * }
    */
-  async getSisterhoodIndexInfo() {
-    this.#log.info("Retrieving sisterhood index info...");
+  async getNetworkIndexInfo() {
+    this.#log.info("Retrieving network index info...");
 
     if (this.remoteIndexes.size === 0) {
-      this.#log.warn("No remote indexes available in sisterhood.");
+      this.#log.warn("No remote indexes available in network.");
       return new Map().set("local", await this.localIndex.getIndexInfo());
     }
 
-    const sisterhoodInfo = await this.getNonlocalSisterhoodIndexInfo();
+    const networkInfo = await this.getNonlocalNetworkIndexInfo();
     const self = await this.localIndex.getIndexInfo();
-    sisterhoodInfo.set("local", self);
-    return sisterhoodInfo;
+    networkInfo.set("local", self);
+    return networkInfo;
   }
 
-  /** Get local file metadata and bee metadata for nonlocal sisters */
-  async getNonlocalSisterhoodIndexInfo() {
-    this.#log.info("Retrieving nonlocal sister index info...");
+  /** Get local file metadata and bee metadata for nonlocal peardrives */
+  async getNonlocalNetworkIndexInfo() {
+    this.#log.info("Retrieving nonlocal peardrive index info...");
 
     if (this.remoteIndexes.size === 0) {
-      this.#log.warn("No remote indexes available in sisterhood.");
+      this.#log.warn("No remote indexes available in network.");
       return new Map();
     }
 
     const nonlocalInfo = new Map();
-    for (const [sisterId, bee] of this.remoteIndexes.entries()) {
+    for (const [pdId, bee] of this.remoteIndexes.entries()) {
       const files = [];
       for await (const { _key, value } of bee.createReadStream()) {
         files.push(value);
       }
-      nonlocalInfo.set(sisterId, { key: bee.key, files });
+      nonlocalInfo.set(pdId, { key: bee.key, files });
     }
 
     return nonlocalInfo;
@@ -252,7 +252,7 @@ export class IndexManager {
 
   /**
    * Create and configure the hyperdrive for uploading a file to a remote
-   * sister.
+   * peardrive.
    *
    * @param {string} path - Local file path to upload
    * @param {string | Uint8Array | ArrayBuffer} [driveKey] - Optional drive key.
@@ -296,7 +296,7 @@ export class IndexManager {
 
   /**
    * Create and configure the hyperdrive for downloading a file from a remote
-   * sister.
+   * peardrive.
    *
    * @param {string} path - Remote file path to download
    * @param {string | Uint8Array | ArrayBuffer} driveKey - Drive key.

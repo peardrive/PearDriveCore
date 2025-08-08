@@ -169,7 +169,7 @@ export function areObjectsEqual(obj1, obj2) {
  *
  * @returns {Promise<Object>} - { pd, localDrivePath, corestorePath, logPath }
  */
-export async function createSister(
+export async function createPearDrive(
   name,
   bootstrap,
   onError = () => {},
@@ -215,7 +215,7 @@ export async function createSister(
  * @returns {Promise<Object[]>} - Array of sister descriptor objects { pd,
  *  localDrivePath, corestorePath, logPath }
  */
-export async function createSisterhood(
+export async function createNetwork(
   baseName,
   bootstrap,
   n,
@@ -228,7 +228,7 @@ export async function createSisterhood(
   const peers = [];
   for (let i = 0; i < n; i++) {
     const name = `${baseName}${i}`;
-    const peer = await createSister(name, bootstrap, onError, indexOpts);
+    const peer = await createPearDrive(name, bootstrap, onError, indexOpts);
     await peer.pd.ready();
     if (i === 0) {
       await peer.pd.joinNetwork();

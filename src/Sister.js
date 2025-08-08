@@ -24,26 +24,26 @@ import * as C from "./constants.js";
 import * as utils from "./utils/index.js";
 import { IndexManager } from "./IndexManager.js";
 
-/** The utils toolbox SisterJS uses */
-export const purse = utils;
+/** The utils toolbox PearDrive Core uses */
+export const lib = utils;
 
 /** Built-in events, attach callbacks to these events with the on() function */
 export const EVENT = C.EVENT;
 
-/** RPC event names SisterJS uses */
+/** RPC event names PearDrive Core uses */
 export const RPC_EVENT = C.RPC;
 
 /*******************************************************************************
- * Sister.js
+ * PearDrive Core
  * ---
  * P2P networking system for node.js applications.
  ******************************************************************************/
-export default class Sister {
+export default class PearDrive {
   /** @private {Hyperswarm} Hyperswarm object for peer discovery */
   _swarm;
   /** @private {Corestore} Corestore for all hypercores */
   _store;
-  /** @private {Map<string, RPC>} RPC Sister connections */
+  /** @private {Map<string, RPC>} RPC PearDrive connections */
   _rpcConnections;
   /** @private {Logger} Logger */
   #log;
@@ -51,7 +51,7 @@ export default class Sister {
   _indexManager;
   /** @private {string} Absolute path to corestore */
   _corestorePath;
-  /** @private {string} Path to Sister's local file storage */
+  /** @private {string} Path to PearDrive's local file storage */
   _watchPath;
   /** @private {string} Name of the local indexer */
   _indexName;
@@ -130,7 +130,7 @@ export default class Sister {
 
     // Set up logging
     this.#log = new Logger(this._logOpts);
-    this.#log.info("Initializing Sister...");
+    this.#log.info("Initializing PearDrive...");
 
     // Set up corestore and swarm
     this._swarm = new Hyperswarm(swarmOpts);
@@ -163,13 +163,13 @@ export default class Sister {
   // Getters
   //////////////////////////////////////////////////////////////////////////////
 
-  /** Get the absolute path to the local file storage for this Sister */
+  /** Get the absolute path to the local file storage for this PearDrive */
   get watchPath() {
     return this._watchPath;
   }
 
   /**
-   * Get the public key for RPC connections to the sisterhood (Buffer)
+   * Get the public key for RPC connections to the network (Buffer)
    *
    * @returns {ArrayBuffer} - Public key as ArrayBuffer
    */
@@ -177,7 +177,7 @@ export default class Sister {
     return this._swarm.keyPair.publicKey;
   }
 
-  /** Get the public key for RPC connections to the sisterhood (String) */
+  /** Get the public key for RPC connections to the network (String) */
   get publicKeyStr() {
     return utils.formatToStr(this.publicKey);
   }
@@ -187,6 +187,7 @@ export default class Sister {
     return utils.formatToStr(this._networkKey);
   }
 
+  /** Get the inProgressDownloads dictionary */
   get inProgressDownloads() {
     return { ...this._inProgress };
   }
@@ -235,7 +236,7 @@ export default class Sister {
   }
 
   /**
-   * Join or create a sisterhood.
+   * Join or create a network.
    *
    * @param {string|Uint8Array|ArrayBuffer} [networkKey] - Optional network
    *  topic key.
@@ -376,13 +377,13 @@ export default class Sister {
     }));
   }
 
-  /** Close Sister gracefully */
+  /** Close PearDrive gracefully */
   async close() {
-    this.#log.info("Closing Sister...");
+    this.#log.info("Closing PearDrive...");
     this._indexManager.close();
     this._swarm.destroy();
     await this._store.close();
-    this.#log.info("Sister closed.");
+    this.#log.info("PearDrive closed.");
   }
 
   /** Activate automatic polling for the local file index */
@@ -426,12 +427,12 @@ export default class Sister {
 
   /** List files currently available over the network */
   async listNetworkFiles() {
-    return await this._indexManager.getSisterhoodIndexInfo();
+    return await this._indexManager.getNetworkIndexInfo();
   }
 
   /** List files currently available over the network not downloaded locally */
   async listNonLocalFiles() {
-    return await this._indexManager.getNonlocalSisterhoodIndexInfo();
+    return await this._indexManager.getNonlocalNetworkIndexInfo();
   }
 
   //////////////////////////////////////////////////////////////////////////////
