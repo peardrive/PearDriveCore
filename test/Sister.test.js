@@ -497,8 +497,5 @@ solo(
     await sisterB.pd.downloadFileFromPeer(sisterA.pd.publicKeyStr, fileA.name);
     utils.wait(1);
     await sisterB.pd.syncLocalFilesOnce();
-
-    // Check the downloaded file
-    console.log("Downloaded files", await sisterB.pd.listLocalFiles());
   }
 );

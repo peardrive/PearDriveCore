@@ -274,7 +274,8 @@ export class IndexManager {
     if (driveKey) {
       const keyStr = utils.formatToStr(driveKey);
       this.#log.info(`Resuming upload with drive key: ${keyStr}`);
-      drive = new Hyperdrive(this._store, driveKey);
+      const driveStore = this._createNamespace(path, "upload");
+      drive = new Hyperdrive(driveStore, driveKey);
     } else {
       this.#log.info(`Creating new upload drive for file: ${path}`);
       drive = new Hyperdrive(this._store);
@@ -307,7 +308,8 @@ export class IndexManager {
     try {
       // Create / load the hyperdrive
       const keyStr = utils.formatToStr(driveKey);
-      const drive = new Hyperdrive(this._store, keyStr);
+      const driveStore = this._createNamespace(path, "download");
+      const drive = new Hyperdrive(driveStore, keyStr);
       await drive.ready();
       this._downloadDrives.set(utils.asDrivePath(path), drive);
       return drive;
@@ -345,6 +347,7 @@ export class IndexManager {
     }
 
     try {
+      await drive.clearAll();
       await drive.close();
       this._downloadDrives.delete(dPath);
       this.#log.info(`Download drive closed for file: ${path}`);
@@ -383,6 +386,7 @@ export class IndexManager {
     }
 
     try {
+      await drive.clearAll();
       await drive.close();
       this._uploadDrives.delete(dPath);
       this.#log.info(`Upload drive closed for file: ${path}`);
@@ -545,5 +549,25 @@ export class IndexManager {
 
     this.#log.info(`Transfer for ${path} (${direction}) with peer 
       ${utils.formatToStr(peerId)} unmarked`);
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Private functions
+  //////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Create corestore namespace for a drive
+   *
+   * @param {string} pathOrKey - The path or key to create the namespace for
+   *
+   * @param {string} [tag] - Optional tag for the namespace
+   */
+  _createNamespace(pathOrKey, tag) {
+    const key = utils.formatToStr(pathOrKey);
+    this.#log.debug(`Creating namespace for drive: ${pathOrKey}`);
+
+    const tagStr = `${tag}:` || "";
+    const storePath = `${tagStr}${key}`;
+    return this._store.namespace(storePath);
   }
 }
