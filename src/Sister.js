@@ -68,6 +68,8 @@ export default class Sister {
   _uploadDrives;
   /** @private {Object} In-progress downloads meta-data */
   _inProgress;
+  /** @private {string} Seed for Hyperswarm */
+  _seed;
 
   /**
    * @param {Object} opts
@@ -91,6 +93,7 @@ export default class Sister {
    *  in the local file index automatically.
    * @param {number} [opts.indexOpts.pollInterval=500] - Interval in
    *  milliseconds for polling the local file index.
+   * @param {string} [opts.networkKey] - Optional network key to join
    */
   constructor({
     corestorePath,
@@ -101,15 +104,22 @@ export default class Sister {
       logToConsole: true,
     },
     indexOpts = {},
+    networkKey,
   }) {
     this._emitEvent = this._emitEvent.bind(this);
     this._hooks = {};
 
     // Set save data
+    this._networkKey = networkKey
+      ? utils.formatToBuffer(networkKey)
+      : utils.generateSeed();
     this._corestorePath = corestorePath;
     this._watchPath = watchPath;
     this._indexName = indexName;
     this._swarmOpts = swarmOpts;
+    this._swarmOpts.seed = swarmOpts.seed
+      ? utils.formatToBuffer(swarmOpts.seed)
+      : utils.generateSeed();
     this._logOpts = logOpts;
     const { poll = true, pollInterval = 500 } = indexOpts;
     this._indexOpts = {
@@ -171,6 +181,11 @@ export default class Sister {
     return utils.formatToStr(this.publicKey);
   }
 
+  /** Get the stringified network key */
+  get networkKey() {
+    return utils.formatToStr(this._networkKey);
+  }
+
   get inProgressDownloads() {
     return { ...this._inProgress };
   }
@@ -199,8 +214,11 @@ export default class Sister {
       corestorePath: this._corestorePath,
       watchPath: this._watchPath,
       indexName: this._indexName,
-      swarmOpts: this._swarmOpts,
+      swarmOpts: {
+        seed: utils.formatToStr(this._swarmOpts.seed),
+      },
       logOpts: this._logOpts,
+      networkKey: this.networkKey,
     };
   }
 
@@ -226,16 +244,14 @@ export default class Sister {
   async joinNetwork(networkKey) {
     // Set network key if provided, otherwise create a new one
     if (networkKey) {
-      this.networkKey = utils.formatToBuffer(networkKey);
-    } else {
-      this.networkKey = utils.generateSeed();
+      this._networkKey = utils.formatToBuffer(networkKey);
     }
 
     this.#log.info(
       "Joining network with key",
       utils.formatToStr(this.networkKey)
     );
-    const discovery = this._swarm.join(this.networkKey, {
+    const discovery = this._swarm.join(this._networkKey, {
       server: true,
       client: true,
     });

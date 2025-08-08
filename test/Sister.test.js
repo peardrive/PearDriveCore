@@ -467,7 +467,7 @@ test(txt.main("Sister: List network files"), { stealth: true }, async (t) => {
   }
 });
 
-solo(
+test(
   txt.main("Sister: Test file downloading"),
   { stealth: false },
   async (t) => {
