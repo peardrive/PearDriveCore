@@ -275,7 +275,7 @@ export default class LocalFileIndex {
 
   /** Poll for new files and sync with hyperbee */
   async #pollAndSync() {
-    this.#log.info("Polling for new files in", this.watchPath, "...");
+    this.#log.debug("Polling for new files in", this.watchPath, "...");
 
     // Load all existing file keys from hyperbee
     const storedFiles = new Map();
@@ -313,7 +313,7 @@ export default class LocalFileIndex {
 
   /** Recursively scan a dir and fill map with file metaData */
   async #scanDirectory(dir, outMap, relativeBase = this.watchPath) {
-    this.#log.info("Scanning directory", dir, "...");
+    this.#log.debug("Scanning directory", dir, "...");
 
     // Check all files
     const entries = fs.readdirSync(dir);
