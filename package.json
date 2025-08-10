@@ -16,7 +16,7 @@
     "make-dist": "tsc && cp -R src/. dist/",
     "build-code": "npm run clear-dist && npm run make-dist",
     "build-docs": "typedoc",
-    "build": "npm run build-code && npm run build-meta && npm run build-docs",
+    "build": "npm run build-code && npm run build-docs",
     "deploy": "npm run build && npm publish"
   },
   "imports": {
@@ -43,6 +43,14 @@
     "process/*": {
       "bare": "bare-process/*",
       "default": "process/*"
+    },
+    "crypto": {
+      "bare": "bare-crypto",
+      "default": "crypto"
+    },
+    "crypto/*": {
+      "bare": "bare-crypto/*",
+      "default": "crypto/*"
     }
   },
   "exports": {
@@ -72,6 +80,7 @@
   "dependencies": {
     "@hopets/logger": "^1.0.1",
     "b4a": "^1.6.7",
+    "bare-crypto": "^1.10.1",
     "bare-fs": "^4.1.4",
     "bare-path": "^3.0.0",
     "bare-process": "^4.2.1",
