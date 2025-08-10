@@ -169,7 +169,7 @@ export default class PearDrive {
   }
 
   /**
-   * Get the public key for RPC connections to the network (Buffer)
+   * Read-only public key for RPC connections to the network
    *
    * @returns {ArrayBuffer} - Public key as ArrayBuffer
    */
@@ -177,19 +177,58 @@ export default class PearDrive {
     return this._swarm.keyPair.publicKey;
   }
 
-  /** Get the public key for RPC connections to the network (String) */
+  /**
+   * Read-only public key for RPC connections to the network
+   *
+   * @returns {string} - Public key as hex string
+   */
   get publicKeyStr() {
     return utils.formatToStr(this.publicKey);
   }
 
-  /** Get the stringified network key */
+  /**
+   * Read-only stringified network key
+   *
+   * @returns {string} - Network key as hex string
+   */
   get networkKey() {
     return utils.formatToStr(this._networkKey);
   }
 
-  /** Get the inProgressDownloads dictionary */
+  /**
+   * Read-only inProgressDownloads dictionary
+   *
+   * @returns {Object} - In-progress downloads meta-data
+   */
   get inProgressDownloads() {
     return { ...this._inProgress };
+  }
+
+  /**
+   * Read-only 'seed' - Stringified basis for this peer's keypair
+   *
+   * @returns {string} - Seed as hex string
+   */
+  get seed() {
+    return utils.formatToStr(this._swarmOpts.seed);
+  }
+
+  /**
+   * Read-only Corestore path (path to all the internal networking storage)
+   *
+   * @returns {string} - Corestore path
+   */
+  get corestorePath() {
+    return this._corestorePath;
+  }
+
+  /**
+   * Read-only logging options
+   *
+   * @returns {Object} - Logger options
+   */
+  get logOpts() {
+    return { ...this._logOpts };
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -213,13 +252,13 @@ export default class PearDrive {
    */
   getSaveData() {
     return {
-      corestorePath: this._corestorePath,
-      watchPath: this._watchPath,
+      corestorePath: this.corestorePath,
+      watchPath: this.watchPath,
       indexName: this._indexName,
       swarmOpts: {
-        seed: utils.formatToStr(this._swarmOpts.seed),
+        seed: this.seed,
       },
-      logOpts: this._logOpts,
+      logOpts: this.logOpts,
       networkKey: this.networkKey,
     };
   }
