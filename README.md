@@ -360,7 +360,7 @@ console.log("Downloaded", wanted, "to", pdB.watchPath);
 
 ### React Native (for mobile apps)
 
-PearDrive works in Bare runtime, so you can follow [this guide](docs.pears.com/guides/making-a-bare-mobile-app) to get started
+PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pears.com/guides/making-a-bare-mobile-app) to get started
 
 ---
 
