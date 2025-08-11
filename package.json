@@ -1,6 +1,6 @@
 {
   "name": "@peardrive/core",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "main": "./dist/PearDrive.js",
   "module": "./dist/PearDrive.js",
   "type": "module",
