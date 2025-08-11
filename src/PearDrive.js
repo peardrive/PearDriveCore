@@ -39,6 +39,7 @@ export const RPC_EVENT = C.RPC;
  * P2P networking system for node.js applications.
  ******************************************************************************/
 export default class PearDrive {
+  /** @private {Hyperswarm} Hyperswarm for all nodes on network */
   _swarm;
   /** @private {Corestore} Corestore for all hypercores */
   _store;
@@ -68,32 +69,32 @@ export default class PearDrive {
   _uploadDrives;
   /** @private {Object} In-progress downloads meta-data */
   _inProgress;
-  /** @private {string} Seed for Hyperswarm */
-  _seed;
+  /** @private {ArrayBuffer | Uint8Array} - Hyperswarm topic buffer */
+  _networkKey;
 
   /**
    * @param {Object} opts
-   * @param {string}  opts.corestorePath - Filesystem path for corestore data
-   * @param {string}  opts.watchPath - Path to watch for local files
-   * @param {string}  [opts.indexName] - Name of the local file index core
-   * @param {Object}  [opts.swarmOpts]   - Options passed to Hyperswarm
-   * @param {Array<string|Buffer|Uint8Array>} [opts.swarmOpts.bootstrap] - DHT
-   *  bootstrap list for peer discovery.
-   * @param {Uint8Array|Buffer|string} [opts.swarmOpts.seed] - Keypair seed for
-   *  Hyperswarm identity.
-   * @param {Object} [opts.logOpts] - Options to configure Logger.
-   * @param {boolean} [opts.logOpts.logToConsole] - Whether to output logs to
-   *  console.
-   * @param {boolean} [opts.logOpts.logToFile] - Whether to write logs to a
-   *  file.
-   * @param {string}  [opts.logOpts.logFilePath] - Filesystem path for the log
-   *  file (if logToFile=true).
-   * @param {Object} [opts.indexOpts] - Options for the index manager.
-   * @param {boolean} [opts.indexOpts.poll=true] - Whether to poll for changes
-   *  in the local file index automatically.
-   * @param {number} [opts.indexOpts.pollInterval=500] - Interval in
-   *  milliseconds for polling the local file index.
-   * @param {string} [opts.networkKey] - Optional network key to join
+   *    @param {string}  opts.corestorePath - Filesystem path for corestore data
+   *    @param {string}  opts.watchPath - Path to watch for local files
+   *    @param {string}  [opts.indexName] - Name of the local file index core
+   *    @param {Object}  [opts.swarmOpts]   - Options passed to Hyperswarm
+   *    @param {Array<string|Buffer|Uint8Array>} [opts.swarmOpts.bootstrap] -
+   *      DHT bootstrap list for peer discovery.
+   *    @param {Uint8Array|Buffer|string} [opts.swarmOpts.seed] - Keypair seed
+   *      for Hyperswarm identity.
+   *    @param {Object} [opts.logOpts] - Options to configure Logger.
+   *    @param {boolean} [opts.logOpts.logToConsole] - Whether to output logs to
+   *      console.
+   *    @param {boolean} [opts.logOpts.logToFile] - Whether to write logs to a
+   *      file.
+   *    @param {string}  [opts.logOpts.logFilePath] - Filesystem path for the
+   *      log file (if logToFile=true).
+   *    @param {Object} [opts.indexOpts] - Options for the index manager.
+   *    @param {boolean} [opts.indexOpts.poll=true] - Whether to poll for
+   *      changes in the local file index automatically.
+   *    @param {number} [opts.indexOpts.pollInterval=500] - Interval in
+   *      milliseconds for polling the local file index.
+   *    @param {string} [opts.networkKey] - Optional network key to join
    */
   constructor({
     corestorePath,
