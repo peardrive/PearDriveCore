@@ -171,19 +171,10 @@ export default class PearDrive {
   /**
    * Read-only public key for RPC connections to the network
    *
-   * @returns {ArrayBuffer} - Public key as ArrayBuffer
-   */
-  get publicKey() {
-    return this._swarm.keyPair.publicKey;
-  }
-
-  /**
-   * Read-only public key for RPC connections to the network
-   *
    * @returns {string} - Public key as hex string
    */
-  get publicKeyStr() {
-    return utils.formatToStr(this.publicKey);
+  get publicKey() {
+    return utils.formatToStr(this._publicKey);
   }
 
   /**
@@ -231,6 +222,17 @@ export default class PearDrive {
     return { ...this._logOpts };
   }
 
+  /**
+   * Read-only public key Buffer for RPC connections to the network
+   *
+   * @returns {ArrayBuffer} - Public key as ArrayBuffer
+   *
+   * @private
+   */
+  get _publicKey() {
+    return this._swarm.keyPair.publicKey;
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Public functions
   //////////////////////////////////////////////////////////////////////////////
@@ -265,6 +267,9 @@ export default class PearDrive {
 
   /**
    * Wire up hooks for events here.
+   *
+   * @param {string} event - Event name to hook into
+   * @param {Function} cb - Callback function to run when the event is emitted
    */
   on(event, cb) {
     this.#log.info(`Registering hook for event: ${event}`);
