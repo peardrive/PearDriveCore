@@ -162,22 +162,23 @@ export function areObjectsEqual(obj1, obj2) {
 /**
  * Creates and initializes a PearDrive instance with isolated mock-data folders.
  *
- * @param {string} name - Unique test identifier
- * @param {Uint8Array[]} bootstrap - DHT bootstrap nodes
- * @param {Function} [onError] - Optional error handler callback
- * @param {Object} [indexOpts] - Optional index options
+ * @param {Object} opts - Options for PearDrive instance
+ *    @param {string} opts.name - Unique test identifier
+ *    @param {Uint8Array[]} opts.bootstrap - DHT bootstrap nodes
+ *    @param {Function} [opts.onError] - Optional error handler callback
+ *    @param {Object} [opts.indexOpts] - Optional index options
  *
  * @returns {Promise<Object>} - { pd, localDrivePath, corestorePath, logPath }
  */
-export async function createPearDrive(
+export async function createPearDrive({
   name,
   bootstrap,
   onError = () => {},
   indexOpts = {
     poll: true,
     pollInterval: 500,
-  }
-) {
+  },
+}) {
   // prepare directories
   const localDrivePath = path.join(Ctest.LD_DIR, name);
   const corestorePath = path.join(Ctest.CORESTORE_DIR, name);
@@ -206,16 +207,17 @@ export async function createPearDrive(
 /**
  * Creates a network of n PearDrive peers, each with its own storage folders.
  *
- * @param {string} baseName - Base name for each peer's folders
- * @param {Array} bootstrap - DHT bootstrap nodes
- * @param {number} n - Number of peers to create
- * @param {Function} [onError] - Optional error callback
- * @param {Object} [indexOpts] - Optional index options
+ * @param {Object} opts - Options for network creation
+ *    @param {string} opts.baseName - Base name for each peer's folders
+ *    @param {Array} opts.bootstrap - DHT bootstrap nodes
+ *    @param {number} opts.n - Number of peers to create
+ *    @param {Function} [opts.onError] - Optional error callback
+ *    @param {Object} [opts.indexOpts] - Optional index options
  *
  * @returns {Promise<Object[]>} - Array of PearDrive descriptor objects { pd,
  *  localDrivePath, corestorePath, logPath }
  */
-export async function createNetwork(
+export async function createNetwork({
   baseName,
   bootstrap,
   n,
@@ -223,12 +225,17 @@ export async function createNetwork(
   indexOpts = {
     poll: true,
     pollInterval: 500,
-  }
-) {
+  },
+}) {
   const peers = [];
   for (let i = 0; i < n; i++) {
     const name = `${baseName}${i}`;
-    const peer = await createPearDrive(name, bootstrap, onError, indexOpts);
+    const peer = await createPearDrive({
+      name,
+      bootstrap,
+      onError,
+      indexOpts,
+    });
     await peer.pd.ready();
     if (i === 0) {
       await peer.pd.joinNetwork();

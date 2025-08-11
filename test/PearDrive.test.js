@@ -26,9 +26,11 @@ test(txt.main("PearDrive: Initialization"), { stealth: true }, async (t) => {
 
   // Test initialization
   const { pd, localDrivePath, corestorePath, logPath } =
-    await utils.createPearDrive("init-test", bootstrap, () =>
-      t.fail("onError called")
-    );
+    await utils.createPearDrive({
+      name: "init-test",
+      bootstrap,
+      onError: (err) => t.fail(txt.fail("onError called"), err),
+    });
   t.teardown(() => {
     pd.close();
   });
@@ -61,7 +63,11 @@ test(
     const testnet = await createTestnet();
     const { bootstrap } = testnet;
 
-    const { pd } = await utils.createPearDrive("net1", bootstrap);
+    const { pd } = await utils.createPearDrive({
+      name: "one-node",
+      bootstrap,
+      onError: (err) => t.fail(txt.fail("onError called"), err),
+    });
     t.teardown(() => {
       pd.close();
     });
@@ -79,7 +85,12 @@ test(
     const testnet = await createTestnet();
     const { bootstrap } = testnet;
 
-    const [p1, p2] = await utils.createNetwork("net-peer", bootstrap, 2);
+    const [p1, p2] = await utils.createNetwork({
+      baseName: "two-node",
+      bootstrap,
+      n: 2,
+      onError: (err) => t.fail(txt.fail("onError called"), err),
+    });
     t.teardown(() => {
       p1.pd.close();
       p2.pd.close();
@@ -132,11 +143,16 @@ test(txt.main("PearDrive: NETWORK events"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  const [pearDriveA, pearDriveB] = await utils.createNetwork(
-    "network-events",
+  const [pearDriveA, pearDriveB] = await utils.createNetwork({
+    baseName: "network-events",
     bootstrap,
-    2
-  );
+    n: 2,
+    onError: (err) => t.fail(txt.fail("onError called"), err),
+    indexOpts: {
+      poll: false, // Disable polling for this test
+      pollInterval: 500,
+    },
+  });
   t.teardown(async () => {
     pearDriveA.pd.close();
     pearDriveB.pd.close();
@@ -211,8 +227,16 @@ test(txt.main("PearDrive: PEER events"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  const pearDriveA = await utils.createPearDrive("pearDriveA", bootstrap);
-  const pearDriveB = await utils.createPearDrive("pearDriveB", bootstrap);
+  const pearDriveA = await utils.createPearDrive({
+    name: "pearDriveA",
+    bootstrap,
+    onError: (err) => t.fail(txt.fail("onError called"), err),
+  });
+  const pearDriveB = await utils.createPearDrive({
+    name: "pearDriveB",
+    bootstrap,
+    onError: (err) => t.fail(txt.fail("onError called"), err),
+  });
   t.teardown(async () => {
     await pearDriveA.pd.close();
     await pearDriveB.pd.close();
@@ -271,12 +295,15 @@ test(txt.main("PearDrive: LOCAL events"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  const { pd, localDrivePath } = await utils.createPearDrive(
-    "local-events",
+  const { pd, localDrivePath } = await utils.createPearDrive({
+    name: "local-events",
     bootstrap,
-    (err) => t.fail(txt.fail("onError called"), err),
-    { poll: false, pollInterval: 500 }
-  );
+    onError: (err) => t.fail(txt.fail("onError called"), err),
+    indexOpts: {
+      poll: false, // Disable polling for this test
+      pollInterval: 500,
+    },
+  });
   t.teardown(() => pd.close());
   await pd.ready();
 
@@ -335,21 +362,30 @@ test(txt.main("PearDrive: Custom message"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  const peers = await utils.createNetwork("rpc-test", bootstrap, 2);
-  const [pearDriveA, pearDriveB] = peers;
+  const [peerA, peerB] = await utils.createNetwork({
+    baseName: "custom-message",
+    bootstrap,
+    n: 2,
+    onError: (err) => t.fail(txt.fail("onError called"), err),
+    indexOpts: {
+      poll: false, // Disable polling for this test
+      pollInterval: 500,
+    },
+  });
+
   t.teardown(async () => {
-    await pearDriveA.pd.close();
-    await pearDriveB.pd.close();
+    await peerA.pd.close();
+    await peerB.pd.close();
   });
 
   let customRequestReceived = false;
-  pearDriveB.pd.on("custom_message", (_payload) => {
+  peerB.pd.on("custom_message", (_payload) => {
     customRequestReceived = true;
     return true;
   });
 
-  const peerId = pearDriveA.pd.listPeersStringified()[0].publicKey;
-  const response = await pearDriveA.pd.sendMessage(peerId, "custom_message", {
+  const peerId = peerA.pd.listPeersStringified()[0].publicKey;
+  const response = await peerA.pd.sendMessage(peerId, "custom_message", {
     data: "test",
   });
   t.ok(customRequestReceived, "Custom request received by pearDriveB");
@@ -364,14 +400,12 @@ test(txt.main("PearDrive: List local files"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  const { pd, localDrivePath } = await utils.createPearDrive(
-    "list-local-files",
+  const { pd, localDrivePath } = await utils.createPearDrive({
+    name: "list-local-files",
     bootstrap,
-    (err) => {
-      t.fail(txt.fail("onError called"), err);
-    },
-    { poll: false, pollInterval: 500 }
-  );
+    onError: (err) => t.fail(txt.fail("onError called"), err),
+    indexOpts: { poll: false, pollInterval: 500 },
+  });
   t.teardown(() => pd.close());
   await pd.ready();
 
@@ -404,11 +438,16 @@ test(
     const testnet = await createTestnet();
     const { bootstrap } = testnet;
 
-    const [pearDriveA, pearDriveB] = await utils.createNetwork(
-      "list-network-files",
+    const [pearDriveA, pearDriveB] = await utils.createNetwork({
+      baseName: "list-network-files",
       bootstrap,
-      2
-    );
+      n: 2,
+      onError: (err) => t.fail(txt.fail("onError called"), err),
+      indexOpts: {
+        poll: false, // Disable polling for this test
+        pollInterval: 500,
+      },
+    });
     t.teardown(async () => {
       await pearDriveA.pd.close();
       await pearDriveB.pd.close();
@@ -490,15 +529,16 @@ test(
     const testnet = await createTestnet();
     const { bootstrap } = testnet;
 
-    // TODO
-
-    const [pearDriveA, pearDriveB] = await utils.createNetwork(
-      "file-download-test",
+    const [pearDriveA, pearDriveB] = await utils.createNetwork({
+      baseName: "file-download-test",
       bootstrap,
-      2,
-      (err) => t.fail(txt.fail("onError called"), err),
-      { poll: false, pollInterval: 500 }
-    );
+      n: 2,
+      onError: (err) => t.fail(txt.fail("onError called"), err),
+      indexOpts: {
+        poll: false, // Disable polling for this test
+        pollInterval: 500,
+      },
+    });
     t.teardown(async () => {
       await pearDriveA.pd.close();
       await pearDriveB.pd.close();
@@ -516,5 +556,7 @@ test(
     );
     utils.wait(1);
     await pearDriveB.pd.syncLocalFilesOnce();
+
+    // Check if the file exists on pearDriveB
   }
 );
