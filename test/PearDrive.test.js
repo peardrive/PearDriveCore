@@ -429,7 +429,7 @@ test(
     await pearDriveB.pd.syncLocalFilesOnce();
 
     // Test file indexing on pearDriveB
-    const pearDriveAkey = pearDriveA.pd.publicKeyStr;
+    const pearDriveAkey = pearDriveA.pd.publicKey;
     const networkFilesB = await pearDriveB.pd.listNetworkFiles();
 
     t.is(
@@ -456,7 +456,7 @@ test(
     }
 
     // Test file indexing on pearDriveA
-    const pearDriveBkey = pearDriveB.pd.publicKeyStr;
+    const pearDriveBkey = pearDriveB.pd.publicKey;
     const networkFilesA = await pearDriveA.pd.listNetworkFiles();
     t.is(
       networkFilesA.get("local").files.length,
@@ -511,7 +511,7 @@ test(
 
     // Download the file from pearDriveB
     await pearDriveB.pd.downloadFileFromPeer(
-      pearDriveA.pd.publicKeyStr,
+      pearDriveA.pd.publicKey,
       fileA.name
     );
     utils.wait(1);

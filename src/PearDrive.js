@@ -39,7 +39,6 @@ export const RPC_EVENT = C.RPC;
  * P2P networking system for node.js applications.
  ******************************************************************************/
 export default class PearDrive {
-  /** @private {Hyperswarm} Hyperswarm object for peer discovery */
   _swarm;
   /** @private {Corestore} Corestore for all hypercores */
   _store;
@@ -133,6 +132,7 @@ export default class PearDrive {
     this.#log.info("Initializing PearDrive...");
 
     // Set up corestore and swarm
+    /** @private {Hyperswarm} Hyperswarm object for peer discovery */
     this._swarm = new Hyperswarm(swarmOpts);
     this._store = new Corestore(corestorePath);
     this._rpcConnections = new Map();

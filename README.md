@@ -366,6 +366,10 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 
 ## 🚧 Changelog
 
+### 1.1.0
+
+- publicKey: publicKeyStr -> publicKey, make buffer variable private
+
 ### 1.0.0
 
 - Initial release
