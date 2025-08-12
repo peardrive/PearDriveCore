@@ -18,7 +18,7 @@ import Corestore from "corestore";
 import RPC from "protomux-rpc";
 import c from "compact-encoding";
 import Hyperbee from "hyperbee";
-import Logger from "@hopets/logger";
+import Logger, { LOG_LEVELS } from "@hopets/logger";
 
 import * as C from "./constants.js";
 import * as utils from "./utils/index.js";
@@ -87,8 +87,9 @@ export default class PearDrive {
    *      console.
    *    @param {boolean} [opts.logOpts.logToFile] - Whether to write logs to a
    *      file.
-   *    @param {string}  [opts.logOpts.logFilePath] - Filesystem path for the
+   *    @param {string} [opts.logOpts.logFilePath] - Filesystem path for the
    *      log file (if logToFile=true).
+   *    @param {string} [opts.logOpts.level=LOG_LEVELS.INFO] - Log level.
    *    @param {Object} [opts.indexOpts] - Options for the index manager.
    *    @param {boolean} [opts.indexOpts.poll=true] - Whether to poll for
    *      changes in the local file index automatically.
@@ -128,13 +129,12 @@ export default class PearDrive {
       pollInterval,
     };
 
-    console.log("index opts", this._indexOpts);
     // Set up logging
     this.#log = new Logger(this._logOpts);
     this.#log.info("Initializing PearDrive...");
+    this.#log.debug("DEBUG mode enabled");
 
     // Set up corestore and swarm
-    /** @private {Hyperswarm} Hyperswarm object for peer discovery */
     this._swarm = new Hyperswarm(swarmOpts);
     this._store = new Corestore(corestorePath);
     this._rpcConnections = new Map();

@@ -63,7 +63,7 @@ export class IndexManager {
     downloadDrives,
     inProgress = {},
   }) {
-    this._store = store;
+    this._store = store.namespace("peardrive:indexmanager");
     this._emitEvent = emitEvent;
     this._indexOpts = indexOpts;
     this.#log = log;
@@ -313,6 +313,7 @@ export class IndexManager {
       // Create / load the hyperdrive
       const keyStr = utils.formatToStr(driveKey);
       const driveStore = this._createNamespace(path, "download");
+
       const drive = new Hyperdrive(driveStore, keyStr);
       await drive.ready();
       this._downloadDrives.set(utils.asDrivePath(path), drive);

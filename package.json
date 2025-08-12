@@ -78,7 +78,7 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
-    "@hopets/logger": "^1.0.1",
+    "@hopets/logger": "^1.1.1",
     "b4a": "^1.6.7",
     "bare-crypto": "^1.10.1",
     "bare-fs": "^4.1.4",

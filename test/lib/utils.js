@@ -2,7 +2,7 @@ import fs from "fs";
 import chalk from "chalk";
 import path from "path";
 import Corestore from "corestore";
-import Logger from "@hopets/logger";
+import Logger, { LOG_LEVELS } from "@hopets/logger";
 
 import * as Ctest from "./constants.js";
 import * as C from "../../src/constants.js";
@@ -196,12 +196,11 @@ export async function createPearDrive({
       logToFile: true,
       logFilePath: logPath,
       logToConsole: false,
+      level: LOG_LEVELS.DEBUG,
     },
     indexOpts,
     onError,
   });
-
-  console.log("IndexOpts in utils", indexOpts);
 
   return { pd, localDrivePath, corestorePath, logPath };
 }

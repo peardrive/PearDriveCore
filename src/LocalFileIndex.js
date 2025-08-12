@@ -66,7 +66,7 @@ export default class LocalFileIndex {
     /** Event emitter */
     this._emitEvent = emitEvent;
     /** Corestore instance */
-    this._store = store;
+    this._store = store.namespace("peardrive:localfileindex");
     /** Absolute path to folder being watched */
     this.watchPath = watchPath;
     /** Local file index core name */
