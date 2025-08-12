@@ -522,14 +522,14 @@ test(
   }
 );
 
-test(
+solo(
   txt.main("PearDrive: Test file downloading"),
   { stealth: false },
   async (t) => {
     const testnet = await createTestnet();
     const { bootstrap } = testnet;
 
-    const [pearDriveA, pearDriveB] = await utils.createNetwork({
+    const [peerA, peerB] = await utils.createNetwork({
       baseName: "file-download-test",
       bootstrap,
       n: 2,
@@ -540,23 +540,23 @@ test(
       },
     });
     t.teardown(async () => {
-      await pearDriveA.pd.close();
-      await pearDriveB.pd.close();
+      await peerA.pd.close();
+      await peerB.pd.close();
     });
 
     // Create a file on pearDriveA
-    const fileA = utils.createRandomFile(pearDriveA.pd.watchPath, 10);
-    await pearDriveA.pd.syncLocalFilesOnce();
-    await pearDriveB.pd.syncLocalFilesOnce();
+    const fileA = utils.createRandomFile(peerA.pd.watchPath, 10);
+    await peerA.pd.syncLocalFilesOnce();
+    await peerB.pd.syncLocalFilesOnce();
 
     // Download the file from pearDriveB
-    await pearDriveB.pd.downloadFileFromPeer(
-      pearDriveA.pd.publicKey,
-      fileA.name
-    );
-    utils.wait(1);
-    await pearDriveB.pd.syncLocalFilesOnce();
+    await peerB.pd.downloadFileFromPeer(peerA.pd.publicKey, fileA.name);
+    await peerB.pd.syncLocalFilesOnce();
 
     // Check if the file exists on pearDriveB
+    console.log("Peer B's network files:", await peerB.pd.listNetworkFiles());
+    console.log("Peer B's local files:", await peerB.pd.listLocalFiles());
+
+    await utils.wait(1);
   }
 );

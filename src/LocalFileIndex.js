@@ -36,16 +36,16 @@ export default class LocalFileIndex {
 
   /**
    * @param {Object} opts
-   * @param {any} opts.log - Optional logger instance
-   * @param {import('corestore')} opts.store - Corestore instance
-   * @param {string} opts.watchPath - Path to watch for local files
-   * @param {Function} opts.emitEvent - Optional function to emit events
-   * @param {Object} opts.indexOpts - Index options
-   * @param {Map<string, HyperDrive} - opts.downloadDrives - Map of download
-   *  drives
-   * @param {Map<string, HyperDrive} - opts.uploadDrives - Map of upload drives
-   * @param {string} [opts.name] - Optional core name
-   *  (defauls to 'local-file-index)
+   *    @param {any} opts.log - Optional logger instance
+   *    @param {import('corestore')} opts.store - Corestore instance
+   *    @param {string} opts.watchPath - Path to watch for local files
+   *    @param {Function} opts.emitEvent - Optional function to emit events
+   *    @param {Object} opts.indexOpts - Index options
+   *    @param {Map<string, HyperDrive} opts.downloadDrives - Map of download
+   *       drives
+   *    @param {Map<string, HyperDrive} opts.uploadDrives - Map of upload drives
+   *    @param {string} [opts.name] - Optional core name (defaults to
+   *      'local-file-index)
    */
   constructor({
     log,

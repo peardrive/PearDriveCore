@@ -38,16 +38,19 @@ export class IndexManager {
 
   /**
    * @param {Object} opts
-   * @param {Corestore} opts.store - Corestore instance for managing Hypercores
-   * @param {Logger}    opts.log - Logger for informational output
-   * @param {string}    opts.watchPath - Path to watch for local files
-   * @param {any} opts.emitEvent - Function to emit events
-   * @param {Object} indexOpts - Options for the local file index
-   * @param {Map<string, RPC>} rpcConnections - Map of peer IDs to RPC instances
-   * @param {Map<string, Hyperdrive>} uploadDrives - Map of writable hyperdrives
-   * @param {Map<string, Hyperdrive>} downloadDrives - Map of readable
-   *  hyperdrives
-   * @param {Object} inProgress - Map of in-progress downloads
+   *    @param {Corestore} opts.store - Corestore instance for managing
+   *      Hypercores
+   *    @param {Logger}    opts.log - Logger for informational output
+   *    @param {string}    opts.watchPath - Path to watch for local files
+   *    @param {any} opts.emitEvent - Function to emit events
+   *    @param {Object} opts.indexOpts - Options for the local file index
+   *    @param {Map<string, RPC>} opts.rpcConnections - Map of peer IDs to RPC
+   *      instances
+   *    @param {Map<string, Hyperdrive>} opts.uploadDrives - Map of writable
+   *      hyperdrives
+   *    @param {Map<string, Hyperdrive>} opts.downloadDrives - Map of readable
+   *      hyperdrives
+   *    @param {Object} opts.inProgress - Map of in-progress downloads
    */
   constructor({
     store,

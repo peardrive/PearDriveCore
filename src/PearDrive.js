@@ -128,6 +128,7 @@ export default class PearDrive {
       pollInterval,
     };
 
+    console.log("index opts", this._indexOpts);
     // Set up logging
     this.#log = new Logger(this._logOpts);
     this.#log.info("Initializing PearDrive...");
@@ -452,6 +453,7 @@ export default class PearDrive {
    */
   async syncLocalFilesOnce() {
     if (this._indexOpts.poll) {
+      console.log(this._indexOpts.poll);
       this.#log.warn(
         "Can't manually sync local files, automatic syncing is enabled."
       );
