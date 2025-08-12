@@ -201,6 +201,8 @@ export async function createPearDrive({
     onError,
   });
 
+  console.log("IndexOpts in utils", indexOpts);
+
   return { pd, localDrivePath, corestorePath, logPath };
 }
 

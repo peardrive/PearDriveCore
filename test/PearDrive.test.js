@@ -556,7 +556,5 @@ solo(
     // Check if the file exists on pearDriveB
     console.log("Peer B's network files:", await peerB.pd.listNetworkFiles());
     console.log("Peer B's local files:", await peerB.pd.listLocalFiles());
-
-    await utils.wait(1);
   }
 );

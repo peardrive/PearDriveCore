@@ -97,7 +97,7 @@ export class IndexManager {
   async ready() {
     this.#log.info("Getting IndexManager ready...");
     await this.localIndex.ready();
-    this.localIndex.startPolling();
+    if (this._indexOpts.poll) this.localIndex.startPolling();
   }
 
   /**
