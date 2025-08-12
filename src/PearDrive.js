@@ -899,7 +899,7 @@ export default class PearDrive {
         err
       );
       this._emitEvent(C.EVENT.ERROR, err);
-      return "false";
+      throw err;
     }
   }
 

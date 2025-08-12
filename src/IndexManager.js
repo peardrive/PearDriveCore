@@ -139,12 +139,13 @@ export class IndexManager {
       return;
     }
 
-    this.#relayer = setInterval(() => this.#relayOnceSafe(), this.relay);
+    this.#relayer = setInterval(
+      () => this.#relayOnceSafe(),
+      this.relayInterval
+    );
   }
 
-  /**
-   * Stop relay mode.
-   */
+  /** Stop relay mode */
   stopRelay() {
     this._indexOpts.relay = false;
     if (!this.#relayer) {
@@ -369,10 +370,10 @@ export class IndexManager {
 
     try {
       // Create / load the hyperdrive
-      const keyStr = utils.formatToStr(driveKey);
+      const keyBuf = utils.formatToBuffer(driveKey);
       const driveStore = this._createNamespace(path, "download");
 
-      const drive = new Hyperdrive(driveStore, keyStr);
+      const drive = new Hyperdrive(driveStore, keyBuf);
       await drive.ready();
       this._downloadDrives.set(utils.asDrivePath(path), drive);
       return drive;
