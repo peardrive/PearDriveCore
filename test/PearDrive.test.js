@@ -549,17 +549,22 @@ test(
     await peerA.pd.syncLocalFilesOnce();
     await peerB.pd.syncLocalFilesOnce();
 
+    // Get hash of the filefrom peerA
+    const files = await peerA.pd.listLocalFiles();
+    const fileEntry = files.files.find((f) => f.path === fileA.name);
+    const fileHash = fileEntry.hash;
+
     // Download the file from pearDriveB
     await peerB.pd.downloadFileFromPeer(peerA.pd.publicKey, fileA.name);
-    console.log("Download complete");
     await peerB.pd.syncLocalFilesOnce();
-    console.log("Sync complete");
 
-    // Check peerA
-    console.log("Peer A's local files:", await peerA.pd.listLocalFiles());
-    console.log("Peer A's network files:", await peerA.pd.listNetworkFiles());
-    // Check if the file exists on pearDriveB
-    console.log("Peer B's local files:", await peerB.pd.listLocalFiles());
-    console.log("Peer B's network files:", await peerB.pd.listNetworkFiles());
+    // Ensure the file was downloaded correctly
+    const peerBLocalFiles = await peerB.pd.listLocalFiles();
+    const downloadedFile = peerBLocalFiles.files.find(
+      (f) => f.path === fileA.name
+    );
+    const downloadedFileHash = downloadedFile.hash;
+
+    t.is(downloadedFileHash, fileHash, "Downloaded file hash matches original");
   }
 );
