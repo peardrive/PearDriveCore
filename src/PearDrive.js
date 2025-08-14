@@ -63,9 +63,9 @@ export default class PearDrive {
   _swarmOpts;
   /** @private Logger options */
   _logOpts;
-  /** @private {Map} Writable hyperdrives (for downloading files) */
+  /** @protected {Map} Map of download drives and corestore subspaces*/
   _downloadDrives;
-  /** @private {Map} Readable hyperdrives (for uploading files) */
+  /** @protected {Map} Map of upload drives and corestore subspaces */
   _uploadDrives;
   /** @private {Object} In-progress downloads meta-data */
   _inProgress;
@@ -95,6 +95,8 @@ export default class PearDrive {
    *      changes in the local file index automatically.
    *    @param {number} [opts.indexOpts.pollInterval=500] - Interval in
    *      milliseconds for polling the local file index.
+   *    @param {boolean} [opts.indexOpts.relay] - Whether to automaically
+   *      download files from the network.
    *    @param {string} [opts.networkKey] - Optional network key to join
    */
   constructor({
@@ -123,10 +125,11 @@ export default class PearDrive {
       ? utils.formatToBuffer(swarmOpts.seed)
       : utils.generateSeed();
     this._logOpts = logOpts;
-    const { poll = true, pollInterval = 500 } = indexOpts;
+    const { poll = true, pollInterval = 500, relay = false } = indexOpts;
     this._indexOpts = {
       poll,
       pollInterval,
+      relay,
     };
 
     // Set up logging
@@ -156,6 +159,12 @@ export default class PearDrive {
       uploadDrives: this._uploadDrives,
       downloadDrives: this._downloadDrives,
       inProgress: this._inProgress,
+      sendFileRequest: async (peerId, filePath) => {
+        return await this._sendFileRequest(peerId, filePath);
+      },
+      sendFileRelease: async (peerId, filePath) => {
+        return await this._sendFileRelease(peerId, filePath);
+      },
     });
 
     this._swarm.on("connection", this._onConnection.bind(this));
@@ -164,6 +173,11 @@ export default class PearDrive {
   //////////////////////////////////////////////////////////////////////////////
   // Getters
   //////////////////////////////////////////////////////////////////////////////
+
+  /** Whether or not 'relay' mode is enabled */
+  get relay() {
+    return this._indexOpts.relay;
+  }
 
   /** Get the absolute path to the local file storage for this PearDrive */
   get watchPath() {
@@ -217,7 +231,7 @@ export default class PearDrive {
 
   /**
    * Read-only logging options
-   *
+   *Found a missing file 2DxBQXymKh.txt
    * @returns {Object} - Logger options
    */
   get logOpts() {
@@ -281,6 +295,18 @@ export default class PearDrive {
     this._hooks[event] = cb;
   }
 
+  /** Activate 'relay' mode */
+  activateRelay() {
+    this.#log.info("Activating 'relay' mode...");
+    this._indexOpts.relay = true;
+  }
+
+  /** Deactivate 'relay' mode */
+  deactivateRelay() {
+    this.#log.info("Deactivating 'relay' mode...");
+    this._indexOpts.relay = false;
+  }
+
   /**
    * Join or create a network.
    *
@@ -327,9 +353,11 @@ export default class PearDrive {
       }
 
       // Handle download
-      this._indexManager.markTransfer(filePath, "download", peerId);
-      await this._indexManager.createDownloadDrive(filePath, peerDownloadKey);
-      await this._indexManager.executeDownload(filePath);
+      await this._indexManager.handleDownload(
+        peerId,
+        filePath,
+        peerDownloadKey
+      );
 
       // Cleanup
       await this._indexManager.unmarkTransfer(filePath, "download", peerId);
@@ -503,13 +531,11 @@ export default class PearDrive {
       this.#log.info(
         `Sending FILE_REQUEST to peer ${peerIdStr} for file ${filePath}`
       );
-      const peerDownloadInfoRaw = await this._sendInternalMessageToPeer(
+      const peerDownloadInfo = await this._sendInternalMessageToPeer(
         peerIdStr,
         C.RPC.FILE_REQUEST,
         filePath
       );
-      const peerDownloadInfoBuf = Buffer.from(peerDownloadInfoRaw, "hex");
-      const peerDownloadInfo = utils.formatToStr(peerDownloadInfoBuf);
       return peerDownloadInfo;
     } catch (err) {
       this.#log.error(`Error sending file request to peer ${peerId}`, err);
@@ -539,9 +565,10 @@ export default class PearDrive {
         C.RPC.FILE_RELEASE,
         filePath
       );
-      if (response !== true) {
+      if (response !== "true") {
         throw new Error("File release failed on peer");
       }
+
       return true;
     } catch (err) {
       this.#log.error(`Error sending file release to peer ${peerId}`, err);
@@ -827,8 +854,14 @@ export default class PearDrive {
 
       this._indexManager.markTransfer(payload, "upload", conn.remotePublicKey);
       const response = await this._indexManager.createUploadDrive(payload);
-
-      return response;
+      const responseStr = utils.formatToStr(response);
+      if (!responseStr) {
+        const peer = utils.formatToStr(conn.remotePublicKey);
+        throw new Error(
+          `Failed to create upload drive for file ${payload} on peer ${peer}`
+        );
+      }
+      return responseStr;
     } catch (err) {
       this.#log.error(
         `Error handling file request from ${utils.formatToStr(
@@ -837,7 +870,7 @@ export default class PearDrive {
         err
       );
       this._emitEvent(C.EVENT.ERROR, err);
-      return;
+      throw err;
     }
   }
 
@@ -860,7 +893,7 @@ export default class PearDrive {
       const peerId = utils.formatToStr(conn.remotePublicKey);
       await this._indexManager.unmarkTransfer(payload, "upload", peerId);
 
-      return true;
+      return "true";
     } catch (err) {
       this.#log.error(
         `Error handling file release from ${utils.formatToStr(
@@ -869,7 +902,7 @@ export default class PearDrive {
         err
       );
       this._emitEvent(C.EVENT.ERROR, err);
-      return false;
+      throw err;
     }
   }
 

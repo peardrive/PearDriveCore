@@ -42,8 +42,9 @@ export default class LocalFileIndex {
    *    @param {Function} opts.emitEvent - Optional function to emit events
    *    @param {Object} opts.indexOpts - Index options
    *    @param {Map<string, HyperDrive} opts.downloadDrives - Map of download
-   *       drives
+   *       drives and corestore subspaces
    *    @param {Map<string, HyperDrive} opts.uploadDrives - Map of upload drives
+   *       and corestore subspaces
    *    @param {string} [opts.name] - Optional core name (defaults to
    *      'local-file-index)
    */
@@ -346,6 +347,23 @@ export default class LocalFileIndex {
       }
     }
   }
+
+  /**
+   * Mark a file as busy for upload or download
+   *
+   * @param {string} path - (Relative) path to the file
+   *
+   * @private
+   */
+  #markBusy(path) {}
+
+  /**
+   *
+   * @param {string} path - (Relative) path to the file
+   *
+   * @private
+   */
+  #markNotBusy(path) {}
 
   /**
    * Determine if a file is busy at given path

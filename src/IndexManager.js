@@ -35,22 +35,30 @@ export class IndexManager {
   _store;
   /** @private {Logger} */
   #log;
+  /** @private  Relayer interval function */
+  #relayer;
+  /** @private {boolean} whether relay function is currently running */
+  #relayRunning;
 
   /**
    * @param {Object} opts
    *    @param {Corestore} opts.store - Corestore instance for managing
    *      Hypercores
-   *    @param {Logger}    opts.log - Logger for informational output
-   *    @param {string}    opts.watchPath - Path to watch for local files
+   *    @param {Logger} opts.log - Logger for informational output
+   *    @param {string} opts.watchPath - Path to watch for local files
    *    @param {any} opts.emitEvent - Function to emit events
    *    @param {Object} opts.indexOpts - Options for the local file index
    *    @param {Map<string, RPC>} opts.rpcConnections - Map of peer IDs to RPC
    *      instances
-   *    @param {Map<string, Hyperdrive>} opts.uploadDrives - Map of writable
-   *      hyperdrives
-   *    @param {Map<string, Hyperdrive>} opts.downloadDrives - Map of readable
-   *      hyperdrives
+   *    @param {Map<string, Hyperdrive>} opts.uploadDrives - Map of upload
+   *      drives and corestore subspaces
+   *    @param {Map<string, Hyperdrive>} opts.downloadDrives - Map of download
+   *      drives and corestore subspaces
    *    @param {Object} opts.inProgress - Map of in-progress downloads
+   *    @param {Function} opts.sendFileRequest - Function to request a file from
+   *      a peer
+   *    @param {Function} opts.sendFileRelease- Function to release a file after
+   *      download/upload
    */
   constructor({
     store,
@@ -62,6 +70,8 @@ export class IndexManager {
     uploadDrives,
     downloadDrives,
     inProgress = {},
+    sendFileRequest,
+    sendFileRelease,
   }) {
     this._store = store.namespace("peardrive:indexmanager");
     this._emitEvent = emitEvent;
@@ -83,6 +93,22 @@ export class IndexManager {
     this._uploadDrives = uploadDrives;
     this._downloadDrives = downloadDrives;
     this._inProgress = inProgress;
+    this._sendFileRequest = sendFileRequest;
+    this._sendFileRelease = sendFileRelease;
+    this.#relayer = null;
+    this.#relayRunning = false;
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Getters
+  //////////////////////////////////////////////////////////////////////////////
+
+  get relay() {
+    return this._indexOpts.relay;
+  }
+
+  get relayInterval() {
+    return this._indexOpts.pollInterval;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -98,6 +124,39 @@ export class IndexManager {
     this.#log.info("Getting IndexManager ready...");
     await this.localIndex.ready();
     if (this._indexOpts.poll) this.localIndex.startPolling();
+    if (this.relay) this.startRelay();
+    this.#log.info("IndexManager ready.");
+  }
+
+  /**
+   * Start relay mode, which periodically scans the network for files not
+   * present on the local index and automatically downloads them.
+   */
+  startRelay() {
+    this._indexOpts.relay = true;
+    if (this.#relayer) {
+      this.#log.warn("Relay mode is already active.");
+      return;
+    }
+
+    this.#relayer = setInterval(
+      () => this.#relayOnceSafe(),
+      this.relayInterval
+    );
+  }
+
+  /** Stop relay mode */
+  stopRelay() {
+    this._indexOpts.relay = false;
+    if (!this.#relayer) {
+      this.#log.warn("Relay mode is not currently active.");
+      return;
+    }
+
+    this.#log.info("Stopping relay mode...");
+    clearInterval(this.#relayer);
+    this.#relayer = null;
+    this.#log.info("Relay mode stopped.");
   }
 
   /**
@@ -298,29 +357,30 @@ export class IndexManager {
   }
 
   /**
-   * Create and configure the hyperdrive for downloading a file from a remote
-   * peardrive.
+   *  Given a peer ID, hyperdrive key for the upload, and the file path,
+   *  handle the download process.
    *
-   * @param {string} path - Remote file path to download
-   * @param {string | Uint8Array | ArrayBuffer} driveKey - Drive key.
+   * @param {string | Uint8Array | ArrayBuffer} peerId
+   * @param {string} filePath
+   * @param {string | Uint8Array | ArrayBuffer} driveKey - Key to peer's upload
+   *   hyperdrive
    *
-   * @returns {Promise<Hyperdrive>} - Readable hyperdrive
+   * @returns {Promise<boolean>} - Success flag
    */
-  async createDownloadDrive(path, driveKey) {
-    this.#log.info(`Creating download drive for file: ${path}`);
-
+  async handleDownload(peerId, filePath, driveKey) {
+    this.#log.info(
+      `Handling download for file: ${filePath} from peer ${peerId}`
+    );
     try {
-      // Create / load the hyperdrive
-      const keyStr = utils.formatToStr(driveKey);
-      const driveStore = this._createNamespace(path, "download");
-
-      const drive = new Hyperdrive(driveStore, keyStr);
-      await drive.ready();
-      this._downloadDrives.set(utils.asDrivePath(path), drive);
-      return drive;
+      this.markTransfer(filePath, "download", peerId);
+      await this._createDownloadDrive(filePath, driveKey);
+      await this._executeDownload(filePath);
     } catch (err) {
-      this.#log.error(`Failed to create download drive for file: ${path}`, err);
-      throw err;
+      this.#log.error(
+        `Download process failed for file: ${filePath} from peer ${peerId}`,
+        err
+      );
+      return false;
     }
   }
 
@@ -397,47 +457,6 @@ export class IndexManager {
       this.#log.info(`Upload drive closed for file: ${path}`);
     } catch (err) {
       this.#log.error(`Failed to close upload drive for file: ${path}`, err);
-      throw err;
-    }
-  }
-
-  /**
-   * Execute a download from a given path through the corresponding upload
-   * and download drives.
-   *
-   * @param {string} path - Local file path to download
-   */
-  async executeDownload(path) {
-    this.#log.info(`Executing download for file: ${path}`);
-
-    // Ensure download drive exists and has the file
-    const downDrive = this._downloadDrives.get(utils.asDrivePath(path));
-    if (downDrive === undefined) {
-      this.#log.error(`No download drive found for file: ${path}`);
-      throw new Error(`No download drive found for file: ${path}`);
-    }
-
-    try {
-      this.#log.info(`Download starting for ${path}`);
-
-      const readStream = downDrive.createReadStream(utils.asDrivePath(path), {
-        timeout: 10000,
-      });
-      const writeStream = fs.createWriteStream(
-        utils.createAbsPath(path, this.watchPath)
-      );
-
-      await new Promise((resolve, reject) => {
-        writeStream.on("error", reject);
-        readStream.on("error", reject);
-        writeStream.on("close", () => {
-          this.#log.info(`Download completed for ${path}`);
-          resolve();
-        });
-        readStream.pipe(writeStream);
-      });
-    } catch (err) {
-      this.#log.error(`Failed to execute download for file: ${path}`, err);
       throw err;
     }
   }
@@ -561,11 +580,85 @@ export class IndexManager {
   //////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Create and configure the hyperdrive for downloading a file from a remote
+   * peardrive.
+   *
+   * @param {string} path - Remote file path to download
+   * @param {string | Uint8Array | ArrayBuffer} driveKey - Drive key.
+   *
+   * @returns {Promise<Hyperdrive>} - Readable hyperdrive
+   *
+   * @private
+   */
+  async _createDownloadDrive(path, driveKey) {
+    this.#log.info(`Creating download drive for file: ${path}`);
+
+    try {
+      // Create / load the hyperdrive
+      const keyBuf = utils.formatToBuffer(driveKey);
+      const driveStore = this._createNamespace(path, "download");
+
+      const drive = new Hyperdrive(driveStore, keyBuf);
+      await drive.ready();
+      this._downloadDrives.set(utils.asDrivePath(path), drive);
+      return drive;
+    } catch (err) {
+      this.#log.error(`Failed to create download drive for file: ${path}`, err);
+      throw err;
+    }
+  }
+
+  /**
+   * Execute a download from a given path through the corresponding upload
+   * and download drives.
+   *
+   * @param {string} path - Local file path to download
+   *
+   * @private
+   */
+  async _executeDownload(path) {
+    this.#log.info(`Executing download for file: ${path}`);
+
+    // Ensure download drive exists and has the file
+    const downDrive = this._downloadDrives.get(utils.asDrivePath(path));
+    if (downDrive === undefined) {
+      this.#log.error(`No download drive found for file: ${path}`);
+      throw new Error(`No download drive found for file: ${path}`);
+    }
+
+    try {
+      this.#log.info(`Download starting for ${path}`);
+
+      const readStream = downDrive.createReadStream(utils.asDrivePath(path), {
+        timeout: 10000,
+      });
+      const writeStream = fs.createWriteStream(
+        utils.createAbsPath(path, this.watchPath)
+      );
+
+      await new Promise((resolve, reject) => {
+        writeStream.on("error", reject);
+        readStream.on("error", reject);
+        writeStream.on("close", () => {
+          this.#log.info(`Download completed for ${path}`);
+          resolve();
+        });
+        readStream.pipe(writeStream);
+      });
+    } catch (err) {
+      this.#log.error(`Failed to execute download for file: ${path}`, err);
+      throw err;
+    }
+  }
+
+  /**
    * Create corestore namespace for a drive
    *
    * @param {string} pathOrKey - The path or key to create the namespace for
    *
    * @param {string} [tag] - Optional tag for the namespace
+   *
+   * @private
    */
   _createNamespace(pathOrKey, tag) {
     const key = utils.formatToStr(pathOrKey);
@@ -574,5 +667,92 @@ export class IndexManager {
     const tagStr = `${tag}:` || "";
     const storePath = `${tagStr}${key}`;
     return this._store.namespace(storePath);
+  }
+
+  /**
+   * Relay logic that periodically scans the network for files not present on
+   * the local index and automatically downloads them.
+   *
+   * @private
+   */
+  async _relayOnce() {
+    // Create set of all files in the local index
+    const localFiles = new Set();
+    for await (const { key } of this.localIndex.bee.createReadStream()) {
+      localFiles.add(utils.formatToStr(key));
+    }
+
+    // Iterate over each peer to find files not in local index
+    const missing = [];
+    for (const [peerId, bee] of this.remoteIndexes.entries()) {
+      this.#log.debug(`Checking remote index for peer ${peerId}`);
+      for await (const { key } of bee.createReadStream()) {
+        const fileKey = utils.formatToStr(key);
+        if (!localFiles.has(fileKey)) {
+          this.#log.info(
+            `File ${fileKey} missing in local index, downloading...`
+          );
+          missing.push({ peerId, fileKey });
+        }
+      }
+    }
+
+    // Download missing files
+    for (const { peerId, fileKey } of missing) {
+      await this._relayDownload(peerId, fileKey);
+    }
+  }
+
+  /**
+   * Execute a download from the relay. Mirrors the PearDrive
+   * 'DownloadFileFromPeer' functionality.
+   */
+  async _relayDownload(peerId, fileKey) {
+    this.#log.info(`Relay: Downloading file ${fileKey} from peer ${peerId}`);
+    try {
+      const driveKey = await this._sendFileRequest(peerId, fileKey);
+      if (!driveKey) {
+        this.#log.warn(
+          `Relay: No key received for file ${fileKey} from peer ${peerId}`
+        );
+        return;
+      }
+
+      // Handle download
+      const downloadDrive = await this.createDownloadDrive(fileKey, driveKey);
+      if (!downloadDrive) {
+        this.#log.error(
+          `Failed to create drive for file ${fileKey} from peer ${peerId}`
+        );
+        return;
+      }
+      await this.executeDownload(fileKey);
+
+      // Cleanup
+      await this.unmarkTransfer(fileKey, "download", peerId);
+      await this._sendFileRelease(peerId, fileKey);
+    } catch (err) {
+      this.#log.error(
+        `Relay: Error downloading file ${fileKey} from peer ${peerId}`,
+        err
+      );
+      throw err;
+    }
+  }
+
+  /**
+   * Wrapper for relay logic that ensures it runs safely
+   *
+   * @private
+   */
+  async #relayOnceSafe() {
+    if (this.#relayRunning) return;
+    try {
+      await this._relayOnce();
+    } catch (err) {
+      this.#log.error("Error during relay operation", err);
+    } finally {
+      this.#relayRunning = false;
+    }
   }
 }

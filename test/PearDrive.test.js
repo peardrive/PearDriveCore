@@ -1,4 +1,4 @@
-import test, { solo } from "brittle";
+import test, { solo, skip } from "brittle";
 import fs from "fs";
 import path from "path";
 import createTestnet from "hyperdht/testnet.js";
@@ -566,5 +566,39 @@ test(
     const downloadedFileHash = downloadedFile.hash;
 
     t.is(downloadedFileHash, fileHash, "Downloaded file hash matches original");
+  }
+);
+
+skip(
+  txt.main("PearDrive: Test file downloading with relay"),
+  { stealth: false },
+  async (t) => {
+    const testnet = await createTestnet();
+    const { bootstrap } = testnet;
+
+    const [peerA, peerB] = await utils.createNetwork({
+      baseName: "file-download-relay-test",
+      bootstrap,
+      n: 2,
+      onError: (err) => t.fail(txt.fail("onError called"), err),
+      indexOpts: {
+        poll: true,
+        pollInterval: 500,
+        relay: true, // Enable relay mode
+      },
+    });
+    t.teardown(async () => {
+      await peerA.pd.close();
+      await peerB.pd.close();
+    });
+
+    // Create 2 files on peerA
+    const fileA1 = utils.createRandomFile(peerA.pd.watchPath, 10);
+    const fileA2 = utils.createRandomFile(peerA.pd.watchPath, 10);
+
+    await utils.wait(3);
+
+    const filesInB = await peerB.pd.listLocalFiles();
+    console.log("Files in peerB", filesInB);
   }
 );
