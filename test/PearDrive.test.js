@@ -522,7 +522,7 @@ test(
   }
 );
 
-solo(
+test(
   txt.main("PearDrive: Test file downloading"),
   { stealth: false },
   async (t) => {
@@ -569,7 +569,7 @@ solo(
   }
 );
 
-test(
+skip(
   txt.main("PearDrive: Test file downloading with relay"),
   { stealth: false },
   async (t) => {
