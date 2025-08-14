@@ -63,9 +63,9 @@ export default class PearDrive {
   _swarmOpts;
   /** @private Logger options */
   _logOpts;
-  /** @private {Map} Writable hyperdrives (for downloading files) */
+  /** @protected {Map} Map of download drives and corestore subspaces*/
   _downloadDrives;
-  /** @private {Map} Readable hyperdrives (for uploading files) */
+  /** @protected {Map} Map of upload drives and corestore subspaces */
   _uploadDrives;
   /** @private {Object} In-progress downloads meta-data */
   _inProgress;
@@ -353,9 +353,11 @@ export default class PearDrive {
       }
 
       // Handle download
-      this._indexManager.markTransfer(filePath, "download", peerId);
-      await this._indexManager.createDownloadDrive(filePath, peerDownloadKey);
-      await this._indexManager.executeDownload(filePath);
+      await this._indexManager.handleDownload(
+        peerId,
+        filePath,
+        peerDownloadKey
+      );
 
       // Cleanup
       await this._indexManager.unmarkTransfer(filePath, "download", peerId);
@@ -563,9 +565,10 @@ export default class PearDrive {
         C.RPC.FILE_RELEASE,
         filePath
       );
-      if (response !== true) {
+      if (response !== "true") {
         throw new Error("File release failed on peer");
       }
+
       return true;
     } catch (err) {
       this.#log.error(`Error sending file release to peer ${peerId}`, err);

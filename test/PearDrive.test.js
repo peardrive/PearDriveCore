@@ -522,9 +522,9 @@ test(
   }
 );
 
-test(
+solo(
   txt.main("PearDrive: Test file downloading"),
-  { stealth: true },
+  { stealth: false },
   async (t) => {
     const testnet = await createTestnet();
     const { bootstrap } = testnet;
@@ -569,7 +569,7 @@ test(
   }
 );
 
-solo(
+test(
   txt.main("PearDrive: Test file downloading with relay"),
   { stealth: false },
   async (t) => {

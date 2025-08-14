@@ -50,10 +50,10 @@ export class IndexManager {
    *    @param {Object} opts.indexOpts - Options for the local file index
    *    @param {Map<string, RPC>} opts.rpcConnections - Map of peer IDs to RPC
    *      instances
-   *    @param {Map<string, Hyperdrive>} opts.uploadDrives - Map of writable
-   *      hyperdrives
-   *    @param {Map<string, Hyperdrive>} opts.downloadDrives - Map of readable
-   *      hyperdrives
+   *    @param {Map<string, Hyperdrive>} opts.uploadDrives - Map of upload
+   *      drives and corestore subspaces
+   *    @param {Map<string, Hyperdrive>} opts.downloadDrives - Map of download
+   *      drives and corestore subspaces
    *    @param {Object} opts.inProgress - Map of in-progress downloads
    *    @param {Function} opts.sendFileRequest - Function to request a file from
    *      a peer
@@ -357,29 +357,30 @@ export class IndexManager {
   }
 
   /**
-   * Create and configure the hyperdrive for downloading a file from a remote
-   * peardrive.
+   *  Given a peer ID, hyperdrive key for the upload, and the file path,
+   *  handle the download process.
    *
-   * @param {string} path - Remote file path to download
-   * @param {string | Uint8Array | ArrayBuffer} driveKey - Drive key.
+   * @param {string | Uint8Array | ArrayBuffer} peerId
+   * @param {string} filePath
+   * @param {string | Uint8Array | ArrayBuffer} driveKey - Key to peer's upload
+   *   hyperdrive
    *
-   * @returns {Promise<Hyperdrive>} - Readable hyperdrive
+   * @returns {Promise<boolean>} - Success flag
    */
-  async createDownloadDrive(path, driveKey) {
-    this.#log.info(`Creating download drive for file: ${path}`);
-
+  async handleDownload(peerId, filePath, driveKey) {
+    this.#log.info(
+      `Handling download for file: ${filePath} from peer ${peerId}`
+    );
     try {
-      // Create / load the hyperdrive
-      const keyBuf = utils.formatToBuffer(driveKey);
-      const driveStore = this._createNamespace(path, "download");
-
-      const drive = new Hyperdrive(driveStore, keyBuf);
-      await drive.ready();
-      this._downloadDrives.set(utils.asDrivePath(path), drive);
-      return drive;
+      this.markTransfer(filePath, "download", peerId);
+      await this._createDownloadDrive(filePath, driveKey);
+      await this._executeDownload(filePath);
     } catch (err) {
-      this.#log.error(`Failed to create download drive for file: ${path}`, err);
-      throw err;
+      this.#log.error(
+        `Download process failed for file: ${filePath} from peer ${peerId}`,
+        err
+      );
+      return false;
     }
   }
 
@@ -456,47 +457,6 @@ export class IndexManager {
       this.#log.info(`Upload drive closed for file: ${path}`);
     } catch (err) {
       this.#log.error(`Failed to close upload drive for file: ${path}`, err);
-      throw err;
-    }
-  }
-
-  /**
-   * Execute a download from a given path through the corresponding upload
-   * and download drives.
-   *
-   * @param {string} path - Local file path to download
-   */
-  async executeDownload(path) {
-    this.#log.info(`Executing download for file: ${path}`);
-
-    // Ensure download drive exists and has the file
-    const downDrive = this._downloadDrives.get(utils.asDrivePath(path));
-    if (downDrive === undefined) {
-      this.#log.error(`No download drive found for file: ${path}`);
-      throw new Error(`No download drive found for file: ${path}`);
-    }
-
-    try {
-      this.#log.info(`Download starting for ${path}`);
-
-      const readStream = downDrive.createReadStream(utils.asDrivePath(path), {
-        timeout: 10000,
-      });
-      const writeStream = fs.createWriteStream(
-        utils.createAbsPath(path, this.watchPath)
-      );
-
-      await new Promise((resolve, reject) => {
-        writeStream.on("error", reject);
-        readStream.on("error", reject);
-        writeStream.on("close", () => {
-          this.#log.info(`Download completed for ${path}`);
-          resolve();
-        });
-        readStream.pipe(writeStream);
-      });
-    } catch (err) {
-      this.#log.error(`Failed to execute download for file: ${path}`, err);
       throw err;
     }
   }
@@ -618,6 +578,78 @@ export class IndexManager {
   //////////////////////////////////////////////////////////////////////////////
   // Private functions
   //////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Create and configure the hyperdrive for downloading a file from a remote
+   * peardrive.
+   *
+   * @param {string} path - Remote file path to download
+   * @param {string | Uint8Array | ArrayBuffer} driveKey - Drive key.
+   *
+   * @returns {Promise<Hyperdrive>} - Readable hyperdrive
+   *
+   * @private
+   */
+  async _createDownloadDrive(path, driveKey) {
+    this.#log.info(`Creating download drive for file: ${path}`);
+
+    try {
+      // Create / load the hyperdrive
+      const keyBuf = utils.formatToBuffer(driveKey);
+      const driveStore = this._createNamespace(path, "download");
+
+      const drive = new Hyperdrive(driveStore, keyBuf);
+      await drive.ready();
+      this._downloadDrives.set(utils.asDrivePath(path), drive);
+      return drive;
+    } catch (err) {
+      this.#log.error(`Failed to create download drive for file: ${path}`, err);
+      throw err;
+    }
+  }
+
+  /**
+   * Execute a download from a given path through the corresponding upload
+   * and download drives.
+   *
+   * @param {string} path - Local file path to download
+   *
+   * @private
+   */
+  async _executeDownload(path) {
+    this.#log.info(`Executing download for file: ${path}`);
+
+    // Ensure download drive exists and has the file
+    const downDrive = this._downloadDrives.get(utils.asDrivePath(path));
+    if (downDrive === undefined) {
+      this.#log.error(`No download drive found for file: ${path}`);
+      throw new Error(`No download drive found for file: ${path}`);
+    }
+
+    try {
+      this.#log.info(`Download starting for ${path}`);
+
+      const readStream = downDrive.createReadStream(utils.asDrivePath(path), {
+        timeout: 10000,
+      });
+      const writeStream = fs.createWriteStream(
+        utils.createAbsPath(path, this.watchPath)
+      );
+
+      await new Promise((resolve, reject) => {
+        writeStream.on("error", reject);
+        readStream.on("error", reject);
+        writeStream.on("close", () => {
+          this.#log.info(`Download completed for ${path}`);
+          resolve();
+        });
+        readStream.pipe(writeStream);
+      });
+    } catch (err) {
+      this.#log.error(`Failed to execute download for file: ${path}`, err);
+      throw err;
+    }
+  }
 
   /**
    * Create corestore namespace for a drive
