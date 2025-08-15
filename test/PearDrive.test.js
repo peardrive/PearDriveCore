@@ -524,7 +524,7 @@ test(
 
 test(
   txt.main("PearDrive: Test file downloading"),
-  { stealth: false },
+  { stealth: true },
   async (t) => {
     const testnet = await createTestnet();
     const { bootstrap } = testnet;
