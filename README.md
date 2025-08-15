@@ -366,6 +366,13 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 
 ## 🚧 Changelog
 
+### 1.3.0
+
+- TODO: Implement relay mode
+- TODO: Add maximum concurrent downloads option
+- TODO: Improve structure / standardize format / error & status handling for custom and internal messages
+- TODO: Add optional max file size for watching and downloads
+
 ### 1.2.0
 
 - Fix file downloading
