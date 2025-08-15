@@ -21,5 +21,6 @@ export { formatToBuffer } from "./formatToBuffer.js";
 export { formatToStr } from "./formatToStr.js";
 export { generateSeed } from "./generateSeed.js";
 export { isPearRuntime } from "./isPearRuntime.js";
+export { normalizePath } from "./normalizePath.js";
 export { pathInRoot } from "./pathInRoot.js";
 export { strToBuffer } from "./strToBuffer.js";

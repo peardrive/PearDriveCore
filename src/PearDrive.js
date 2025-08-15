@@ -118,7 +118,7 @@ export default class PearDrive {
       ? utils.formatToBuffer(networkKey)
       : utils.generateSeed();
     this._corestorePath = corestorePath;
-    this._watchPath = watchPath;
+    this._watchPath = utils.normalizePath(watchPath);
     this._indexName = indexName;
     this._swarmOpts = swarmOpts;
     this._swarmOpts.seed = swarmOpts.seed
