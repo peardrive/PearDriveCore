@@ -17,7 +17,6 @@
 export { asDrivePath } from "./asDrivePath.js";
 export { bufferToStr } from "./bufferToStr.js";
 export { createAbsPath } from "./createAbsPath.js";
-export { formatLocalDrivePath } from "./formatLocalDrivePath.js";
 export { formatToBuffer } from "./formatToBuffer.js";
 export { formatToStr } from "./formatToStr.js";
 export { generateSeed } from "./generateSeed.js";
