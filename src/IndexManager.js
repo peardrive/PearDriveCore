@@ -50,10 +50,10 @@ export class IndexManager {
    *    @param {Object} opts.indexOpts - Options for the local file index
    *    @param {Map<string, RPC>} opts.rpcConnections - Map of peer IDs to RPC
    *      instances
-   *    @param {Map<string, Hyperdrive>} opts.uploadDrives - Map of upload
-   *      drives and corestore subspaces
-   *    @param {Map<string, Hyperdrive>} opts.downloadDrives - Map of download
-   *      drives and corestore subspaces
+   *    @param {Map<string, Hyperdrive>} opts.uploads - Map of upload drives and
+   *      corestore subspaces
+   *    @param {Map<string, Hyperdrive>} opts.downloads - Map of download drives
+   *      and corestore subspaces
    *    @param {Object} opts.inProgress - Map of in-progress downloads
    *    @param {Function} opts.sendFileRequest - Function to request a file from
    *      a peer
@@ -67,8 +67,8 @@ export class IndexManager {
     emitEvent,
     indexOpts,
     rpcConnections,
-    uploadDrives,
-    downloadDrives,
+    uploads,
+    downloads,
     inProgress = {},
     sendFileRequest,
     sendFileRelease,
@@ -83,15 +83,15 @@ export class IndexManager {
       watchPath,
       emitEvent: this._emitEvent,
       indexOpts,
-      uploadDrives,
-      downloadDrives,
+      uploads,
+      downloads,
     });
     /** @protected {Map<string, Hyperbee>} }All nonlocal PearDrives hyperbees */
     this.remoteIndexes = new Map();
     this.watchPath = watchPath;
     this._rpcConnections = rpcConnections;
-    this._uploadDrives = uploadDrives;
-    this._downloadDrives = downloadDrives;
+    this._uploads = uploads;
+    this._downloads = downloads;
     this._inProgress = inProgress;
     this._sendFileRequest = sendFileRequest;
     this._sendFileRelease = sendFileRelease;
@@ -317,12 +317,10 @@ export class IndexManager {
    * peardrive.
    *
    * @param {string} path - Local file path to upload
-   * @param {string | Uint8Array | ArrayBuffer} [driveKey] - Optional drive key.
-   *  This should only be used when finishing an unfinished upload.
    *
    * @returns {Promise<string>} - Key to the writable hyperdrive
    */
-  async createUploadDrive(path, driveKey) {
+  async createUploadDrive(path) {
     this.#log.info(`Creating upload drive for file: ${path}`);
 
     // Ensure the path is found in the local index
@@ -332,25 +330,21 @@ export class IndexManager {
       throw new Error(`File not found in local index: ${path}`);
     }
 
-    // Create / load the hyperdrive
-    let drive;
-    if (driveKey) {
-      const keyStr = utils.formatToStr(driveKey);
-      this.#log.info(`Resuming upload with drive key: ${keyStr}`);
-      const driveStore = this._createNamespace(path, "upload");
-      drive = new Hyperdrive(driveStore, driveKey);
-    } else {
-      this.#log.info(`Creating new upload drive for file: ${path}`);
-      drive = new Hyperdrive(this._store);
-    }
+    // Create the hyperdrive
+    const dPath = utils.asDrivePath(path);
+    const store = this._createNamespace(path, "upload");
+    await store.ready();
+    const drive = new Hyperdrive(store);
     await drive.ready();
-    this._uploadDrives.set(utils.asDrivePath(path), drive);
+    this._uploads.set(dPath, {
+      drive,
+      store,
+    });
 
     // Load the drive with the file
     const absPath = utils.createAbsPath(path, this.watchPath);
     const data = fs.readFileSync(absPath);
-    const drivePath = utils.asDrivePath(path);
-    await drive.put(drivePath, data);
+    await drive.put(dPath, data);
 
     this.#log.info(`Upload drive created for file: ${path}`);
     return drive.key;
@@ -397,24 +391,39 @@ export class IndexManager {
     this.#log.info(`Closing download drive for file: ${path}`);
 
     const dPath = utils.asDrivePath(path);
-    const drive = this._downloadDrives.get(dPath);
-    if (!drive) {
-      this.#log.warn(`No download drive found for file: ${path}`);
+    const download = this._downloads.get(dPath);
+    if (!download) {
+      this.#log.warn(`No download found for file: ${path}`);
+      return;
+    }
+
+    // Ensure type safety
+    const { drive, store } = download;
+    try {
+      if (!drive || !store) {
+        this.#log.warn(`Invalid download entry for file: ${path}`);
+        this._downloads.delete(dPath);
+        return;
+      }
+    } catch (err) {
+      this.#log.error(`Error accessing download entry for file: ${path}`, err);
+      this._downloads.delete(dPath);
       return;
     }
 
     // Check if the drive is still in use
     if (this.hasActiveDownloads(dPath) && !force) {
       this.#log.warn(
-        `Cannot close download drive for ${path} while downloads in progress`
+        `Cannot close download for ${path} while downloads in progress`
       );
       return;
     }
 
     try {
-      await drive.clearAll();
+      // Close the download
+      await drive.clear(dPath);
       await drive.close();
-      this._downloadDrives.delete(dPath);
+      this._downloads.delete(dPath);
       this.#log.info(`Download drive closed for file: ${path}`);
     } catch (err) {
       this.#log.error(`Failed to close download drive for file: ${path}`, err);
@@ -436,8 +445,8 @@ export class IndexManager {
 
     const dPath = utils.asDrivePath(path);
 
-    const drive = this._uploadDrives.get(dPath);
-    if (!drive) {
+    const upload = this._uploads.get(dPath);
+    if (!upload) {
       this.#log.warn(`No upload drive found for file: ${path}`);
       return;
     }
@@ -451,9 +460,10 @@ export class IndexManager {
     }
 
     try {
-      await drive.clearAll();
+      const { drive, store } = upload;
+      await drive.clear(dPath);
       await drive.close();
-      this._uploadDrives.delete(dPath);
+      this._uploads.delete(dPath);
       this.#log.info(`Upload drive closed for file: ${path}`);
     } catch (err) {
       this.#log.error(`Failed to close upload drive for file: ${path}`, err);
@@ -596,11 +606,14 @@ export class IndexManager {
     try {
       // Create / load the hyperdrive
       const keyBuf = utils.formatToBuffer(driveKey);
-      const driveStore = this._createNamespace(path, "download");
-
-      const drive = new Hyperdrive(driveStore, keyBuf);
+      const store = this._createNamespace(path, "download");
+      await store.ready();
+      const drive = new Hyperdrive(store, keyBuf);
       await drive.ready();
-      this._downloadDrives.set(utils.asDrivePath(path), drive);
+      this._downloads.set(utils.asDrivePath(path), {
+        drive,
+        store,
+      });
       return drive;
     } catch (err) {
       this.#log.error(`Failed to create download drive for file: ${path}`, err);
@@ -620,8 +633,8 @@ export class IndexManager {
     this.#log.info(`Executing download for file: ${path}`);
 
     // Ensure download drive exists and has the file
-    const downDrive = this._downloadDrives.get(utils.asDrivePath(path));
-    if (downDrive === undefined) {
+    const download = this._downloads.get(utils.asDrivePath(path));
+    if (download === undefined) {
       this.#log.error(`No download drive found for file: ${path}`);
       throw new Error(`No download drive found for file: ${path}`);
     }
@@ -629,7 +642,8 @@ export class IndexManager {
     try {
       this.#log.info(`Download starting for ${path}`);
 
-      const readStream = downDrive.createReadStream(utils.asDrivePath(path), {
+      const { drive } = download;
+      const readStream = drive.createReadStream(utils.asDrivePath(path), {
         timeout: 10000,
       });
       const writeStream = fs.createWriteStream(

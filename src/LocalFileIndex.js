@@ -41,10 +41,10 @@ export default class LocalFileIndex {
    *    @param {string} opts.watchPath - Path to watch for local files
    *    @param {Function} opts.emitEvent - Optional function to emit events
    *    @param {Object} opts.indexOpts - Index options
-   *    @param {Map<string, HyperDrive} opts.downloadDrives - Map of download
-   *       drives and corestore subspaces
-   *    @param {Map<string, HyperDrive} opts.uploadDrives - Map of upload drives
-   *       and corestore subspaces
+   *    @param {Map<string, HyperDrive} opts.downloads - Map of download drives
+   *      and corestore subspaces
+   *    @param {Map<string, HyperDrive} opts.uploads - Map of upload drives and
+   *      corestore subspaces
    *    @param {string} [opts.name] - Optional core name (defaults to
    *      'local-file-index)
    */
@@ -54,8 +54,8 @@ export default class LocalFileIndex {
     watchPath,
     emitEvent,
     indexOpts,
-    uploadDrives,
-    downloadDrives,
+    uploads,
+    downloads,
     name = "local-file-index",
   }) {
     // Logger setup
@@ -84,9 +84,9 @@ export default class LocalFileIndex {
     /** Index options */
     this._indexOpts = indexOpts;
     /** Upload drives */
-    this._uploadDrives = uploadDrives;
+    this._uploads = uploads;
     /** Download drives */
-    this._downloadDrives = downloadDrives;
+    this._downloads = downloads;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -374,6 +374,6 @@ export default class LocalFileIndex {
    */
   #isBusy(path) {
     const dPath = utils.asDrivePath(path);
-    return this._uploadDrives.has(dPath) || this._downloadDrives.has(dPath);
+    return this._uploads.has(dPath) || this._downloads.has(dPath);
   }
 }
