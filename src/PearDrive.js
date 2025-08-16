@@ -64,9 +64,9 @@ export default class PearDrive {
   /** @private Logger options */
   _logOpts;
   /** @protected {Map} Map of download drives and corestore subspaces*/
-  _downloadDrives;
+  _downloads;
   /** @protected {Map} Map of upload drives and corestore subspaces */
-  _uploadDrives;
+  _uploads;
   /** @private {Object} In-progress downloads meta-data */
   _inProgress;
   /** @private {ArrayBuffer | Uint8Array} - Hyperswarm topic buffer */
@@ -118,7 +118,7 @@ export default class PearDrive {
       ? utils.formatToBuffer(networkKey)
       : utils.generateSeed();
     this._corestorePath = corestorePath;
-    this._watchPath = watchPath;
+    this._watchPath = utils.normalizePath(watchPath);
     this._indexName = indexName;
     this._swarmOpts = swarmOpts;
     this._swarmOpts.seed = swarmOpts.seed
@@ -141,8 +141,8 @@ export default class PearDrive {
     this._swarm = new Hyperswarm(swarmOpts);
     this._store = new Corestore(corestorePath);
     this._rpcConnections = new Map();
-    this._uploadDrives = new Map();
-    this._downloadDrives = new Map();
+    this._uploads = new Map();
+    this._downloads = new Map();
     this._inProgress = {};
 
     // Save data
@@ -156,8 +156,8 @@ export default class PearDrive {
       watchPath: watchPath,
       emitEvent: this._emitEvent,
       indexOpts: this._indexOpts,
-      uploadDrives: this._uploadDrives,
-      downloadDrives: this._downloadDrives,
+      uploads: this._uploads,
+      downloads: this._downloads,
       inProgress: this._inProgress,
       sendFileRequest: async (peerId, filePath) => {
         return await this._sendFileRequest(peerId, filePath);
@@ -376,10 +376,8 @@ export default class PearDrive {
    *
    * @param {Uint8Array | ArrayBuffer | string} peerId - Hex-encoded public key
    *  of the peer
-   *
    * @param {string} type - Type of the message, this can be any string except
    *  the reserved RPC types.
-   *
    * @param {any} payload - Data to send to the peer
    *
    * @returns {Promise<any>} - Response from the peer
@@ -481,7 +479,6 @@ export default class PearDrive {
    */
   async syncLocalFilesOnce() {
     if (this._indexOpts.poll) {
-      console.log(this._indexOpts.poll);
       this.#log.warn(
         "Can't manually sync local files, automatic syncing is enabled."
       );

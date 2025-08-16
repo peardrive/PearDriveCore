@@ -366,6 +366,11 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 
 ## 🚧 Changelog
 
+### 1.2.1
+
+- Normalize watchPath to deal with spaces in the path
+- Fix 'Corestore closed' error on subsequent downloads after the first
+
 ### 1.2.0
 
 - Fix file downloading
