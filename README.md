@@ -368,8 +368,8 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 
 ### 1.2.1
 
-- TODO: Normalize watchPath to deal with spaces in the path
-- TODO: Fix 'Corestore closed' error on subsequent downloads after the first
+- Normalize watchPath to deal with spaces in the path
+- Fix 'Corestore closed' error on subsequent downloads after the first
 
 ### 1.2.0
 
