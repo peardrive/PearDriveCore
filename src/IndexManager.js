@@ -317,12 +317,10 @@ export class IndexManager {
    * peardrive.
    *
    * @param {string} path - Local file path to upload
-   * @param {string | Uint8Array | ArrayBuffer} [driveKey] - Optional drive key.
-   *  This should only be used when finishing an unfinished upload.
    *
    * @returns {Promise<string>} - Key to the writable hyperdrive
    */
-  async createUploadDrive(path, driveKey) {
+  async createUploadDrive(path) {
     this.#log.info(`Creating upload drive for file: ${path}`);
 
     // Ensure the path is found in the local index
@@ -332,17 +330,10 @@ export class IndexManager {
       throw new Error(`File not found in local index: ${path}`);
     }
 
-    // Create / load the hyperdrive
-    let drive;
-    if (driveKey) {
-      const keyStr = utils.formatToStr(driveKey);
-      this.#log.info(`Resuming upload with drive key: ${keyStr}`);
-      const driveStore = this._createNamespace(path, "upload");
-      drive = new Hyperdrive(driveStore, driveKey);
-    } else {
-      this.#log.info(`Creating new upload drive for file: ${path}`);
-      drive = new Hyperdrive(this._store);
-    }
+    // Create the hyperdrive
+    //const store = this._createNamespace(path, "upload");
+    const drive = new Hyperdrive(this._store);
+
     await drive.ready();
     this._uploadDrives.set(utils.asDrivePath(path), drive);
 
@@ -452,7 +443,6 @@ export class IndexManager {
 
     try {
       await drive.clearAll();
-      await drive.close();
       this._uploadDrives.delete(dPath);
       this.#log.info(`Upload drive closed for file: ${path}`);
     } catch (err) {

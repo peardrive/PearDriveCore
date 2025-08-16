@@ -571,7 +571,7 @@ test(
 
 test(
   txt.main("PearDrive: Download five files"),
-  { stealth: true },
+  { stealth: false },
   async (t) => {
     const testnet = await createTestnet();
     const { bootstrap } = testnet;
@@ -600,6 +600,7 @@ test(
 
     // Download all files from peerB
     for (const file of filesA) {
+      console.log("Downloading file", file.name);
       await peerB.pd.downloadFileFromPeer(peerA.pd.publicKey, file.name);
       await peerB.pd.syncLocalFilesOnce();
     }
