@@ -607,7 +607,6 @@ test(
 
     // Download all files from perA to peerB
     for (const file of filesA) {
-      console.log("Downloading file", file.name);
       await peerB.pd.downloadFileFromPeer(peerA.pd.publicKey, file.name);
       await peerB.pd.syncLocalFilesOnce();
     }
