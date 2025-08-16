@@ -331,10 +331,14 @@ export class IndexManager {
     }
 
     // Create the hyperdrive
-    //const store = this._createNamespace(path, "upload");
+    const store = this._createNamespace(path, "upload");
+    await store.ready();
     const drive = new Hyperdrive(this._store);
     await drive.ready();
-    this._uploads.set(utils.asDrivePath(path), drive);
+    this._uploads.set(utils.asDrivePath(path), {
+      drive,
+      store,
+    });
 
     // Load the drive with the file
     const absPath = utils.createAbsPath(path, this.watchPath);
@@ -387,23 +391,39 @@ export class IndexManager {
     this.#log.info(`Closing download drive for file: ${path}`);
 
     const dPath = utils.asDrivePath(path);
-    const drive = this._downloads.get(dPath);
-    if (!drive) {
-      this.#log.warn(`No download drive found for file: ${path}`);
+    const download = this._downloads.get(dPath);
+    if (!download) {
+      this.#log.warn(`No download found for file: ${path}`);
+      return;
+    }
+
+    // Ensure type safety
+    const { drive, store } = download;
+    try {
+      if (!drive || !store) {
+        this.#log.warn(`Invalid download entry for file: ${path}`);
+        this._downloads.delete(dPath);
+        return;
+      }
+    } catch (err) {
+      this.#log.error(`Error accessing download entry for file: ${path}`, err);
+      this._downloads.delete(dPath);
       return;
     }
 
     // Check if the drive is still in use
     if (this.hasActiveDownloads(dPath) && !force) {
       this.#log.warn(
-        `Cannot close download drive for ${path} while downloads in progress`
+        `Cannot close download for ${path} while downloads in progress`
       );
       return;
     }
 
     try {
-      await drive.clearAll();
+      // Close the download
+      await drive.clear(path);
       await drive.close();
+      await store.close();
       this._downloads.delete(dPath);
       this.#log.info(`Download drive closed for file: ${path}`);
     } catch (err) {
@@ -426,8 +446,8 @@ export class IndexManager {
 
     const dPath = utils.asDrivePath(path);
 
-    const drive = this._uploads.get(dPath);
-    if (!drive) {
+    const upload = this._uploads.get(dPath);
+    if (!upload) {
       this.#log.warn(`No upload drive found for file: ${path}`);
       return;
     }
@@ -441,7 +461,10 @@ export class IndexManager {
     }
 
     try {
+      const { drive, store } = upload;
       await drive.clearAll();
+      await drive.close();
+      await store.close();
       this._uploads.delete(dPath);
       this.#log.info(`Upload drive closed for file: ${path}`);
     } catch (err) {
@@ -585,11 +608,14 @@ export class IndexManager {
     try {
       // Create / load the hyperdrive
       const keyBuf = utils.formatToBuffer(driveKey);
-      const driveStore = this._createNamespace(path, "download");
-
-      const drive = new Hyperdrive(driveStore, keyBuf);
+      const store = this._createNamespace(path, "download");
+      await store.ready();
+      const drive = new Hyperdrive(store, keyBuf);
       await drive.ready();
-      this._downloads.set(utils.asDrivePath(path), drive);
+      this._downloads.set(utils.asDrivePath(path), {
+        drive,
+        store,
+      });
       return drive;
     } catch (err) {
       this.#log.error(`Failed to create download drive for file: ${path}`, err);
@@ -609,8 +635,8 @@ export class IndexManager {
     this.#log.info(`Executing download for file: ${path}`);
 
     // Ensure download drive exists and has the file
-    const downDrive = this._downloads.get(utils.asDrivePath(path));
-    if (downDrive === undefined) {
+    const download = this._downloads.get(utils.asDrivePath(path));
+    if (download === undefined) {
       this.#log.error(`No download drive found for file: ${path}`);
       throw new Error(`No download drive found for file: ${path}`);
     }
@@ -618,7 +644,8 @@ export class IndexManager {
     try {
       this.#log.info(`Download starting for ${path}`);
 
-      const readStream = downDrive.createReadStream(utils.asDrivePath(path), {
+      const { drive } = download;
+      const readStream = drive.createReadStream(utils.asDrivePath(path), {
         timeout: 10000,
       });
       const writeStream = fs.createWriteStream(
