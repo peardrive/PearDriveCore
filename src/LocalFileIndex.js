@@ -349,23 +349,6 @@ export default class LocalFileIndex {
   }
 
   /**
-   * Mark a file as busy for upload or download
-   *
-   * @param {string} path - (Relative) path to the file
-   *
-   * @private
-   */
-  #markBusy(path) {}
-
-  /**
-   *
-   * @param {string} path - (Relative) path to the file
-   *
-   * @private
-   */
-  #markNotBusy(path) {}
-
-  /**
    * Determine if a file is busy at given path
    *
    * @param {string} path - (Relative) path to the file
