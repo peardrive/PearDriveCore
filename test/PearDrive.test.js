@@ -569,7 +569,7 @@ test(
   }
 );
 
-test(
+solo(
   txt.main("PearDrive: Download five files"),
   { stealth: false },
   async (t) => {

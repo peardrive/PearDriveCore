@@ -462,7 +462,7 @@ export class IndexManager {
 
     try {
       const { drive, store } = upload;
-      await drive.clearAll();
+      await drive.clear(path);
       await drive.close();
       await store.close();
       this._uploads.delete(dPath);
