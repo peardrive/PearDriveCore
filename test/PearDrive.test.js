@@ -523,7 +523,7 @@ test(
 );
 
 test(
-  txt.main("PearDrive: Test file downloading"),
+  txt.main("PearDrive: Test single file download"),
   { stealth: true },
   async (t) => {
     const testnet = await createTestnet();
@@ -566,6 +566,62 @@ test(
     const downloadedFileHash = downloadedFile.hash;
 
     t.is(downloadedFileHash, fileHash, "Downloaded file hash matches original");
+  }
+);
+
+test(
+  txt.main("PearDrive: Download five files"),
+  { stealth: true },
+  async (t) => {
+    const testnet = await createTestnet();
+    const { bootstrap } = testnet;
+
+    const [peerA, peerB] = await utils.createNetwork({
+      baseName: "file-download-five-test",
+      bootstrap,
+      n: 2,
+      onError: (err) => t.fail(txt.fail("onError called"), err),
+      indexOpts: {
+        poll: false, // Disable polling for this test
+        pollInterval: 500,
+      },
+    });
+    t.teardown(async () => {
+      await peerA.pd.close();
+      await peerB.pd.close();
+    });
+
+    // Create 5 files on peerA
+    const filesA = [];
+    for (let i = 0; i < 5; i++) {
+      filesA.push(utils.createRandomFile(peerA.pd.watchPath, 10));
+    }
+    await peerA.pd.syncLocalFilesOnce();
+
+    // Download all files from peerB
+    for (const file of filesA) {
+      await peerB.pd.downloadFileFromPeer(peerA.pd.publicKey, file.name);
+      await peerB.pd.syncLocalFilesOnce();
+    }
+
+    // Ensure all files were downloaded correctly
+    const peerBLocalFiles = await peerB.pd.listLocalFiles();
+    t.is(
+      peerBLocalFiles.files.length,
+      filesA.length,
+      "All files downloaded to peerB"
+    );
+    for (const file of filesA) {
+      const downloadedFile = peerBLocalFiles.files.find(
+        (f) => f.path === file.name
+      );
+      t.ok(downloadedFile, `File ${file.name} downloaded to peerB`);
+      t.is(
+        downloadedFile.hash,
+        file.hash,
+        `Downloaded file ${file.name} hash matches original`
+      );
+    }
   }
 );
 
