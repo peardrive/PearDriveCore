@@ -331,11 +331,12 @@ export class IndexManager {
     }
 
     // Create the hyperdrive
+    const dPath = utils.asDrivePath(path);
     const store = this._createNamespace(path, "upload");
     await store.ready();
-    const drive = new Hyperdrive(this._store);
+    const drive = new Hyperdrive(store);
     await drive.ready();
-    this._uploads.set(utils.asDrivePath(path), {
+    this._uploads.set(dPath, {
       drive,
       store,
     });
@@ -343,8 +344,7 @@ export class IndexManager {
     // Load the drive with the file
     const absPath = utils.createAbsPath(path, this.watchPath);
     const data = fs.readFileSync(absPath);
-    const drivePath = utils.asDrivePath(path);
-    await drive.put(drivePath, data);
+    await drive.put(dPath, data);
 
     this.#log.info(`Upload drive created for file: ${path}`);
     return drive.key;
@@ -421,9 +421,8 @@ export class IndexManager {
 
     try {
       // Close the download
-      await drive.clear(path);
+      await drive.clear(dPath);
       await drive.close();
-      await store.close();
       this._downloads.delete(dPath);
       this.#log.info(`Download drive closed for file: ${path}`);
     } catch (err) {
@@ -462,9 +461,8 @@ export class IndexManager {
 
     try {
       const { drive, store } = upload;
-      await drive.clear(path);
+      await drive.clear(dPath);
       await drive.close();
-      await store.close();
       this._uploads.delete(dPath);
       this.#log.info(`Upload drive closed for file: ${path}`);
     } catch (err) {
