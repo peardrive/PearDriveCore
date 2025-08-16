@@ -569,9 +569,9 @@ test(
   }
 );
 
-solo(
+test(
   txt.main("PearDrive: Download five files"),
-  { stealth: false },
+  { stealth: true },
   async (t) => {
     const testnet = await createTestnet();
     const { bootstrap } = testnet;
@@ -598,7 +598,14 @@ solo(
     }
     await peerA.pd.syncLocalFilesOnce();
 
-    // Download all files from peerB
+    // Get file hashes from peerA
+    const peerAFiles = await peerA.pd.listLocalFiles();
+    const fileAHashes = peerAFiles.files.map((f) => ({
+      name: f.path,
+      hash: f.hash,
+    }));
+
+    // Download all files from perA to peerB
     for (const file of filesA) {
       console.log("Downloading file", file.name);
       await peerB.pd.downloadFileFromPeer(peerA.pd.publicKey, file.name);
@@ -607,20 +614,23 @@ solo(
 
     // Ensure all files were downloaded correctly
     const peerBLocalFiles = await peerB.pd.listLocalFiles();
+    const fileBHashes = peerBLocalFiles.files.map((f) => ({
+      name: f.path,
+      hash: f.hash,
+    }));
+
     t.is(
       peerBLocalFiles.files.length,
       filesA.length,
       "All files downloaded to peerB"
     );
-    for (const file of filesA) {
-      const downloadedFile = peerBLocalFiles.files.find(
-        (f) => f.path === file.name
-      );
-      t.ok(downloadedFile, `File ${file.name} downloaded to peerB`);
+    for (const file of fileAHashes) {
+      const downloadedFile = fileBHashes.find((f) => f.name === file.name);
+      t.ok(downloadedFile, `File ${file.name} was downloaded`);
       t.is(
         downloadedFile.hash,
         file.hash,
-        `Downloaded file ${file.name} hash matches original`
+        `Hash for ${file.name} matches original`
       );
     }
   }
