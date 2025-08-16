@@ -50,10 +50,10 @@ export class IndexManager {
    *    @param {Object} opts.indexOpts - Options for the local file index
    *    @param {Map<string, RPC>} opts.rpcConnections - Map of peer IDs to RPC
    *      instances
-   *    @param {Map<string, Hyperdrive>} opts.uploadDrives - Map of upload
-   *      drives and corestore subspaces
-   *    @param {Map<string, Hyperdrive>} opts.downloadDrives - Map of download
-   *      drives and corestore subspaces
+   *    @param {Map<string, Hyperdrive>} opts.uploads - Map of upload drives and
+   *      corestore subspaces
+   *    @param {Map<string, Hyperdrive>} opts.downloads - Map of download drives
+   *      and corestore subspaces
    *    @param {Object} opts.inProgress - Map of in-progress downloads
    *    @param {Function} opts.sendFileRequest - Function to request a file from
    *      a peer
@@ -67,8 +67,8 @@ export class IndexManager {
     emitEvent,
     indexOpts,
     rpcConnections,
-    uploadDrives,
-    downloadDrives,
+    uploads,
+    downloads,
     inProgress = {},
     sendFileRequest,
     sendFileRelease,
@@ -83,15 +83,15 @@ export class IndexManager {
       watchPath,
       emitEvent: this._emitEvent,
       indexOpts,
-      uploadDrives,
-      downloadDrives,
+      uploads,
+      downloads,
     });
     /** @protected {Map<string, Hyperbee>} }All nonlocal PearDrives hyperbees */
     this.remoteIndexes = new Map();
     this.watchPath = watchPath;
     this._rpcConnections = rpcConnections;
-    this._uploadDrives = uploadDrives;
-    this._downloadDrives = downloadDrives;
+    this._uploads = uploads;
+    this._downloads = downloads;
     this._inProgress = inProgress;
     this._sendFileRequest = sendFileRequest;
     this._sendFileRelease = sendFileRelease;
@@ -333,9 +333,8 @@ export class IndexManager {
     // Create the hyperdrive
     //const store = this._createNamespace(path, "upload");
     const drive = new Hyperdrive(this._store);
-
     await drive.ready();
-    this._uploadDrives.set(utils.asDrivePath(path), drive);
+    this._uploads.set(utils.asDrivePath(path), drive);
 
     // Load the drive with the file
     const absPath = utils.createAbsPath(path, this.watchPath);
@@ -388,7 +387,7 @@ export class IndexManager {
     this.#log.info(`Closing download drive for file: ${path}`);
 
     const dPath = utils.asDrivePath(path);
-    const drive = this._downloadDrives.get(dPath);
+    const drive = this._downloads.get(dPath);
     if (!drive) {
       this.#log.warn(`No download drive found for file: ${path}`);
       return;
@@ -405,7 +404,7 @@ export class IndexManager {
     try {
       await drive.clearAll();
       await drive.close();
-      this._downloadDrives.delete(dPath);
+      this._downloads.delete(dPath);
       this.#log.info(`Download drive closed for file: ${path}`);
     } catch (err) {
       this.#log.error(`Failed to close download drive for file: ${path}`, err);
@@ -427,7 +426,7 @@ export class IndexManager {
 
     const dPath = utils.asDrivePath(path);
 
-    const drive = this._uploadDrives.get(dPath);
+    const drive = this._uploads.get(dPath);
     if (!drive) {
       this.#log.warn(`No upload drive found for file: ${path}`);
       return;
@@ -443,7 +442,7 @@ export class IndexManager {
 
     try {
       await drive.clearAll();
-      this._uploadDrives.delete(dPath);
+      this._uploads.delete(dPath);
       this.#log.info(`Upload drive closed for file: ${path}`);
     } catch (err) {
       this.#log.error(`Failed to close upload drive for file: ${path}`, err);
@@ -590,7 +589,7 @@ export class IndexManager {
 
       const drive = new Hyperdrive(driveStore, keyBuf);
       await drive.ready();
-      this._downloadDrives.set(utils.asDrivePath(path), drive);
+      this._downloads.set(utils.asDrivePath(path), drive);
       return drive;
     } catch (err) {
       this.#log.error(`Failed to create download drive for file: ${path}`, err);
@@ -610,7 +609,7 @@ export class IndexManager {
     this.#log.info(`Executing download for file: ${path}`);
 
     // Ensure download drive exists and has the file
-    const downDrive = this._downloadDrives.get(utils.asDrivePath(path));
+    const downDrive = this._downloads.get(utils.asDrivePath(path));
     if (downDrive === undefined) {
       this.#log.error(`No download drive found for file: ${path}`);
       throw new Error(`No download drive found for file: ${path}`);

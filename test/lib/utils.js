@@ -288,8 +288,8 @@ export async function makeLocalFileIndex(
       log.info(`Event emitted: ${eventName}`, payload);
     },
     indexOpts,
-    uploadDrives: new Map(),
-    downloadDrives: new Map(),
+    uploads: new Map(),
+    downloads: new Map(),
   });
 
   return {
