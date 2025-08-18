@@ -373,6 +373,11 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 - TODO: Improve structure / standardize format / error & status handling for custom and internal messages
 - TODO: Add optional max file size for watching and downloads
 
+### 1.2.2
+
+- Update dependencies
+- Enhance automatic polling performance
+
 ### 1.2.1
 
 - Normalize watchPath to deal with spaces in the path

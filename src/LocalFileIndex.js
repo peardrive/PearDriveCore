@@ -87,6 +87,8 @@ export default class LocalFileIndex {
     this._uploads = uploads;
     /** Download drives */
     this._downloads = downloads;
+    /** Whether or not currently polling */
+    this._polling = false;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -181,19 +183,21 @@ export default class LocalFileIndex {
   /** Poll local files once */
   pollOnce() {
     this.#log.info("Polling local files once...");
-    return this.#pollAndSync();
+    return this.#pollAndSync(false);
   }
 
-  /** Poll automatically for new files in the local folder */
-  startPolling() {
-    if (this.#poller) return;
+  /**
+   * Asynchronous poll process, automatically scans for new files in the local
+   * folder
+   */
+  async startPolling() {
+    if (this.#poller || this._running) return;
     this.#log.info("Starting automatic polling for local files...");
 
+    this._running = true;
     this._indexOpts.poll = true;
-    this.#poller = setInterval(
-      async () => this.#pollAndSync(),
-      this._indexOpts.pollInterval
-    );
+
+    this.#pollAndSync(true);
   }
 
   /** Stop automatic polling for new files in the local folder */
@@ -274,9 +278,18 @@ export default class LocalFileIndex {
     });
   }
 
-  /** Poll for new files and sync with hyperbee */
-  async #pollAndSync() {
-    this.#log.info("Polling for new files in", this.watchPath, "...");
+  /**
+   * Poll for new files and sync with hyperbee
+   *
+   * @param {boolean} [continuous=true] - Whether to continue polling
+   */
+  async #pollAndSync(continuous = false) {
+    if (this._polling) {
+      this.#log.warn("Already polling, skipping this run.");
+      return;
+    }
+
+    this.#log.debug("Polling for new files in", this.watchPath, "...");
 
     // Load all existing file keys from hyperbee
     const storedFiles = new Map();
@@ -310,6 +323,19 @@ export default class LocalFileIndex {
         this._emitEvent(C.EVENT.LOCAL, null);
       }
     }
+
+    this.#log.debug("Polling complete.");
+
+    // If this is a continuous poll, ensure that automatic polling is enabled
+    // and if so, set the next poll timeout
+    if (continuous && this._indexOpts.poll) {
+      this.#poller = setTimeout(
+        () => this.#pollAndSync(true),
+        this._indexOpts.pollInterval
+      );
+    }
+
+    this._polling = false;
   }
 
   /** Recursively scan a dir and fill map with file metaData */
