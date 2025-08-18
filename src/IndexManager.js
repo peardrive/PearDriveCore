@@ -18,6 +18,7 @@
 import Hyperbee from "hyperbee";
 import Hyperdrive from "hyperdrive";
 import fs from "fs";
+import ReadyResource from "ready-resource";
 
 import * as C from "./constants.js";
 import * as utils from "./utils/index.js";
@@ -30,7 +31,7 @@ import LocalFileIndex from "./LocalFileIndex.js";
  *
  * @protected
  ******************************************************************************/
-export class IndexManager {
+export class IndexManager extends ReadyResource {
   /** @private {Corestore} */
   _store;
   /** @private {Logger} */
@@ -73,6 +74,8 @@ export class IndexManager {
     sendFileRequest,
     sendFileRelease,
   }) {
+    super();
+
     this._store = store.namespace("peardrive:indexmanager");
     this._emitEvent = emitEvent;
     this._indexOpts = indexOpts;
@@ -114,19 +117,6 @@ export class IndexManager {
   //////////////////////////////////////////////////////////////////////////////
   // Public functions
   //////////////////////////////////////////////////////////////////////////////
-
-  /**
-   * Prepare the local index: ready, build initial index, and start polling.
-   *
-   * @returns {Promise<void>}
-   */
-  async ready() {
-    this.#log.info("Getting IndexManager ready...");
-    await this.localIndex.ready();
-    if (this._indexOpts.poll) this.localIndex.startPolling();
-    if (this.relay) this.startRelay();
-    this.#log.info("IndexManager ready.");
-  }
 
   /**
    * Start relay mode, which periodically scans the network for files not
@@ -768,5 +758,39 @@ export class IndexManager {
     } finally {
       this.#relayRunning = false;
     }
+  }
+
+  async _open() {
+    this.#log.info("Opening IndexManager...");
+
+    await this.localIndex.ready();
+    if (this.relay) this.startRelay();
+    if (this._indexOpts.poll) this.localIndex.startPolling();
+
+    this.#log.info("IndexManager opened successfully!");
+  }
+
+  async _close() {
+    this.#log.info("Closing IndexManager...");
+
+    await this.localIndex.close();
+
+    for (const [peerId, bee] of this.remoteIndexes.entries()) {
+      this.#log.debug(`Closing remote index for peer ${peerId}`);
+      await bee.close();
+      this.remoteIndexes.delete(peerId);
+    }
+
+    for (const [dPath, { drive }] of this._uploads.entries()) {
+      this.#log.debug(`Closing upload drive for ${dPath}`);
+      await drive.close();
+    }
+
+    for (const [dPath, { drive }] of this._downloads.entries()) {
+      this.#log.debug(`Closing download drive for ${dPath}`);
+      await drive.close();
+    }
+
+    this.#log.info("IndexManager closed successfully!");
   }
 }

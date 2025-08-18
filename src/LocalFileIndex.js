@@ -19,6 +19,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import Hyperbee from "hyperbee";
+import ReadyResource from "ready-resource";
 
 import * as utils from "./utils/index.js";
 import * as C from "./constants.js";
@@ -28,7 +29,7 @@ import * as C from "./constants.js";
  *
  * @protected
  */
-export default class LocalFileIndex {
+export default class LocalFileIndex extends ReadyResource {
   /** Logger instance */
   #log;
   /** Automatic polling interval function */
@@ -58,6 +59,7 @@ export default class LocalFileIndex {
     downloads,
     name = "local-file-index",
   }) {
+    super();
     // Logger setup
     this.#log = log;
     this.#log.info("Initializing LocalFileIndex...");
@@ -94,36 +96,6 @@ export default class LocalFileIndex {
   //////////////////////////////////////////////////////////////////////////////
   // Public functions
   //////////////////////////////////////////////////////////////////////////////
-
-  /** Get corestores ready (run and complete this before using) */
-  async ready() {
-    this.#log.info("Getting LocalFileIndexer ready...");
-
-    await this.indexCore.ready();
-    this.bee = new Hyperbee(this.indexCore, {
-      keyEncoding: "utf-8",
-      valueEncoding: "json",
-    });
-    await this.bee.ready();
-
-    this.#log.info("LocalFileIndexer is ready!");
-  }
-
-  /** Close the LocalFileIndex gracefully */
-  async close() {
-    this.#log.info("Closing LocalFileIndexer...");
-
-    // Stop polling
-    this.stopPolling();
-
-    // Close the hyperbee
-    if (this.bee) {
-      await this.bee.close();
-      this.bee = null;
-    }
-
-    this.#log.info("LocalFileIndexer closed.");
-  }
 
   /** Get save data as a JSON object */
   getSaveData() {
@@ -291,51 +263,58 @@ export default class LocalFileIndex {
 
     this.#log.debug("Polling for new files in", this.watchPath, "...");
 
-    // Load all existing file keys from hyperbee
-    const storedFiles = new Map();
-    for await (const { key, value } of this.bee.createReadStream()) {
-      storedFiles.set(utils.formatToStr(key), value);
-    }
+    try {
+      // Load all existing file keys from hyperbee
+      const storedFiles = new Map();
+      for await (const { key, value } of this.bee.createReadStream()) {
+        storedFiles.set(utils.formatToStr(key), value);
+      }
 
-    // Recursively scan local directory
-    const currentFiles = new Map();
-    await this.#scanDirectory(this.watchPath, currentFiles);
+      // Recursively scan local directory
+      const currentFiles = new Map();
+      await this.#scanDirectory(this.watchPath, currentFiles);
 
-    // Check for deleted files
-    for (const storedPath of storedFiles.keys()) {
-      if (!currentFiles.has(storedPath)) {
-        if (this.#isBusy(storedPath)) {
-          this.#log.info("Busy file not deleted!", storedPath);
-          continue;
+      // Check for deleted files
+      for (const storedPath of storedFiles.keys()) {
+        if (!currentFiles.has(storedPath)) {
+          if (this.#isBusy(storedPath)) {
+            this.#log.info("Busy file not deleted!", storedPath);
+            continue;
+          }
+          this.#log.info("File deleted:", storedPath);
+          await this.bee.del(storedPath);
+          this._emitEvent(C.EVENT.LOCAL, null);
         }
-        this.#log.info("File deleted:", storedPath);
-        await this.bee.del(storedPath);
-        this._emitEvent(C.EVENT.LOCAL, null);
       }
-    }
 
-    // Detect new or modified files
-    for (const [path, meta] of currentFiles.entries()) {
-      const storedMeta = storedFiles.get(path);
-      if (!storedMeta || storedMeta.hash !== meta.hash) {
-        this.#log.info(storedMeta ? "File updated:" : "New file added:", path);
-        await this.bee.put(path, meta);
-        this._emitEvent(C.EVENT.LOCAL, null);
+      // Detect new or modified files
+      for (const [path, meta] of currentFiles.entries()) {
+        const storedMeta = storedFiles.get(path);
+        if (!storedMeta || storedMeta.hash !== meta.hash) {
+          this.#log.info(
+            storedMeta ? "File updated:" : "New file added:",
+            path
+          );
+          await this.bee.put(path, meta);
+          this._emitEvent(C.EVENT.LOCAL, null);
+        }
       }
+
+      this.#log.debug("Polling complete.");
+
+      // If this is a continuous poll, ensure that automatic polling is enabled
+      // and if so, set the next poll timeout
+      if (continuous && this._indexOpts.poll) {
+        this.#poller = setTimeout(
+          () => this.#pollAndSync(true),
+          this._indexOpts.pollInterval
+        );
+      }
+
+      this._polling = false;
+    } catch (error) {
+      this.#log.error("Error during polling:", error);
     }
-
-    this.#log.debug("Polling complete.");
-
-    // If this is a continuous poll, ensure that automatic polling is enabled
-    // and if so, set the next poll timeout
-    if (continuous && this._indexOpts.poll) {
-      this.#poller = setTimeout(
-        () => this.#pollAndSync(true),
-        this._indexOpts.pollInterval
-      );
-    }
-
-    this._polling = false;
   }
 
   /** Recursively scan a dir and fill map with file metaData */
@@ -384,5 +363,31 @@ export default class LocalFileIndex {
   #isBusy(path) {
     const dPath = utils.asDrivePath(path);
     return this._uploads.has(dPath) || this._downloads.has(dPath);
+  }
+
+  async _open() {
+    this.#log.info("Opening LocalFileIndex...");
+
+    // Ready corestore and create hyperbee
+    await this.indexCore.ready();
+    this.bee = new Hyperbee(this.indexCore, {
+      keyEncoding: "utf-8",
+      valueEncoding: "json",
+    });
+    await this.bee.ready();
+
+    this.#log.info("LocalFileIndex opened successfully!");
+  }
+
+  async _close() {
+    this.#log.info("Closing LocalFileIndex...");
+
+    this.stopPolling();
+    if (this.bee) {
+      await this.bee.close();
+      this.bee = null;
+    }
+
+    this.#log.info("LocalFileIndex closed successfully!");
   }
 }

@@ -19,6 +19,7 @@ import RPC from "protomux-rpc";
 import c from "compact-encoding";
 import Hyperbee from "hyperbee";
 import Logger, { LOG_LEVELS } from "@hopets/logger";
+import ReadyResource from "ready-resource";
 
 import * as C from "./constants.js";
 import * as utils from "./utils/index.js";
@@ -38,7 +39,7 @@ export const RPC_EVENT = C.RPC;
  * ---
  * P2P networking system for node.js applications.
  ******************************************************************************/
-export default class PearDrive {
+export default class PearDrive extends ReadyResource {
   /** @private {Hyperswarm} Hyperswarm for all nodes on network */
   _swarm;
   /** @private {Corestore} Corestore for all hypercores */
@@ -110,6 +111,8 @@ export default class PearDrive {
     indexOpts = {},
     networkKey,
   }) {
+    super();
+
     this._emitEvent = this._emitEvent.bind(this);
     this._hooks = {};
 
@@ -252,16 +255,6 @@ export default class PearDrive {
   //////////////////////////////////////////////////////////////////////////////
   // Public functions
   //////////////////////////////////////////////////////////////////////////////
-
-  /**
-   * Initialize corestore and index manager.
-   *
-   * @returns {Promise<void>}
-   */
-  async ready() {
-    await this._store.ready();
-    await this._indexManager.ready();
-  }
 
   /**
    * Get save data as JSON.
@@ -447,15 +440,6 @@ export default class PearDrive {
         ? utils.formatToStr(peer.hyperbeeKey)
         : null,
     }));
-  }
-
-  /** Close PearDrive gracefully */
-  async close() {
-    this.#log.info("Closing PearDrive...");
-    this._indexManager.close();
-    this._swarm.destroy();
-    await this._store.close();
-    this.#log.info("PearDrive closed.");
   }
 
   /** Activate automatic polling for the local file index */
@@ -968,5 +952,24 @@ export default class PearDrive {
       (this._hooks[C.EVENT.ERROR] || []).forEach((cb) => cb(err));
       throw err;
     }
+  }
+
+  async _open() {
+    this.#log.info("Opening PearDrive...");
+
+    await this._store.ready();
+    await this._indexManager.ready();
+
+    this.#log.info("PearDrive opened successfully!");
+  }
+
+  async _close() {
+    this.#log.info("Closing PearDrive...");
+
+    await this._indexManager.close();
+    this._swarm.destroy();
+    await this._store.close();
+
+    this.#log.info("PearDrive closed successfully!");
   }
 }
