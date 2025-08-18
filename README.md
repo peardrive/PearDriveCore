@@ -366,6 +366,11 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 
 ## 🚧 Changelog
 
+### 1.2.2
+
+- Update dependencies
+- Enhance automatic polling performance
+
 ### 1.2.1
 
 - Normalize watchPath to deal with spaces in the path
