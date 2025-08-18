@@ -1,3 +1,6 @@
+.DS_Store
+
+/* Ignore build/dev folders and files */
 node_modules
 test/mock
 dist
