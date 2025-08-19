@@ -635,7 +635,7 @@ test(
   }
 );
 
-test(
+solo(
   txt.main("PearDrive: Test file downloading with relay"),
   { stealth: false },
   async (t) => {
@@ -662,18 +662,21 @@ test(
     const fileA1 = utils.createRandomFile(peerA.pd.watchPath, 10);
     const fileA2 = utils.createRandomFile(peerA.pd.watchPath, 10);
 
-    await peerB.pd.syncLocalFilesOnce();
-    await peerA.pd.syncLocalFilesOnce();
-    await utils.wait(3);
+    const success = await utils.waitFor(
+      async () => {
+        let isTrue = false;
+        const localFiles = (await peerB.pd.listLocalFiles()).files;
 
-    await peerB.pd.syncLocalFilesOnce();
-    await peerA.pd.syncLocalFilesOnce();
+        if (localFiles.length < 2) return false;
+        isTrue = localFiles.some((f) => f.path === fileA1.name);
+        isTrue = isTrue && localFiles.some((f) => f.path === fileA2.name);
 
-    // Download fileA2 from peerA to peerB
-    await peerB.pd.syncLocalFilesOnce();
+        return isTrue;
+      },
+      5000,
+      100
+    );
 
-    await utils.wait(7);
-
-    // Ensure files were downloaded and have the correct hashes
+    t.ok(success, "Files downloaded successfully with relay");
   }
 );

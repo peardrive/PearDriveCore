@@ -23,6 +23,42 @@ export function generateString(length = 8) {
   return result;
 }
 
+/**
+ * Wait for condition to be true
+ *
+ * @param {Function} conditionFn - Function that returns true when condition is
+ *   met
+ * @param {number} [timeout=5000] - Maximum time to wait in milliseconds
+ * @param {number} [interval=100] - Interval to check condition in milliseconds
+ */
+export async function waitFor(conditionFn, timeout = 5000, interval = 100) {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeout) {
+    if (await conditionFn()) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+  return false;
+}
+
+/**
+ * Given two lists of files, ensure file.name and file.hash match for each of them
+ */
+export function filesMatch(files, expectedFiles) {
+  if (files.length !== expectedFiles.length) {
+    return false;
+  }
+  const fileMap = new Map(files.map((f) => [f.name, f.hash]));
+  for (const file of expectedFiles) {
+    if (!fileMap.has(file.name) || fileMap.get(file.name) !== file.hash) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /** Create a random dummy text file in given basePath */
 export function createRandomFile(basePath, length = 8) {
   const name = `${generateString(length)}.txt`;
