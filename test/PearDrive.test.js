@@ -95,8 +95,9 @@ test(
       p1.pd.close();
       p2.pd.close();
     });
-    await utils.wait(1);
-    t.ok(p1.pd.connected && p2.pd.connected, "both peers connected");
+
+    t.is(p1.pd.connected, true, "p1 is connected");
+    t.is(p2.pd.connected, true, "p2 is connected");
 
     const peers1 = p1.pd.listPeers();
     const peers2 = p2.pd.listPeers();
@@ -114,13 +115,12 @@ test(
 
     // Spin up 5 peers
     const peerObjs = await utils.createNetwork("peer", bootstrap, 5);
-    await utils.wait(1);
-    const pds = peerObjs.map((p) => p.pd);
-
-    // Teardown all peers
     t.teardown(async () => {
       for (const pd of pds) await pd.close();
     });
+
+    const pds = peerObjs.map((p) => p.pd);
+    t.is(pds.length, 5, "5 peers created");
 
     // Ensure all are connected
     for (const pd of pds) {
@@ -635,7 +635,7 @@ test(
   }
 );
 
-solo(
+test(
   txt.main("PearDrive: Test file downloading with relay"),
   { stealth: false },
   async (t) => {
