@@ -114,12 +114,16 @@ test(
     const { bootstrap } = testnet;
 
     // Spin up 5 peers
-    const peerObjs = await utils.createNetwork("peer", bootstrap, 5);
+    const peerObjs = await utils.createNetwork({
+      baseName: "peer",
+      bootstrap,
+      n: 5,
+    });
+    const pds = peerObjs.map((p) => p.pd);
     t.teardown(async () => {
       for (const pd of pds) await pd.close();
     });
 
-    const pds = peerObjs.map((p) => p.pd);
     t.is(pds.length, 5, "5 peers created");
 
     // Ensure all are connected

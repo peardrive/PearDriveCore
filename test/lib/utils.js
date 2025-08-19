@@ -111,19 +111,15 @@ export function createCorestorePath(folderName) {
 
 /** Resolves when given array of PearDrives are all connected */
 export async function awaitAllConnected(instances, timeout = 60000) {
-  let connected = false;
-  const startTime = Date.now();
-
   // Flush all peers
   for (const instance of instances) {
     await instance._swarm.flush();
   }
 
   // Wait for connected status to activate
-  while (!connected && Date.now() - startTime < timeout) {
-    connected = instances.every((instance) => instance.connected);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
+  let connected = await waitFor(() => {
+    instances.every((instance) => instance.connected, timeout, 50);
+  });
 
   return connected;
 }
