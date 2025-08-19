@@ -417,7 +417,6 @@ export default class PearDrive extends ReadyResource {
    */
   listPeers() {
     const peers = [];
-    // TODO fix this
     for (const [peerId, _rpc] of this._rpcConnections.entries()) {
       const bee = this._indexManager.remoteIndexes.get(peerId);
       const hyperbeeKey = bee ? bee.core.key : null;

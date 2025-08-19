@@ -666,49 +666,18 @@ export class IndexManager extends ReadyResource {
   }
 
   /**
-   * Relay logic that periodically scans the network for files not present on
-   * the local index and automatically downloads them.
-   *
-   * @private
-   */
-  async _relayOnce() {
-    // Create set of all files in the local index
-    const localFiles = new Set();
-    for await (const { key } of this.localIndex.bee.createReadStream()) {
-      localFiles.add(utils.formatToStr(key));
-    }
-
-    // Iterate over each peer to find files not in local index
-    const missing = [];
-    for (const [peerId, bee] of this.remoteIndexes.entries()) {
-      this.#log.debug(`Checking remote index for peer ${peerId}`);
-      for await (const { key } of bee.createReadStream()) {
-        const fileKey = utils.formatToStr(key);
-        if (!localFiles.has(fileKey)) {
-          this.#log.info(
-            `File ${fileKey} missing in local index, downloading...`
-          );
-          missing.push({ peerId, fileKey });
-        }
-      }
-    }
-
-    // Download missing files
-    for (const { peerId, fileKey } of missing) {
-      await this._relayDownload(peerId, fileKey);
-    }
-  }
-
-  /**
    * Execute a download from the relay. Mirrors the PearDrive
    * 'DownloadFileFromPeer' functionality.
+   *
+   * @param {string | Uint8Array | ArrayBuffer} peerId - Peer ID to download
+   *   from
+   * @param {string} fileKey - Key of the file to download
    */
   async _relayDownload(peerId, fileKey) {
     this.#log.info(`Relay: Downloading file ${fileKey} from peer ${peerId}`);
-    console.log("Relay download called!");
     try {
-      const driveKey = await this._sendFileRequest(peerId, fileKey);
-      if (!driveKey) {
+      const peerDownloadKey = await this._sendFileRequest(peerId, fileKey);
+      if (typeof peerDownloadKey !== "string") {
         this.#log.warn(
           `Relay: No key received for file ${fileKey} from peer ${peerId}`
         );
@@ -716,7 +685,7 @@ export class IndexManager extends ReadyResource {
       }
 
       // Handle download
-      await this.handleDownload(peerId, fileKey, driveKey);
+      await this.handleDownload(peerId, fileKey, peerDownloadKey);
 
       // Cleanup
       await this.unmarkTransfer(fileKey, "download", peerId);
@@ -741,14 +710,16 @@ export class IndexManager extends ReadyResource {
       return;
     }
 
-    this.#log.debug("Scanning for new files to relay...");
+    this.#log.info("Scanning for new files to relay...");
     this.#relayRunning = true;
 
     try {
+      // Make sure local index is ready
+      await this.localIndex.pollOnce();
       // Create set of all local files
       const localFiles = new Set();
       for await (const { key } of this.localIndex.bee.createReadStream()) {
-        localFiles.add(utils.formatToStr(utils.asDrivePath(key)));
+        localFiles.add(utils.formatToStr(key));
       }
 
       // Iterate over each peer to find missing files in the local index
@@ -758,7 +729,7 @@ export class IndexManager extends ReadyResource {
 
         // Check each file in the peer's index
         for await (const { key } of bee.createReadStream()) {
-          const fileKey = utils.formatToStr(utils.asDrivePath(key));
+          const fileKey = utils.formatToStr(key);
           if (!localFiles.has(fileKey)) {
             missingFiles.set(fileKey, peerId);
           }
@@ -768,19 +739,17 @@ export class IndexManager extends ReadyResource {
       // Download the first entry that is missing
       if (missingFiles.size > 0) {
         const [fileKey, peerId] = missingFiles.entries().next().value;
-        console.log("Should be a file key", fileKey);
-        console.log("Should be a peer ID", peerId);
+        await this._relayDownload(peerId, fileKey);
       }
-
-      // Set the timer for the next relay
-      this.#relayer = setTimeout(
-        async () => await this.#relay(),
-        this._indexOpts.pollInterval
-      );
     } catch (err) {
       this.#log.error("Error during relay operation", err);
     } finally {
       this.#relayRunning = false;
+      // Set the timer for the next relay
+      this.#relayer = setTimeout(
+        () => this.#relay(),
+        this._indexOpts.pollInterval * 3
+      );
     }
   }
 

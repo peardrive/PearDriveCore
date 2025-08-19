@@ -635,7 +635,7 @@ test(
   }
 );
 
-solo(
+test(
   txt.main("PearDrive: Test file downloading with relay"),
   { stealth: false },
   async (t) => {
@@ -669,9 +669,11 @@ solo(
     await peerB.pd.syncLocalFilesOnce();
     await peerA.pd.syncLocalFilesOnce();
 
-    const filesInA = await peerA.pd.listLocalFiles();
-    const filesInB = await peerB.pd.listLocalFiles();
-    console.log("Files in peerA", filesInA);
-    console.log("Files in peerB", filesInB);
+    // Download fileA2 from peerA to peerB
+    await peerB.pd.syncLocalFilesOnce();
+
+    await utils.wait(7);
+
+    // Ensure files were downloaded and have the correct hashes
   }
 );
