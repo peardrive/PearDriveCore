@@ -79,8 +79,6 @@ export default class LocalFileIndex extends ReadyResource {
       name: this.name,
       valueEncoding: "json",
     });
-    /** Store for the file watchers for each file */
-    this.fileWatchers = new Map();
     /** The hyperbee for file indexer */
     this.bee = null;
     /** Index options */
@@ -257,7 +255,7 @@ export default class LocalFileIndex extends ReadyResource {
    */
   async #pollAndSync(continuous = false) {
     if (this._polling) {
-      this.#log.warn("Already polling, skipping this run.");
+      this.#log.warn("Already polling, skipping this iteration.");
       return;
     }
 
@@ -306,14 +304,14 @@ export default class LocalFileIndex extends ReadyResource {
       // and if so, set the next poll timeout
       if (continuous && this._indexOpts.poll) {
         this.#poller = setTimeout(
-          () => this.#pollAndSync(true),
+          async () => await this.#pollAndSync(true),
           this._indexOpts.pollInterval
         );
       }
-
-      this._polling = false;
     } catch (error) {
       this.#log.error("Error during polling:", error);
+    } finally {
+      this._polling = false;
     }
   }
 

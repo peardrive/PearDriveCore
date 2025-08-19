@@ -36,10 +36,10 @@ export class IndexManager extends ReadyResource {
   _store;
   /** @private {Logger} */
   #log;
-  /** @private  Relayer interval function */
-  #relayer;
-  /** @private {boolean} whether relay function is currently running */
-  #relayRunning;
+  /** Relayer interval function */
+  #relayer = null;
+  /** whether relay function is currently running */
+  #relayRunning = false;
 
   /**
    * @param {Object} opts
@@ -98,8 +98,6 @@ export class IndexManager extends ReadyResource {
     this._inProgress = inProgress;
     this._sendFileRequest = sendFileRequest;
     this._sendFileRelease = sendFileRelease;
-    this.#relayer = null;
-    this.#relayRunning = false;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -123,16 +121,10 @@ export class IndexManager extends ReadyResource {
    * present on the local index and automatically downloads them.
    */
   startRelay() {
-    this._indexOpts.relay = true;
-    if (this.#relayer) {
-      this.#log.warn("Relay mode is already active.");
-      return;
-    }
+    if (this.#relayer || this.#relayRunning) return;
+    this.#log.info("Starting relay mode...");
 
-    this.#relayer = setInterval(
-      () => this.#relayOnceSafe(),
-      this.relayInterval
-    );
+    this.#relay();
   }
 
   /** Stop relay mode */
@@ -713,6 +705,7 @@ export class IndexManager extends ReadyResource {
    */
   async _relayDownload(peerId, fileKey) {
     this.#log.info(`Relay: Downloading file ${fileKey} from peer ${peerId}`);
+    console.log("Relay download called!");
     try {
       const driveKey = await this._sendFileRequest(peerId, fileKey);
       if (!driveKey) {
@@ -723,14 +716,7 @@ export class IndexManager extends ReadyResource {
       }
 
       // Handle download
-      const downloadDrive = await this.createDownloadDrive(fileKey, driveKey);
-      if (!downloadDrive) {
-        this.#log.error(
-          `Failed to create drive for file ${fileKey} from peer ${peerId}`
-        );
-        return;
-      }
-      await this.executeDownload(fileKey);
+      await this.handleDownload(peerId, fileKey, driveKey);
 
       // Cleanup
       await this.unmarkTransfer(fileKey, "download", peerId);
@@ -749,10 +735,48 @@ export class IndexManager extends ReadyResource {
    *
    * @private
    */
-  async #relayOnceSafe() {
-    if (this.#relayRunning) return;
+  async #relay() {
+    if (this.#relayRunning || !this._indexOpts.relay) {
+      this.#log.warn("Relay is already running, skipping this iteration.");
+      return;
+    }
+
+    this.#log.debug("Scanning for new files to relay...");
+    this.#relayRunning = true;
+
     try {
-      await this._relayOnce();
+      // Create set of all local files
+      const localFiles = new Set();
+      for await (const { key } of this.localIndex.bee.createReadStream()) {
+        localFiles.add(utils.formatToStr(utils.asDrivePath(key)));
+      }
+
+      // Iterate over each peer to find missing files in the local index
+      const missingFiles = new Map();
+      for (const [peerId, bee] of this.remoteIndexes.entries()) {
+        this.#log.debug(`Checking remote index for peer ${peerId}`);
+
+        // Check each file in the peer's index
+        for await (const { key } of bee.createReadStream()) {
+          const fileKey = utils.formatToStr(utils.asDrivePath(key));
+          if (!localFiles.has(fileKey)) {
+            missingFiles.set(fileKey, peerId);
+          }
+        }
+      }
+
+      // Download the first entry that is missing
+      if (missingFiles.size > 0) {
+        const [fileKey, peerId] = missingFiles.entries().next().value;
+        console.log("Should be a file key", fileKey);
+        console.log("Should be a peer ID", peerId);
+      }
+
+      // Set the timer for the next relay
+      this.#relayer = setTimeout(
+        async () => await this.#relay(),
+        this._indexOpts.pollInterval
+      );
     } catch (err) {
       this.#log.error("Error during relay operation", err);
     } finally {

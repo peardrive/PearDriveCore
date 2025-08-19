@@ -635,7 +635,7 @@ test(
   }
 );
 
-skip(
+solo(
   txt.main("PearDrive: Test file downloading with relay"),
   { stealth: false },
   async (t) => {
@@ -648,7 +648,7 @@ skip(
       n: 2,
       onError: (err) => t.fail(txt.fail("onError called"), err),
       indexOpts: {
-        poll: true,
+        poll: false,
         pollInterval: 500,
         relay: true, // Enable relay mode
       },
@@ -662,9 +662,16 @@ skip(
     const fileA1 = utils.createRandomFile(peerA.pd.watchPath, 10);
     const fileA2 = utils.createRandomFile(peerA.pd.watchPath, 10);
 
+    await peerB.pd.syncLocalFilesOnce();
+    await peerA.pd.syncLocalFilesOnce();
     await utils.wait(3);
 
+    await peerB.pd.syncLocalFilesOnce();
+    await peerA.pd.syncLocalFilesOnce();
+
+    const filesInA = await peerA.pd.listLocalFiles();
     const filesInB = await peerB.pd.listLocalFiles();
+    console.log("Files in peerA", filesInA);
     console.log("Files in peerB", filesInB);
   }
 );
