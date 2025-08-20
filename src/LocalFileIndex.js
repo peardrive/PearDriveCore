@@ -44,6 +44,8 @@ export default class LocalFileIndex extends ReadyResource {
   #metadataCache = new Map();
   /** Set of paths currently being processed */
   #processingPaths = new Set();
+  /** The hyperbee for file indexing */
+  #bee = null;
 
   /**
    * @param {Object} opts
@@ -88,8 +90,6 @@ export default class LocalFileIndex extends ReadyResource {
       name: this.name,
       valueEncoding: "json",
     });
-    /** The hyperbee for file indexer */
-    this.bee = null;
     /** Index options */
     this._indexOpts = indexOpts;
     /** Upload drives */
@@ -102,6 +102,15 @@ export default class LocalFileIndex extends ReadyResource {
     this._debounceDelay = 500;
     /** Use native file watching */
     this._useNativeWatching = true;
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Getters and setters
+  //////////////////////////////////////////////////////////////////////////////
+
+  /** Hyperbee instance */
+  get bee() {
+    return this.#bee;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -121,7 +130,7 @@ export default class LocalFileIndex extends ReadyResource {
   async buildIndex() {
     this.#log.info("Checking if building index is necessary...");
     let isEmpty = true;
-    for await (const _ of this.bee.createReadStream()) {
+    for await (const _ of this.#bee.createReadStream()) {
       isEmpty = false;
       break;
     }
@@ -138,7 +147,7 @@ export default class LocalFileIndex extends ReadyResource {
     for (const [relativePath, metaData] of files.entries()) {
       isEmpty = false;
       this.#log.info("Adding file to index:", relativePath);
-      await this.bee.put(relativePath, metaData);
+      await this.#bee.put(relativePath, metaData);
     }
 
     if (!isEmpty) this._emitEvent(C.EVENT.LOCAL, null);
@@ -147,20 +156,20 @@ export default class LocalFileIndex extends ReadyResource {
 
   /** Retrieve the hyperbee instance */
   getBee() {
-    if (!this.bee) {
+    if (!this.#bee) {
       this.#log.error("Bee is not initialized. Call ready() first.");
       throw new Error("Bee is not initialized. Call ready() first.");
     }
-    return this.bee;
+    return this.#bee;
   }
 
   /** Retrieve the index key (hyperbee key) */
   getKey() {
-    if (!this.bee) {
+    if (!this.#bee) {
       this.#log.error("Bee is not initialized. Call ready() first.");
       throw new Error("Bee is not initialized. Call ready() first.");
     }
-    return this.bee.key;
+    return this.#bee.key;
   }
 
   /** Poll local files once */
@@ -204,13 +213,13 @@ export default class LocalFileIndex extends ReadyResource {
   async getIndexInfo() {
     this.#log.info("Retrieving local file info...");
 
-    if (!this.bee) {
+    if (!this.#bee) {
       this.#log.error("Local index bee is not initialized.");
       throw new Error("Local index bee is not initialized.");
     }
 
     const files = [];
-    for await (const { key, value } of this.bee.createReadStream()) {
+    for await (const { key, value } of this.#bee.createReadStream()) {
       files.push({ key: utils.formatToStr(key), ...value });
     }
 
@@ -230,12 +239,12 @@ export default class LocalFileIndex extends ReadyResource {
   async getFileMetadata(filePath) {
     this.#log.info(`Retrieving metadata for file: ${filePath}`);
 
-    if (!this.bee) {
+    if (!this.#bee) {
       this.#log.error("Local index bee is not initialized.");
       throw new Error("Local index bee is not initialized.");
     }
 
-    const beeEntry = await this.bee.get(filePath);
+    const beeEntry = await this.#bee.get(filePath);
     if (!beeEntry) {
       this.#log.warn(`File not found in index: ${filePath}`);
       return null;
@@ -247,18 +256,7 @@ export default class LocalFileIndex extends ReadyResource {
   // Private functions
   //////////////////////////////////////////////////////////////////////////////
 
-  /** Load metadata cache from bee */
-  async #loadMetadataCache() {
-    this.#log.info("Loading metadata cache...");
-
-    for await (const { key, value } of this.bee.createReadStream()) {
-      const formattedKey = utils.formatToStr(key);
-      this.#metadataCache.set(formattedKey, value);
-      this.#log.debug(`Cached metadata for: ${formattedKey}`);
-    }
-
-    this.#log.info("Metadata cache loaded successfully!");
-  }
+  //-- File watching system --------------------------------------------------//
 
   /** Start native file system watching */
   async #startNativeWatching() {
@@ -275,28 +273,153 @@ export default class LocalFileIndex extends ReadyResource {
     }
   }
 
+  /** Stop native file system watching */
+  #stopNativeWatching() {
+    this.#log.info("Stopping native file system watching...");
+
+    for (const [dir, watcher] of this.#dirWatchers) {
+      watcher.close();
+      this.#log.info(`Stopped watching directory: ${dir}`);
+    }
+    this.#dirWatchers.clear();
+  }
+
+  /** Load metadata cache from bee */
+  async #loadMetadataCache() {
+    this.#log.info("Loading metadata cache...");
+
+    for await (const { key, value } of this.#bee.createReadStream()) {
+      const formattedKey = utils.formatToStr(key);
+      this.#metadataCache.set(formattedKey, value);
+      this.#log.debug(`Cached metadata for: ${formattedKey}`);
+    }
+
+    this.#log.info("Metadata cache loaded successfully!");
+  }
+
   /** Watch a specific directory */
   async #watchDirectory(dir) {
     if (this.#dirWatchers.has(dir)) {
       this.#log.warn(`Tried to watch already watched directory: ${dir}`);
       return;
-    };
+    }
 
     this.#log.info(`Watching directory: ${dir}`);
+    try {
+      const watcher = fs.watch(
+        dir,
+        { persistent: false },
+        (eventType, filename) => {
+          if (!filename) return;
 
-  /** Generate the hash of a file
-   *
-   * @param {string} filePath - Absolute path to the file
-   */
-  async #hashFile(filePath) {
-    return new Promise((resolve, reject) => {
-      const hash = crypto.createHash("sha256");
-      const stream = fs.createReadStream(filePath);
-      stream.on("data", (data) => hash.update(data));
-      stream.on("end", () => resolve(hash.digest("hex")));
-      stream.on("error", (err) => reject(err));
+          const fullPath = path.join(dir, filename);
+          const relativePath = path.relative(this.watchPath, fullPath);
+
+          // Debounce file changes to avoid multiple events
+          this.#debounceFileChange(relativePath, fullPath, eventType);
+        }
+      );
+
+      this.#dirWatchers.set(dir, watcher);
+    } catch (err) {
+      this.#log.warn(`Failed to watch directory ${dir}:`, err.message);
+    }
+  }
+
+  /** Recursively watch all subdirectories */
+  async #watchSubdirectories(dirPath) {
+    return new Promise((resolve) => {
+      try {
+        const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+        const promises = [];
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            const subDirPath = path.join(dirPath, entry.name);
+            this.#watchDirectory(subDirPath);
+            promises.push(this.#watchSubdirectories(subDirPath));
+          }
+        }
+
+        Promise.all(promises).then(() => resolve());
+      } catch (err) {
+        this.#log.warn(
+          `Failed to scan subdirectories of ${dirPath}:`,
+          err.message
+        );
+        resolve();
+      }
     });
   }
+
+  /** Debounce file change events */
+  #debounceFileChange(relativePath, fullPath, eventType) {
+    // Clear existing timer for this path
+    if (this.#debounceTimers.has(relativePath)) {
+      clearTimeout(this.#debounceTimers.get(relativePath));
+    }
+
+    // Set new debounced timer
+    const timer = setTimeout(async () => {
+      this.#debounceTimers.delete(relativePath);
+      await this.#handleFileChange(relativePath, fullPath, eventType);
+    }, this._debounceDelay);
+
+    this.#debounceTimers.set(relativePath, timer);
+  }
+
+  /** Handle a file change event */
+  async #handleFileChange(relativePath, fullPath) {
+    // Prevent concurrent processing of the same path
+    if (this.#processingPaths.has(relativePath)) {
+      return;
+    }
+
+    this.#processingPaths.add(relativePath);
+
+    try {
+      // Check if file/directory exists
+      let exists = false;
+      let isDirectory = false;
+
+      try {
+        const fileStat = fs.statSync(fullPath);
+        exists = true;
+        isDirectory = fileStat.isDirectory();
+      } catch (err) {
+        // File doesn't exist (was deleted)
+        exists = false;
+      }
+
+      if (!exists) {
+        // File was deleted
+        if (this.#isBusy(relativePath)) {
+          this.#log.info("Busy file not deleted!", relativePath);
+          return;
+        }
+
+        if (this.#metadataCache.has(relativePath)) {
+          this.#log.info("File deleted:", relativePath);
+          await this.#bee.del(relativePath);
+          this.#metadataCache.delete(relativePath);
+          this._emitEvent(C.EVENT.LOCAL, null);
+        }
+      } else if (isDirectory) {
+        // New directory created - watch it
+        this.#watchDirectory(fullPath);
+        await this.#watchSubdirectories(fullPath);
+      } else {
+        // File was added or modified
+        await this.#updateFile(relativePath, fullPath);
+      }
+    } catch (err) {
+      this.#log.error(`Error handling file change for ${relativePath}:`, err);
+    } finally {
+      this.#processingPaths.delete(relativePath);
+    }
+  }
+
+  // -- Polling system -------------------------------------------------------//
 
   /**
    * Poll for new files and sync with hyperbee
@@ -314,7 +437,7 @@ export default class LocalFileIndex extends ReadyResource {
     try {
       // Load all existing file keys from hyperbee
       const storedFiles = new Map();
-      for await (const { key, value } of this.bee.createReadStream()) {
+      for await (const { key, value } of this.#bee.createReadStream()) {
         storedFiles.set(utils.formatToStr(key), value);
       }
 
@@ -330,7 +453,7 @@ export default class LocalFileIndex extends ReadyResource {
             continue;
           }
           this.#log.info("File deleted:", storedPath);
-          await this.bee.del(storedPath);
+          await this.#bee.del(storedPath);
           this._emitEvent(C.EVENT.LOCAL, null);
         }
       }
@@ -343,7 +466,7 @@ export default class LocalFileIndex extends ReadyResource {
             storedMeta ? "File updated:" : "New file added:",
             path
           );
-          await this.bee.put(path, meta);
+          await this.#bee.put(path, meta);
           this._emitEvent(C.EVENT.LOCAL, null);
         }
       }
@@ -413,16 +536,92 @@ export default class LocalFileIndex extends ReadyResource {
     return this._uploads.has(dPath) || this._downloads.has(dPath);
   }
 
+  // -- File hashing and metadata updates ------------------------------------//
+
+  /** Update a single file in the index */
+  async #updateFile(relativePath, fullPath) {
+    if (this.#isBusy(relativePath)) {
+      this.#log.info("Skipping busy file:", relativePath);
+      return;
+    }
+
+    try {
+      const fileStat = fs.statSync(fullPath);
+
+      // Check if we need to recalculate hash
+      const cachedMeta = this.#metadataCache.get(relativePath);
+      let needsHash = true;
+      let hash;
+
+      if (
+        cachedMeta &&
+        cachedMeta.size === fileStat.size &&
+        cachedMeta.modified === fileStat.mtimeMs
+      ) {
+        // File hasn't changed, use cached hash
+        needsHash = false;
+        hash = cachedMeta.hash;
+      } else {
+        // File changed, recalculate hash
+        hash = await this.#hashFile(fullPath);
+      }
+
+      const metadata = {
+        path: relativePath,
+        size: fileStat.size,
+        modified: fileStat.mtimeMs,
+        hash,
+      };
+
+      // Only update if metadata actually changed
+      if (needsHash) {
+        this.#log.info(
+          cachedMeta ? "File updated:" : "New file added:",
+          relativePath
+        );
+        await this.#bee.put(relativePath, metadata);
+        this.#metadataCache.set(relativePath, metadata);
+        this._emitEvent(C.EVENT.LOCAL, null);
+      }
+    } catch (err) {
+      this.#log.error(`Error updating file ${relativePath}:`, err);
+    }
+  }
+  /** Generate the hash of a file
+   *
+   * @param {string} filePath - Absolute path to the file
+   */
+  async #hashFile(filePath) {
+    return new Promise((resolve, reject) => {
+      const hash = crypto.createHash("sha256");
+      const stream = fs.createReadStream(filePath);
+      stream.on("data", (data) => hash.update(data));
+      stream.on("end", () => resolve(hash.digest("hex")));
+      stream.on("error", (err) => reject(err));
+    });
+  }
+
+  // -- Lifecycle methods ----------------------------------------------------//
+
   async _open() {
     this.#log.info("Opening LocalFileIndex...");
 
     // Ready corestore and create hyperbee
     await this.indexCore.ready();
-    this.bee = new Hyperbee(this.indexCore, {
+    this.#bee = new Hyperbee(this.indexCore, {
       keyEncoding: "utf-8",
       valueEncoding: "json",
     });
-    await this.bee.ready();
+    await this.#bee.ready();
+
+    await this.#loadMetadataCache();
+
+    // Start native file watching if enabled
+    if (this._useNativeWatching) {
+      await this.#startNativeWatching();
+    } else {
+      this.#log.info("Native file watching disabled, using polling mode.");
+    }
 
     this.#log.info("LocalFileIndex opened successfully!");
   }
@@ -430,11 +629,26 @@ export default class LocalFileIndex extends ReadyResource {
   async _close() {
     this.#log.info("Closing LocalFileIndex...");
 
+    // Stop any ongoing polling or watching
     this.stopPolling();
-    if (this.bee) {
-      await this.bee.close();
-      this.bee = null;
+    this.#stopNativeWatching();
+
+    // Clear debounce timers
+    for (const timer of this.#debounceTimers.values()) {
+      clearTimeout(timer);
     }
+    this.#debounceTimers.clear();
+
+    // Clear caches
+    this.#metadataCache.clear();
+    this.#processingPaths.clear();
+
+    // Close hyperbee and core
+    if (this.#bee) {
+      await this.#bee.close();
+      this.#bee = null;
+    }
+    await this.indexCore.close();
 
     this.#log.info("LocalFileIndex closed successfully!");
   }

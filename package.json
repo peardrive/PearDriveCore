@@ -95,7 +95,7 @@
     "localdrive": "^2.2.0",
     "protomux-rpc": "^1.7.1",
     "random-access-memory": "^6.2.1",
-    "ready-resource": "^1.1.2",
+    "ready-resource": "^1.2.0",
     "watch-drive": "^2.0.3"
   }
 }

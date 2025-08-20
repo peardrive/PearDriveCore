@@ -662,7 +662,7 @@ export default class PearDrive extends ReadyResource {
 
     try {
       // Get key
-      const keyBuf = this._indexManager.localIndex.getKey();
+      const keyBuf = this._indexManager.localIndex.bee.key;
       const keyHex = utils.formatToStr(keyBuf);
 
       // Send key back to peer
