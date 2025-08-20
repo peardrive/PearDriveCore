@@ -33,7 +33,17 @@ export default class LocalFileIndex extends ReadyResource {
   /** Logger instance */
   #log;
   /** Automatic polling interval function */
-  #poller;
+  #poller = null;
+  /** File system watcher instance */
+  #watcher = null;
+  /** File watcher map */
+  #dirWatchers = new Map();
+  /** Debounce timers for file changes */
+  #debounceTimers = new Map();
+  /** Cache for file metadata to avoid re-hashing */
+  #metadataCache = new Map();
+  /** Set of paths currently being processed */
+  #processingPaths = new Set();
 
   /**
    * @param {Object} opts
@@ -60,11 +70,10 @@ export default class LocalFileIndex extends ReadyResource {
     name = "local-file-index",
   }) {
     super();
+
     // Logger setup
     this.#log = log;
     this.#log.info("Initializing LocalFileIndex...");
-
-    this.#poller = null;
 
     /** Event emitter */
     this._emitEvent = emitEvent;
@@ -89,6 +98,10 @@ export default class LocalFileIndex extends ReadyResource {
     this._downloads = downloads;
     /** Whether or not currently polling */
     this._polling = false;
+    /** Debounce delay (in ms) */
+    this._debounceDelay = 500;
+    /** Use native file watching */
+    this._useNativeWatching = true;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -233,6 +246,43 @@ export default class LocalFileIndex extends ReadyResource {
   //////////////////////////////////////////////////////////////////////////////
   // Private functions
   //////////////////////////////////////////////////////////////////////////////
+
+  /** Load metadata cache from bee */
+  async #loadMetadataCache() {
+    this.#log.info("Loading metadata cache...");
+
+    for await (const { key, value } of this.bee.createReadStream()) {
+      const formattedKey = utils.formatToStr(key);
+      this.#metadataCache.set(formattedKey, value);
+      this.#log.debug(`Cached metadata for: ${formattedKey}`);
+    }
+
+    this.#log.info("Metadata cache loaded successfully!");
+  }
+
+  /** Start native file system watching */
+  async #startNativeWatching() {
+    this.#log.info("Starting native file system watching...");
+
+    try {
+      this.#watchDirectory(this.watchPath);
+      await this.#watchSubdirectories(this.watchPath);
+    } catch (error) {
+      this.#log.error("Error starting native file watching:", error);
+      this.#log.info("Falling back to polling mode.");
+      this._useNativeWatching = false;
+      return;
+    }
+  }
+
+  /** Watch a specific directory */
+  async #watchDirectory(dir) {
+    if (this.#dirWatchers.has(dir)) {
+      this.#log.warn(`Tried to watch already watched directory: ${dir}`);
+      return;
+    };
+
+    this.#log.info(`Watching directory: ${dir}`);
 
   /** Generate the hash of a file
    *
