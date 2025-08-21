@@ -21,7 +21,7 @@ utils.createTestFolders();
 // PearDrive core functionality tests
 ////////////////////////////////////////////////////////////////////////////////
 
-solo(txt.main("PearDrive: Initialization"), { stealth: false }, async (t) => {
+test(txt.main("PearDrive: Initialization"), { stealth: false }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
