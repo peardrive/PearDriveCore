@@ -256,170 +256,8 @@ export default class LocalFileIndex extends ReadyResource {
   // Private functions
   //////////////////////////////////////////////////////////////////////////////
 
-  //-- File watching system --------------------------------------------------//
-
-  /** Start native file system watching */
-  async #startNativeWatching() {
-    this.#log.info("Starting native file system watching...");
-
-    try {
-      this.#watchDirectory(this.watchPath);
-      await this.#watchSubdirectories(this.watchPath);
-    } catch (error) {
-      this.#log.error("Error starting native file watching:", error);
-      this.#log.info("Falling back to polling mode.");
-      this._useNativeWatching = false;
-      return;
-    }
-  }
-
-  /** Stop native file system watching */
-  #stopNativeWatching() {
-    this.#log.info("Stopping native file system watching...");
-
-    for (const [dir, watcher] of this.#dirWatchers) {
-      watcher.close();
-      this.#log.info(`Stopped watching directory: ${dir}`);
-    }
-    this.#dirWatchers.clear();
-  }
-
-  /** Load metadata cache from bee */
-  async #loadMetadataCache() {
-    this.#log.info("Loading metadata cache...");
-
-    for await (const { key, value } of this.#bee.createReadStream()) {
-      const formattedKey = utils.formatToStr(key);
-      this.#metadataCache.set(formattedKey, value);
-      this.#log.debug(`Cached metadata for: ${formattedKey}`);
-    }
-
-    this.#log.info("Metadata cache loaded successfully!");
-  }
-
-  /** Watch a specific directory */
-  async #watchDirectory(dir) {
-    if (this.#dirWatchers.has(dir)) {
-      this.#log.warn(`Tried to watch already watched directory: ${dir}`);
-      return;
-    }
-
-    this.#log.info(`Watching directory: ${dir}`);
-    try {
-      const watcher = fs.watch(
-        dir,
-        { persistent: false },
-        (eventType, filename) => {
-          if (!filename) return;
-
-          const fullPath = path.join(dir, filename);
-          const relativePath = path.relative(this.watchPath, fullPath);
-
-          // Debounce file changes to avoid multiple events
-          this.#debounceFileChange(relativePath, fullPath, eventType);
-        }
-      );
-
-      this.#dirWatchers.set(dir, watcher);
-    } catch (err) {
-      this.#log.warn(`Failed to watch directory ${dir}:`, err.message);
-    }
-  }
-
-  /** Recursively watch all subdirectories */
-  async #watchSubdirectories(dirPath) {
-    return new Promise((resolve) => {
-      try {
-        const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-
-        const promises = [];
-        for (const entry of entries) {
-          if (entry.isDirectory()) {
-            const subDirPath = path.join(dirPath, entry.name);
-            this.#watchDirectory(subDirPath);
-            promises.push(this.#watchSubdirectories(subDirPath));
-          }
-        }
-
-        Promise.all(promises).then(() => resolve());
-      } catch (err) {
-        this.#log.warn(
-          `Failed to scan subdirectories of ${dirPath}:`,
-          err.message
-        );
-        resolve();
-      }
-    });
-  }
-
-  /** Debounce file change events */
-  #debounceFileChange(relativePath, fullPath, eventType) {
-    // Clear existing timer for this path
-    if (this.#debounceTimers.has(relativePath)) {
-      clearTimeout(this.#debounceTimers.get(relativePath));
-    }
-
-    // Set new debounced timer
-    const timer = setTimeout(async () => {
-      this.#debounceTimers.delete(relativePath);
-      await this.#handleFileChange(relativePath, fullPath, eventType);
-    }, this._debounceDelay);
-
-    this.#debounceTimers.set(relativePath, timer);
-  }
-
-  /** Handle a file change event */
-  async #handleFileChange(relativePath, fullPath) {
-    // Prevent concurrent processing of the same path
-    if (this.#processingPaths.has(relativePath)) {
-      return;
-    }
-
-    this.#processingPaths.add(relativePath);
-
-    try {
-      // Check if file/directory exists
-      let exists = false;
-      let isDirectory = false;
-
-      try {
-        const fileStat = fs.statSync(fullPath);
-        exists = true;
-        isDirectory = fileStat.isDirectory();
-      } catch (err) {
-        // File doesn't exist (was deleted)
-        exists = false;
-      }
-
-      if (!exists) {
-        // File was deleted
-        if (this.#isBusy(relativePath)) {
-          this.#log.info("Busy file not deleted!", relativePath);
-          return;
-        }
-
-        if (this.#metadataCache.has(relativePath)) {
-          this.#log.info("File deleted:", relativePath);
-          await this.#bee.del(relativePath);
-          this.#metadataCache.delete(relativePath);
-          this._emitEvent(C.EVENT.LOCAL, null);
-        }
-      } else if (isDirectory) {
-        // New directory created - watch it
-        this.#watchDirectory(fullPath);
-        await this.#watchSubdirectories(fullPath);
-      } else {
-        // File was added or modified
-        await this.#updateFile(relativePath, fullPath);
-      }
-    } catch (err) {
-      this.#log.error(`Error handling file change for ${relativePath}:`, err);
-    } finally {
-      this.#processingPaths.delete(relativePath);
-    }
-  }
-
   // -- Polling system -------------------------------------------------------//
+  // Scans the local directory for new and deleted files and syncs with hyperbee
 
   /**
    * Poll for new files and sync with hyperbee
@@ -535,8 +373,169 @@ export default class LocalFileIndex extends ReadyResource {
     const dPath = utils.asDrivePath(path);
     return this._uploads.has(dPath) || this._downloads.has(dPath);
   }
+  //-- End polling system ----------------------------------------------------//
 
-  // -- File hashing and metadata updates ------------------------------------//
+  //-- File watching system --------------------------------------------------//
+  // Watches files and directories for file changes, hashes those changes and
+  // updates the hyperbee index accordingly.
+
+  /** Start native file system watching */
+  async #startNativeWatching() {
+    this.#log.info("Starting native file system watching...");
+
+    try {
+      this.#watchDirectory(this.watchPath);
+      await this.#watchSubdirectories(this.watchPath);
+    } catch (error) {
+      this.#log.error("Error starting native file watching:", error);
+      this.#log.info("Falling back to polling mode.");
+      this._useNativeWatching = false;
+      return;
+    }
+  }
+
+  /** Stop native file system watching */
+  #stopNativeWatching() {
+    this.#log.info("Stopping native file system watching...");
+
+    for (const [dir, watcher] of this.#dirWatchers) {
+      watcher.close();
+      this.#log.info(`Stopped watching directory: ${dir}`);
+    }
+    this.#dirWatchers.clear();
+  }
+
+  /** Load metadata cache from bee */
+  async #loadMetadataCache() {
+    this.#log.info("Loading metadata cache...");
+
+    for await (const { key, value } of this.#bee.createReadStream()) {
+      const formattedKey = utils.formatToStr(key);
+      this.#metadataCache.set(formattedKey, value);
+      this.#log.debug(`Cached metadata for: ${formattedKey}`);
+    }
+
+    this.#log.info("Metadata cache loaded successfully!");
+  }
+
+  /** Watch a specific directory */
+  async #watchDirectory(dir) {
+    if (this.#dirWatchers.has(dir)) {
+      this.#log.warn(`Tried to watch already watched directory: ${dir}`);
+      return;
+    }
+
+    this.#log.info(`Watching directory: ${dir}`);
+    try {
+      const watcher = fs.watch(
+        dir,
+        { persistent: false },
+        (eventType, filename) => {
+          if (!filename) return;
+
+          const fullPath = path.join(dir, filename);
+          const relativePath = path.relative(this.watchPath, fullPath);
+
+          // Debounce file changes to avoid multiple events
+          this.#debounceFileChange(relativePath, fullPath, eventType);
+        }
+      );
+
+      this.#dirWatchers.set(dir, watcher);
+    } catch (err) {
+      this.#log.warn(`Failed to watch directory ${dir}:`, err.message);
+    }
+  }
+
+  /** Recursively watch all subdirectories */
+  async #watchSubdirectories(dirPath) {
+    return new Promise((resolve) => {
+      try {
+        const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+        const promises = [];
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            const subDirPath = path.join(dirPath, entry.name);
+            this.#watchDirectory(subDirPath);
+            promises.push(this.#watchSubdirectories(subDirPath));
+          }
+        }
+
+        Promise.all(promises).then(() => resolve());
+      } catch (err) {
+        this.#log.warn(
+          `Failed to scan subdirectories of ${dirPath}:`,
+          err.message
+        );
+        resolve();
+      }
+    });
+  }
+
+  /** Debounce file change events */
+  #debounceFileChange(relativePath, fullPath, eventType) {
+    // Clear existing timer for this path
+    if (this.#debounceTimers.has(relativePath)) {
+      clearTimeout(this.#debounceTimers.get(relativePath));
+    }
+
+    // Set new debounced timer
+    const timer = setTimeout(async () => {
+      this.#debounceTimers.delete(relativePath);
+      await this.#handleFileChange(relativePath, fullPath, eventType);
+    }, this._debounceDelay);
+
+    this.#debounceTimers.set(relativePath, timer);
+  }
+
+  /** Handle a file change event */
+  async #handleFileChange(relativePath, fullPath) {
+    // Add processing path if not already processing
+    if (this.#processingPaths.has(relativePath)) return;
+    this.#processingPaths.add(relativePath);
+
+    try {
+      // Check if file/directory exists
+      let exists = false;
+      let isDirectory = false;
+
+      try {
+        const fileStat = fs.statSync(fullPath);
+        exists = true;
+        isDirectory = fileStat.isDirectory();
+      } catch (err) {
+        // File doesn't exist (was deleted)
+        exists = false;
+      }
+
+      if (!exists) {
+        // File was deleted
+        if (this.#isBusy(relativePath)) {
+          this.#log.info("Busy file not deleted!", relativePath);
+          return;
+        }
+
+        if (this.#metadataCache.has(relativePath)) {
+          this.#log.info("File deleted:", relativePath);
+          await this.#bee.del(relativePath);
+          this.#metadataCache.delete(relativePath);
+          this._emitEvent(C.EVENT.LOCAL, null);
+        }
+      } else if (isDirectory) {
+        // New directory created - watch it
+        this.#watchDirectory(fullPath);
+        await this.#watchSubdirectories(fullPath);
+      } else {
+        // File was added or modified
+        await this.#updateFile(relativePath, fullPath);
+      }
+    } catch (err) {
+      this.#log.error(`Error handling file change for ${relativePath}:`, err);
+    } finally {
+      this.#processingPaths.delete(relativePath);
+    }
+  }
 
   /** Update a single file in the index */
   async #updateFile(relativePath, fullPath) {
@@ -600,6 +599,7 @@ export default class LocalFileIndex extends ReadyResource {
       stream.on("error", (err) => reject(err));
     });
   }
+  //-- End file watching system ----------------------------------------------//
 
   // -- Lifecycle methods ----------------------------------------------------//
 
@@ -652,4 +652,5 @@ export default class LocalFileIndex extends ReadyResource {
 
     this.#log.info("LocalFileIndex closed successfully!");
   }
+  //-- End lifecycle methods -------------------------------------------------//
 }
