@@ -370,6 +370,7 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 
 - Refactor PearDrive, IndexManager and LocalFileIndex to inherit ReadyResource
 - Implement relay mode
+- Implement file watching system to prevent unnecessary file hashing
 
 - TODO: Add maximum concurrent downloads option
 - TODO: Improve structure / standardize format / error & status handling for custom and internal messages
