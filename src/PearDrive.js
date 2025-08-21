@@ -123,10 +123,13 @@ export default class PearDrive extends ReadyResource {
     this._corestorePath = corestorePath;
     this._watchPath = utils.normalizePath(watchPath);
     this._indexName = indexName;
-    this._swarmOpts = swarmOpts;
-    this._swarmOpts.seed = swarmOpts.seed
+    const normalizedSeed = swarmOpts.seed
       ? utils.formatToBuffer(swarmOpts.seed)
       : utils.generateSeed();
+    this._swarmOpts = {
+      ...swarmOpts,
+      seed: normalizedSeed,
+    };
     this._logOpts = logOpts;
     const { poll = true, pollInterval = 500, relay = false } = indexOpts;
     this._indexOpts = {
@@ -141,7 +144,7 @@ export default class PearDrive extends ReadyResource {
     this.#log.debug("DEBUG mode enabled");
 
     // Set up corestore and swarm
-    this._swarm = new Hyperswarm(swarmOpts);
+    this._swarm = new Hyperswarm(this._swarmOpts);
     this._store = new Corestore(corestorePath);
     this._rpcConnections = new Map();
     this._uploads = new Map();
@@ -252,27 +255,13 @@ export default class PearDrive extends ReadyResource {
     return this._swarm.keyPair.publicKey;
   }
 
+  get saveData() {
+    return this.#buildSaveData();
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Public functions
   //////////////////////////////////////////////////////////////////////////////
-
-  /**
-   * Get save data as JSON.
-   *
-   * @returns {Object} Save data object
-   */
-  getSaveData() {
-    return {
-      corestorePath: this.corestorePath,
-      watchPath: this.watchPath,
-      indexName: this._indexName,
-      swarmOpts: {
-        seed: this.seed,
-      },
-      logOpts: this.logOpts,
-      networkKey: this.networkKey,
-    };
-  }
 
   /**
    * Wire up hooks for events here.
@@ -970,5 +959,19 @@ export default class PearDrive extends ReadyResource {
     await this._store.close();
 
     this.#log.info("PearDrive closed successfully!");
+  }
+
+  /** Build save data */
+  #buildSaveData() {
+    return {
+      corestorePath: this.corestorePath,
+      watchPath: this.watchPath,
+      indexName: this._indexName,
+      swarmOpts: {
+        seed: this.seed,
+      },
+      logOpts: this.logOpts,
+      networkKey: this.networkKey,
+    };
   }
 }

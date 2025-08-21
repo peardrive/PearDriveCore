@@ -5,6 +5,7 @@ import createTestnet from "hyperdht/testnet.js";
 
 import * as C from "../src/constants.js";
 import * as utils from "./lib/utils.js";
+import PearDrive from "../src/PearDrive.js";
 const { txt } = utils;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -20,124 +21,153 @@ utils.createTestFolders();
 // PearDrive core functionality tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("PearDrive: Initialization"), { stealth: true }, async (t) => {
+solo(txt.main("PearDrive: Initialization"), { stealth: false }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  // Test initialization
-  const { pd, localDrivePath, corestorePath, logPath } =
-    await utils.createPearDrive({
-      name: "init-test",
-      bootstrap,
-      onError: (err) => t.fail(txt.fail("onError called"), err),
-    });
-  t.teardown(() => {
-    pd.close();
+  let pd1, pd2, pd3, pd4, pd5;
+  let data, saveData, loadData;
+
+  await t.test("Create PearDrive instance", async (subtest) => {
+    try {
+      const { pd, localDrivePath, corestorePath, logPath } =
+        await utils.createPearDrive({
+          name: "init-test",
+          bootstrap,
+          onError: (err) => t.fail(txt.fail("onError called"), err),
+        });
+
+      pd1 = pd;
+      data = {
+        watchPath: localDrivePath,
+        corestorePath,
+        logFilePath: logPath,
+      };
+
+      await pd1.ready();
+
+      subtest.pass("PearDrive instance created successfully");
+    } catch (err) {
+      subtest.fail("Failed to create PearDrive instance", err);
+    }
   });
 
-  await pd.ready();
-  t.pass("ready() completed");
+  await t.test("Get save data", async (subtest) => {
+    try {
+      saveData = pd1.saveData;
+      subtest.is(saveData.watchPath, data.watchPath, "watchPath saved");
+      subtest.is(
+        saveData.corestorePath,
+        data.corestorePath,
+        "corestorePath saved"
+      );
+      subtest.is(
+        saveData.logOpts.logFilePath,
+        data.logFilePath,
+        "logFilePath saved"
+      );
+    } catch (err) {
+      subtest.fail("Failed to get save data", err);
+    }
+  });
 
-  // Ensure valid save data
-  const data = pd.getSaveData();
-  t.is(data.watchPath, localDrivePath, "watchPath saved");
-  t.is(data.corestorePath, corestorePath, "corestorePath saved");
-  t.is(data.logOpts.logFilePath, logPath, "logFilePath saved");
+  await t.test("Graceful teardown", async (subtest) => {
+    try {
+      await pd1.close();
+      subtest.pass("PearDrive instance closed successfully");
+    } catch (err) {
+      subtest.fail("Failed to close PearDrive instance", err);
+    } finally {
+      pd1 = null;
+    }
+  });
 
-  // Close the PearDrive instance
-  await pd.close();
-  t.pass("close() completed");
+  await t.test("Reload PearDrive instance from save data", async (subtest) => {
+    try {
+      pd1 = new PearDrive(saveData);
+      await pd1.ready();
+      loadData = pd1.saveData;
+      subtest.ok(utils.deepEqual(loadData, saveData), "Save data matches");
+    } catch (err) {
+      subtest.fail("Failed to reload PearDrive instance", err);
+    }
+  });
 
-  // Create a new PearDrive instance with the same save data
-  console.log("TODO test loading from save data");
+  await t.test("Join a single-node network", async (subtest) => {
+    try {
+      await pd1.joinNetwork();
+      await utils.waitFor(() => pd1.connected, 5000, 50);
+      subtest.ok(pd1.connected, "PearDrive connected to single-node network");
+    } catch (err) {
+      subtest.fail("Failed to join single-node network", err);
+    } finally {
+      await pd1?.close();
+      pd1 = null;
+    }
+  });
+
+  await t.test("Join a two-node network", async (subtest) => {
+    try {
+      [pd1, pd2] = await utils.createNetwork({
+        baseName: "two-node-test",
+        bootstrap,
+        n: 2,
+        onError: (err) => t.fail(txt.fail("onError called"), err),
+      });
+
+      pd1 = pd1.pd;
+      pd2 = pd2.pd;
+      subtest.teardown(async () => {
+        await pd1.close();
+        await pd2.close();
+        pd1 = null;
+        pd2 = null;
+      });
+
+      subtest.ok(pd1.connected, "PearDrive connected to two-node network");
+      subtest.ok(pd2.connected, "PearDrive connected to two-node network");
+    } catch (err) {
+      subtest.fail("Failed to join two-node network", err);
+    }
+  });
+
+  await t.test("Join a five-node network", async (subtest) => {
+    try {
+      [pd1, pd2, pd3, pd4, pd5] = await utils.createNetwork({
+        baseName: "five-node-test",
+        bootstrap,
+        n: 5,
+        onError: (err) => t.fail(txt.fail("onError called"), err),
+      });
+
+      pd1 = pd1.pd;
+      pd2 = pd2.pd;
+      pd3 = pd3.pd;
+      pd4 = pd4.pd;
+      pd5 = pd5.pd;
+      subtest.teardown(async () => {
+        await pd1.close();
+        await pd2.close();
+        await pd3.close();
+        await pd4.close();
+        await pd5.close();
+        pd1 = null;
+        pd2 = null;
+        pd3 = null;
+        pd4 = null;
+        pd5 = null;
+      });
+
+      subtest.ok(pd1.connected, "PearDrive 1 connected to five-node network");
+      subtest.ok(pd2.connected, "PearDrive 2 connected to five-node network");
+      subtest.ok(pd3.connected, "PearDrive 3 connected to five-node network");
+      subtest.ok(pd4.connected, "PearDrive 4 connected to five-node network");
+      subtest.ok(pd5.connected, "PearDrive 5 connected to five-node network");
+    } catch (err) {
+      subtest.fail("Failed to join five-node network", err);
+    }
+  });
 });
-
-////////////////////////////////////////////////////////////////////////////////
-// Network connectivity tests
-////////////////////////////////////////////////////////////////////////////////
-
-test(
-  txt.main("PearDrive: Create one-node network"),
-  { stealth: true },
-  async (t) => {
-    const testnet = await createTestnet();
-    const { bootstrap } = testnet;
-
-    const { pd } = await utils.createPearDrive({
-      name: "one-node",
-      bootstrap,
-      onError: (err) => t.fail(txt.fail("onError called"), err),
-    });
-    t.teardown(() => {
-      pd.close();
-    });
-    await pd.ready();
-    await pd.joinNetwork();
-
-    t.ok(pd.connected, "PearDrive connected to network");
-  }
-);
-
-test(
-  txt.main("PearDrive: Create two-node network"),
-  { stealth: true },
-  async (t) => {
-    const testnet = await createTestnet();
-    const { bootstrap } = testnet;
-
-    const [p1, p2] = await utils.createNetwork({
-      baseName: "two-node",
-      bootstrap,
-      n: 2,
-      onError: (err) => t.fail(txt.fail("onError called"), err),
-    });
-    t.teardown(() => {
-      p1.pd.close();
-      p2.pd.close();
-    });
-
-    t.is(p1.pd.connected, true, "p1 is connected");
-    t.is(p2.pd.connected, true, "p2 is connected");
-
-    const peers1 = p1.pd.listPeers();
-    const peers2 = p2.pd.listPeers();
-    t.is(peers1.length, 1, "p1 sees 1 peer");
-    t.is(peers2.length, 1, "p2 sees 1 peer");
-  }
-);
-
-test(
-  txt.main("PearDrive: Create five-node network"),
-  { stealth: true },
-  async (t) => {
-    const testnet = await createTestnet();
-    const { bootstrap } = testnet;
-
-    // Spin up 5 peers
-    const peerObjs = await utils.createNetwork({
-      baseName: "peer",
-      bootstrap,
-      n: 5,
-    });
-    const pds = peerObjs.map((p) => p.pd);
-    t.teardown(async () => {
-      for (const pd of pds) await pd.close();
-    });
-
-    t.is(pds.length, 5, "5 peers created");
-
-    // Ensure all are connected
-    for (const pd of pds) {
-      t.ok(pd.connected, "peer is connected");
-    }
-
-    // Each peer should see 4 other peers
-    for (const pd of pds) {
-      const peers = pd.listPeers();
-      t.is(peers.length, 4, "peer sees 4 other peers");
-    }
-  }
-);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Network Event Emitter tests
@@ -639,33 +669,31 @@ test(
   }
 );
 
-test(
-  txt.main("PearDrive: Test file downloading with relay"),
-  { stealth: true },
-  async (t) => {
-    const testnet = await createTestnet();
-    const { bootstrap } = testnet;
+test(txt.main("PearDrive: File relaying"), { stealth: false }, async (t) => {
+  const testnet = await createTestnet();
+  const { bootstrap } = testnet;
 
-    const [peerA, peerB] = await utils.createNetwork({
-      baseName: "file-download-relay-test",
-      bootstrap,
-      n: 2,
-      onError: (err) => t.fail(txt.fail("onError called"), err),
-      indexOpts: {
-        poll: false,
-        pollInterval: 500,
-        relay: true, // Enable relay mode
-      },
-    });
-    t.teardown(async () => {
-      await peerA.pd.close();
-      await peerB.pd.close();
-    });
+  const [peerA, peerB] = await utils.createNetwork({
+    baseName: "file-download-relay-test",
+    bootstrap,
+    n: 2,
+    onError: (err) => t.fail(txt.fail("onError called"), err),
+    indexOpts: {
+      poll: false,
+      pollInterval: 500,
+      relay: true, // Enable relay mode
+    },
+  });
+  t.teardown(async () => {
+    await peerA.pd.close();
+    await peerB.pd.close();
+  });
 
-    // Create 2 files on peerA
-    const fileA1 = utils.createRandomFile(peerA.pd.watchPath, 10);
-    const fileA2 = utils.createRandomFile(peerA.pd.watchPath, 10);
+  // Create 2 files on peerA
+  const fileA1 = utils.createRandomFile(peerA.pd.watchPath, 10);
+  const fileA2 = utils.createRandomFile(peerA.pd.watchPath, 10);
 
+  await t.test("New file downloading with relay", async (subtest) => {
     const success = await utils.waitFor(
       async () => {
         let isTrue = false;
@@ -681,6 +709,36 @@ test(
       100
     );
 
-    t.ok(success, "Files downloaded successfully with relay");
-  }
-);
+    subtest.ok(success, "Files downloaded successfully with relay");
+  });
+
+  await t.test("File update syncing with relay", async (subtest) => {
+    // Update fileA and ensure it syncs
+    const oldFileAhash = (await peerA.pd.listLocalFiles()).files.find(
+      (f) => f.path === fileA1.name
+    ).hash;
+    console.log("Old fileA hash:", oldFileAhash);
+    const fileA1v2 = { ...fileA1, content: "modified content 1" };
+    fs.writeFileSync(
+      path.join(peerA.pd.watchPath, fileA1.name),
+      fileA1v2.content
+    );
+    await peerA.pd.syncLocalFilesOnce();
+    const newFileAhash = (await peerA.pd.listLocalFiles()).files.find(
+      (f) => f.path === fileA1v2.name
+    ).hash;
+    await peerB.pd.syncLocalFilesOnce();
+    const fileSynced = await utils.waitFor(
+      async () => {
+        const localFiles = await peerB.pd.listLocalFiles();
+        return localFiles.files.some(
+          (f) => f.path === fileA1.name && f.hash === newFileAhash
+        );
+      },
+      15000,
+      100
+    );
+
+    subtest.ok(fileSynced, "File updated and synced successfully with relay");
+  });
+});

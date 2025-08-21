@@ -328,7 +328,7 @@ export default class LocalFileIndex extends ReadyResource {
 
   /** Recursively scan a dir and fill map with file metaData */
   async #scanDirectory(dir, outMap, relativeBase = this.watchPath) {
-    this.#log.info("Scanning directory", dir, "...");
+    this.#log.debug("Scanning directory", dir, "...");
 
     // Check all files
     const entries = fs.readdirSync(dir);
