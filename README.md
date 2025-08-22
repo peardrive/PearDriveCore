@@ -369,6 +369,7 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 ### 1.3.1
 
 - Add indexOpts to saveData, add getter for indexOpts
+- Update dependencies
 
 ### 1.3.0
 
