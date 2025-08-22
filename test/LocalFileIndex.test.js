@@ -32,7 +32,7 @@ test(
     await indexer.buildIndex();
 
     const results = [];
-    for await (const { key, value } of indexer.getBee().createReadStream()) {
+    for await (const { key, value } of indexer.bee.createReadStream()) {
       results.push({ key, value });
     }
 
@@ -65,7 +65,7 @@ test(
 
     // Confirm initial file count
     const initialEntries = [];
-    for await (const entry of indexer.getBee().createReadStream()) {
+    for await (const entry of indexer.bee.createReadStream()) {
       initialEntries.push(entry);
     }
     t.is(initialEntries.length, 5, "5 initial files indexed");
@@ -81,7 +81,7 @@ test(
 
     // Check for new entry
     const afterPollEntries = [];
-    for await (const entry of indexer.getBee().createReadStream()) {
+    for await (const entry of indexer.bee.createReadStream()) {
       afterPollEntries.push(entry);
     }
 

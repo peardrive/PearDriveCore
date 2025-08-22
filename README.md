@@ -366,6 +366,13 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 
 ## 🚧 Changelog
 
+### 1.3.0
+
+- Refactor PearDrive, IndexManager and LocalFileIndex to inherit ReadyResource
+- Implement relay mode
+- Implement file watching system to prevent unnecessary file hashing
+- Move getSaveData() from function to saveData, a prototype property
+
 ### 1.2.2
 
 - Update dependencies

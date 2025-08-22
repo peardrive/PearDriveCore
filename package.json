@@ -1,6 +1,6 @@
 {
   "name": "@hopets/pear-core",
-  "version": "1.2.2",
+  "version": "1.3.0",
   "main": "./dist/PearDrive.js",
   "module": "./dist/PearDrive.js",
   "type": "module",
@@ -95,6 +95,7 @@
     "localdrive": "^2.2.0",
     "protomux-rpc": "^1.7.1",
     "random-access-memory": "^6.2.1",
+    "ready-resource": "^1.2.0",
     "watch-drive": "^2.0.3"
   }
 }

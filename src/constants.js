@@ -42,15 +42,15 @@ export const RPC = {
  */
 export const EVENT = {
   /** Any and all built-in event updates */
-  SYSTEM: "system_update",
+  SYSTEM: "[PD]: system_update",
   /** Update from peer connection */
-  PEER: "peer_event",
+  PEER: "[PD]: peer_event",
   /** Update from a file over the network */
-  NETWORK: "network_update",
+  NETWORK: "[PD]: network_update",
   /** Update on a file on the local filesystem */
-  LOCAL: "local_update",
+  LOCAL: "[PD]: local_update",
   /** Any error thrown in PearDrive */
-  ERROR: "error_update",
+  ERROR: "[PD]: error_update",
   /** Download progress info */
-  DOWNLOAD_PROGRESS: "download_progress",
+  DOWNLOAD_PROGRESS: "[PD]: download_progress",
 };

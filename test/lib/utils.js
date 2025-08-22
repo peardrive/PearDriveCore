@@ -23,6 +23,42 @@ export function generateString(length = 8) {
   return result;
 }
 
+/**
+ * Wait for condition to be true
+ *
+ * @param {Function} conditionFn - Function that returns true when condition is
+ *   met
+ * @param {number} [timeout=5000] - Maximum time to wait in milliseconds
+ * @param {number} [interval=100] - Interval to check condition in milliseconds
+ */
+export async function waitFor(conditionFn, timeout = 5000, interval = 100) {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeout) {
+    if (await conditionFn()) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+  return false;
+}
+
+/**
+ * Given two lists of files, ensure file.name and file.hash match for each of them
+ */
+export function filesMatch(files, expectedFiles) {
+  if (files.length !== expectedFiles.length) {
+    return false;
+  }
+  const fileMap = new Map(files.map((f) => [f.name, f.hash]));
+  for (const file of expectedFiles) {
+    if (!fileMap.has(file.name) || fileMap.get(file.name) !== file.hash) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /** Create a random dummy text file in given basePath */
 export function createRandomFile(basePath, length = 8) {
   const name = `${generateString(length)}.txt`;
@@ -75,19 +111,15 @@ export function createCorestorePath(folderName) {
 
 /** Resolves when given array of PearDrives are all connected */
 export async function awaitAllConnected(instances, timeout = 60000) {
-  let connected = false;
-  const startTime = Date.now();
-
   // Flush all peers
   for (const instance of instances) {
     await instance._swarm.flush();
   }
 
   // Wait for connected status to activate
-  while (!connected && Date.now() - startTime < timeout) {
-    connected = instances.every((instance) => instance.connected);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
+  let connected = await waitFor(() => {
+    instances.every((instance) => instance.connected, timeout, 50);
+  });
 
   return connected;
 }
@@ -299,4 +331,44 @@ export async function makeLocalFileIndex(
     logPath,
     name,
   };
+}
+
+/**
+ * Deeply compare two objects (or arrays, primitives) to ensure
+ * every key-value pair matches.
+ *
+ * @param {any} a
+ * @param {any} b
+ * @returns {boolean}
+ */
+export function deepEqual(a, b) {
+  // Handle reference equality & primitives
+  if (a === b) return true;
+
+  // Handle NaN (since NaN !== NaN)
+  if (typeof a === "number" && typeof b === "number" && isNaN(a) && isNaN(b)) {
+    return true;
+  }
+
+  // If types differ → fail
+  if (typeof a !== typeof b) return false;
+
+  // Handle Arrays
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    return a.every((val, idx) => deepEqual(val, b[idx]));
+  }
+
+  // Handle Objects
+  if (a && b && typeof a === "object" && typeof b === "object") {
+    const keysA = Object.keys(a);
+    const keysB = Object.keys(b);
+
+    if (keysA.length !== keysB.length) return false;
+
+    return keysA.every((key) => deepEqual(a[key], b[key]));
+  }
+
+  // Fallback: primitives (string, number, boolean, null, undefined, symbol)
+  return false;
 }

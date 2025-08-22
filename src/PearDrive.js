@@ -19,6 +19,7 @@ import RPC from "protomux-rpc";
 import c from "compact-encoding";
 import Hyperbee from "hyperbee";
 import Logger, { LOG_LEVELS } from "@hopets/logger";
+import ReadyResource from "ready-resource";
 
 import * as C from "./constants.js";
 import * as utils from "./utils/index.js";
@@ -38,7 +39,7 @@ export const RPC_EVENT = C.RPC;
  * ---
  * P2P networking system for node.js applications.
  ******************************************************************************/
-export default class PearDrive {
+export default class PearDrive extends ReadyResource {
   /** @private {Hyperswarm} Hyperswarm for all nodes on network */
   _swarm;
   /** @private {Corestore} Corestore for all hypercores */
@@ -110,6 +111,8 @@ export default class PearDrive {
     indexOpts = {},
     networkKey,
   }) {
+    super();
+
     this._emitEvent = this._emitEvent.bind(this);
     this._hooks = {};
 
@@ -120,10 +123,13 @@ export default class PearDrive {
     this._corestorePath = corestorePath;
     this._watchPath = utils.normalizePath(watchPath);
     this._indexName = indexName;
-    this._swarmOpts = swarmOpts;
-    this._swarmOpts.seed = swarmOpts.seed
+    const normalizedSeed = swarmOpts.seed
       ? utils.formatToBuffer(swarmOpts.seed)
       : utils.generateSeed();
+    this._swarmOpts = {
+      ...swarmOpts,
+      seed: normalizedSeed,
+    };
     this._logOpts = logOpts;
     const { poll = true, pollInterval = 500, relay = false } = indexOpts;
     this._indexOpts = {
@@ -138,7 +144,7 @@ export default class PearDrive {
     this.#log.debug("DEBUG mode enabled");
 
     // Set up corestore and swarm
-    this._swarm = new Hyperswarm(swarmOpts);
+    this._swarm = new Hyperswarm(this._swarmOpts);
     this._store = new Corestore(corestorePath);
     this._rpcConnections = new Map();
     this._uploads = new Map();
@@ -249,37 +255,13 @@ export default class PearDrive {
     return this._swarm.keyPair.publicKey;
   }
 
+  get saveData() {
+    return this.#buildSaveData();
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Public functions
   //////////////////////////////////////////////////////////////////////////////
-
-  /**
-   * Initialize corestore and index manager.
-   *
-   * @returns {Promise<void>}
-   */
-  async ready() {
-    await this._store.ready();
-    await this._indexManager.ready();
-  }
-
-  /**
-   * Get save data as JSON.
-   *
-   * @returns {Object} Save data object
-   */
-  getSaveData() {
-    return {
-      corestorePath: this.corestorePath,
-      watchPath: this.watchPath,
-      indexName: this._indexName,
-      swarmOpts: {
-        seed: this.seed,
-      },
-      logOpts: this.logOpts,
-      networkKey: this.networkKey,
-    };
-  }
 
   /**
    * Wire up hooks for events here.
@@ -424,7 +406,6 @@ export default class PearDrive {
    */
   listPeers() {
     const peers = [];
-    // TODO fix this
     for (const [peerId, _rpc] of this._rpcConnections.entries()) {
       const bee = this._indexManager.remoteIndexes.get(peerId);
       const hyperbeeKey = bee ? bee.core.key : null;
@@ -447,15 +428,6 @@ export default class PearDrive {
         ? utils.formatToStr(peer.hyperbeeKey)
         : null,
     }));
-  }
-
-  /** Close PearDrive gracefully */
-  async close() {
-    this.#log.info("Closing PearDrive...");
-    this._indexManager.close();
-    this._swarm.destroy();
-    await this._store.close();
-    this.#log.info("PearDrive closed.");
   }
 
   /** Activate automatic polling for the local file index */
@@ -679,7 +651,7 @@ export default class PearDrive {
 
     try {
       // Get key
-      const keyBuf = this._indexManager.localIndex.getKey();
+      const keyBuf = this._indexManager.localIndex.bee.key;
       const keyHex = utils.formatToStr(keyBuf);
 
       // Send key back to peer
@@ -968,5 +940,38 @@ export default class PearDrive {
       (this._hooks[C.EVENT.ERROR] || []).forEach((cb) => cb(err));
       throw err;
     }
+  }
+
+  async _open() {
+    this.#log.info("Opening PearDrive...");
+
+    await this._store.ready();
+    await this._indexManager.ready();
+
+    this.#log.info("PearDrive opened successfully!");
+  }
+
+  async _close() {
+    this.#log.info("Closing PearDrive...");
+
+    await this._indexManager.close();
+    this._swarm.destroy();
+    await this._store.close();
+
+    this.#log.info("PearDrive closed successfully!");
+  }
+
+  /** Build save data */
+  #buildSaveData() {
+    return {
+      corestorePath: this.corestorePath,
+      watchPath: this.watchPath,
+      indexName: this._indexName,
+      swarmOpts: {
+        seed: this.seed,
+      },
+      logOpts: this.logOpts,
+      networkKey: this.networkKey,
+    };
   }
 }
