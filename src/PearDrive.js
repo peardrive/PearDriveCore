@@ -237,11 +237,18 @@ export default class PearDrive extends ReadyResource {
 
   /**
    * Read-only logging options
-   *Found a missing file 2DxBQXymKh.txt
+   *
    * @returns {Object} - Logger options
    */
   get logOpts() {
     return { ...this._logOpts };
+  }
+
+  /**
+   * Read-only index options
+   */
+  get indexOpts() {
+    return { ...this._indexOpts };
   }
 
   /**
@@ -972,6 +979,8 @@ export default class PearDrive extends ReadyResource {
       },
       logOpts: this.logOpts,
       networkKey: this.networkKey,
+      relay: this.relay,
+      indexOpts: this.indexOpts,
     };
   }
 }
