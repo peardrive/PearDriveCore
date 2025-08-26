@@ -366,6 +366,10 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 
 ## 🚧 Changelog
 
+### 1.4.0
+
+- TODO: Send files with hyperblobs
+
 ### 1.3.1
 
 - Add indexOpts to saveData, add getter for indexOpts
