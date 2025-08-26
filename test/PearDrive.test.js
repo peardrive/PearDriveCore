@@ -556,7 +556,7 @@ test(
   }
 );
 
-test(
+solo(
   txt.main("PearDrive: Test single file download"),
   { stealth: true },
   async (t) => {

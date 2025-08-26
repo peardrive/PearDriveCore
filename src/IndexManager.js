@@ -23,6 +23,7 @@ import ReadyResource from "ready-resource";
 import * as C from "./constants.js";
 import * as utils from "./utils/index.js";
 import LocalFileIndex from "./LocalFileIndex.js";
+import { blob } from "stream/consumers";
 
 /*******************************************************************************
  * IndexManager
@@ -330,9 +331,23 @@ export class IndexManager extends ReadyResource {
     const ws = blobs.createWriteStream();
 
     const id = await new Promise((resolve, reject) => {
-      ws.on("error", reject);
-      rs.on("error", reject);
-      ws.on("finish", () => resolve(ws.id));
+      let settled = false;
+
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        resolve(ws.id);
+      };
+
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      };
+
+      ws.once("close", done);
+      ws.once("error", fail);
+      rs.once("error", fail);
       rs.pipe(ws);
     });
 
@@ -340,7 +355,12 @@ export class IndexManager extends ReadyResource {
     this._uploads.set(dPath, { store, core, blobs, id, type: "hyperblobs" });
 
     this.#log.info(`Upload blob ready for ${filePath}`);
-    return { key: core.key, id };
+    const blobData = {
+      type: "hyperblobs",
+      key: utils.formatToStr(core.key),
+      id,
+    };
+    return blobData;
   }
 
   /**
@@ -440,18 +460,33 @@ export class IndexManager extends ReadyResource {
    *  "download")
    * @param {string | Uint8Array | ArrayBuffer} peerId - The ID of the peer
    *  involved in the transfer
+   *
+   * @returns {void}
    */
   markTransfer(path, direction, peerId) {
     this.#log.debug(
       `Marking transfer for ${path} (${direction}) with peer 
       ${utils.formatToStr(peerId)}`
     );
-    const pathKey = utils.asDrivePath(path);
-    const tmpEntries =
-      this._inProgress[pathKey] ||
-      (this._inProgress[pathKey] = Object.create(null));
-    const tmpEntry = { direction, startedAt: Date.now() };
-    this._inProgress[pathKey][utils.formatToStr(peerId)] = tmpEntry;
+    try {
+      const pathKey = utils.asDrivePath(path);
+
+      // Add to in-progress dictionary object, prevent duplicates
+      const tmpEntries = this._inProgress[pathKey];
+      if (!tmpEntries) {
+        this._inProgress[pathKey] = {};
+      } else if (tmpEntries[utils.formatToStr(peerId)]) {
+        this.#log.warn(
+          `Transfer already marked for ${path} (${direction}) with peer 
+          ${utils.formatToStr(peerId)}`
+        );
+        return;
+      }
+      const tmpEntry = { direction, startedAt: Date.now() };
+      this._inProgress[pathKey][utils.formatToStr(peerId)] = tmpEntry;
+    } catch (err) {
+      this.#log.error("Error marking transfer", err);
+    }
   }
 
   /**
@@ -462,6 +497,8 @@ export class IndexManager extends ReadyResource {
    * "download")
    * @param {string | Uint8Array | ArrayBuffer} peerId - The ID of the peer
    * involved in the transfer
+   *
+   * @returns {Promise<void>}
    */
   async unmarkTransfer(path, direction, peerId) {
     this.#log.debug(
@@ -484,10 +521,10 @@ export class IndexManager extends ReadyResource {
       delete this._inProgress[pathKey];
       this.#log.debug(`All transfers for ${path} completed, closing drive`);
       if (direction === "download") {
-        await this.closeDownloadDrive(path, true);
+        await this.closeDownloadBlob(path, true);
       }
       if (direction === "upload") {
-        await this.closeUploadDrive(path, true);
+        await this.closeUploadBlob(path, true);
       }
     } else {
       this.#log.debug(`Transfers still in progress for ${path}`);
@@ -495,6 +532,97 @@ export class IndexManager extends ReadyResource {
 
     this.#log.info(`Transfer for ${path} (${direction}) with peer 
       ${utils.formatToStr(peerId)} unmarked`);
+  }
+
+  /**
+   * Tear down and delete a download blob for a given file path
+   *
+   * @param {string} path - Local file path to close the download blob for
+   * @param {boolean} [force=false] - Whether to force close the blob even if
+   * transfers active
+   *
+   * @returns {Promise<void>}
+   */
+  async closeDownloadBlob(path, force = false) {
+    this.#log.info(`Closing download blob for file: ${path}`);
+    const dPath = utils.asDrivePath(path);
+    const download = this._downloads.get(dPath);
+
+    if (!download) {
+      this.#log.warn(`No download blob found for file: ${path}`);
+      return;
+    }
+
+    if (this.hasActiveDownloads(dPath) && !force) {
+      this.#log.warn(
+        `Cannot close download blob for ${path} while downloads in progress`
+      );
+      return;
+    }
+
+    try {
+      // Optional: free the blob itself if you want to reclaim space
+      if (download.id && download.blobs) {
+        await download.blobs.clear(download.id).catch((err) => {
+          this.#log.debug(`Failed to clear blob data for ${path}`, err);
+        });
+      }
+
+      if (download.core) {
+        await download.core.close();
+      }
+      this.#log.info(`Download blob closed for file: ${path}`);
+    } catch (err) {
+      this.#log.error(`Failed to close download blob for file: ${path}`, err);
+      throw err;
+    } finally {
+      this._downloads.delete(dPath);
+    }
+  }
+
+  /**
+   * Tear down and delete an upload blob for a given file path
+   *
+   * @param {string} path - Local file path to close the upload blob for
+   * @param {boolean} [force=false] - Whether to force close the blob even if
+   * transfers active
+   *
+   * @returns {Promise<void>}
+   */
+  async closeUploadBlob(path, force = false) {
+    this.#log.info(`Closing upload blob for file: ${path}`);
+    const dPath = utils.asDrivePath(path);
+    const upload = this._uploads.get(dPath);
+
+    if (!upload) {
+      this.#log.warn(`No upload blob found for file: ${path}`);
+      return;
+    }
+
+    if (this.hasActiveUploads(dPath) && !force) {
+      this.#log.warn(
+        `Cannot close upload blob for ${path} while uploads in progress`
+      );
+      return;
+    }
+
+    try {
+      if (upload.id && upload.blobs) {
+        await upload.blobs.clear(upload.id).catch((err) => {
+          this.#log.debug(`Failed to clear upload blob data for ${path}`, err);
+        });
+      }
+
+      if (upload.core) {
+        await upload.core.close();
+      }
+      this.#log.info(`Upload blob closed for file: ${path}`);
+    } catch (err) {
+      this.#log.error(`Failed to close upload blob for file: ${path}`, err);
+      throw err;
+    } finally {
+      this._uploads.delete(dPath);
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -532,8 +660,10 @@ export class IndexManager extends ReadyResource {
   /**
    * Execute a download of a blob from a Hyperblobs instance to the local file
    *
-   * @param {string} filePath
-   * @param {string | Uint8Array | ArrayBuffer} id
+   * @param {string} filePath - File path to download from
+   * @param {Object} id - The ID of the blob to download
+   *
+   * @returns {Promise<void>}
    */
   async _executeDownloadBlob(filePath, id) {
     this.#log.info(`Executing Hyperblobs download for: ${filePath}`);
@@ -547,20 +677,20 @@ export class IndexManager extends ReadyResource {
 
     // Create read/write streams from hyperblobs to local file
     const { blobs } = download;
-    const readStream = blobs.createReadStream(id, {
+    const rs = blobs.createReadStream(id, {
       wait: true,
       timeout: 10000,
     });
-    const writeStream = fs.createWriteStream(
+    const ws = fs.createWriteStream(
       utils.createAbsPath(filePath, this.watchPath)
     );
 
     try {
       await new Promise((resolve, reject) => {
-        writeStream.on("error", reject);
-        readStream.on("error", reject);
-        writeStream.on("close", resolve);
-        readStream.pipe(writeStream);
+        ws.once("error", reject);
+        rs.once("error", reject);
+        ws.once("close", resolve);
+        rs.pipe(ws);
       });
     } catch (err) {
       this.#log.error(
