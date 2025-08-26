@@ -666,8 +666,7 @@ export default class PearDrive extends ReadyResource {
       return keyHex;
     } catch (err) {
       this.#log.error(`Error in LOCAL_INDEX_KEY_REQUEST for ${peerId}`, err);
-      // emit ERROR hooks
-      (this._hooks[C.EVENT.ERROR] || []).forEach((cb) => cb(err));
+      this._emitEvent(C.EVENT.ERROR, err);
       throw err;
     }
   }
@@ -829,12 +828,12 @@ export default class PearDrive extends ReadyResource {
       }
 
       this._indexManager.markTransfer(payload, "upload", conn.remotePublicKey);
-      const response = await this._indexManager.createUploadDrive(payload);
+      const response = await this._indexManager.createUploadBlob(payload);
       const responseStr = utils.formatToStr(response);
       if (!responseStr) {
         const peer = utils.formatToStr(conn.remotePublicKey);
         throw new Error(
-          `Failed to create upload drive for file ${payload} on peer ${peer}`
+          `Failed to create upload blob for file ${payload} on peer ${peer}`
         );
       }
       return responseStr;
@@ -884,6 +883,9 @@ export default class PearDrive extends ReadyResource {
 
   /**
    * Handler for messages from sisters
+   *
+   * @param {RPC.Connection} conn - RPC connection
+   * @param {string} rawPayload - Raw JSON string payload
    *
    * @private
    */

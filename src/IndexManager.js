@@ -16,7 +16,7 @@
  */
 
 import Hyperbee from "hyperbee";
-import Hyperdrive from "hyperdrive";
+import Hyperblobs from "hyperblobs";
 import fs from "fs";
 import ReadyResource from "ready-resource";
 
@@ -295,161 +295,91 @@ export class IndexManager extends ReadyResource {
   }
 
   /**
-   * Create and configure the hyperdrive for uploading a file to a remote
-   * peardrive.
+   * Create a Hyperblobs-backed transfer core and stream the file into it.
+   * Returns { key, id } where `key` is the Hypercore pubkey and `id` is the
+   * Hyperblobs id.
    *
-   * @param {string} path - Local file path to upload
+   * @param {string} filePath - Local file path to upload
    *
-   * @returns {Promise<string>} - Key to the writable hyperdrive
+   * @returns {Promise<{ key: string, id: string }>} - Key to the writable
+   *    hypercore and blob id
    */
-  async createUploadDrive(path) {
-    this.#log.info(`Creating upload drive for file: ${path}`);
+  async createUploadBlob(filePath) {
+    this.#log.info(`Creating upload blob for file: ${filePath}`);
 
-    // Ensure the path is found in the local index
-    const fileInfo = await this.localIndex.getFileMetadata(path);
+    // Ensure it exists in local index
+    const fileInfo = await this.localIndex.getFileMetadata(filePath);
     if (!fileInfo) {
-      this.#log.error(`File not found in local index: ${path}`);
-      throw new Error(`File not found in local index: ${path}`);
+      this.#log.error(`File not found in local index: ${filePath}`);
+      throw new Error(`File not found in local index: ${filePath}`);
     }
 
-    // Create the hyperdrive
-    const dPath = utils.asDrivePath(path);
-    const store = this._createNamespace(path, "upload");
+    const dPath = utils.asDrivePath(filePath);
+    const store = this._createNamespace(filePath, "upload:blobs");
     await store.ready();
-    const drive = new Hyperdrive(store);
-    await drive.ready();
-    this._uploads.set(dPath, {
-      drive,
-      store,
+
+    // Dedicated core for this single-blob transfer
+    const core = store.get({ name: "blob" });
+    await core.ready();
+
+    const blobs = new Hyperblobs(core);
+
+    // Stream file into blobs (no buffering entire file)
+    const absPath = utils.createAbsPath(filePath, this.watchPath);
+    const rs = fs.createReadStream(absPath);
+    const ws = blobs.createWriteStream();
+
+    const id = await new Promise((resolve, reject) => {
+      ws.on("error", reject);
+      rs.on("error", reject);
+      ws.on("finish", () => resolve(ws.id));
+      rs.pipe(ws);
     });
 
-    // Load the drive with the file
-    const absPath = utils.createAbsPath(path, this.watchPath);
-    const data = fs.readFileSync(absPath);
-    await drive.put(dPath, data);
+    // Track as "upload in progress" for busy-file semantics
+    this._uploads.set(dPath, { store, core, blobs, id, type: "hyperblobs" });
 
-    this.#log.info(`Upload drive created for file: ${path}`);
-    return drive.key;
+    this.#log.info(`Upload blob ready for ${filePath}`);
+    return { key: core.key, id };
   }
 
   /**
-   *  Given a peer ID, hyperdrive key for the upload, and the file path,
-   *  handle the download process.
+   * Given a peer ID, hyperblobs key for the upload, and the file path, handle
+   * the download process.
    *
    * @param {string | Uint8Array | ArrayBuffer} peerId
    * @param {string} filePath
-   * @param {string | Uint8Array | ArrayBuffer} driveKey - Key to peer's upload
-   *   hyperdrive
+   * @param {{
+   *    type: "hyperblobs", key: string | Uint8Array, id: object
+   * }} downloadRef
    *
    * @returns {Promise<boolean>} - Success flag
    */
-  async handleDownload(peerId, filePath, driveKey) {
-    this.#log.info(
-      `Handling download for file: ${filePath} from peer ${peerId}`
-    );
+  async handleDownload(peerId, filePath, downloadRef) {
+    this.#log.info(`Handling download for ${filePath} from peer ${peerId}`);
+
+    // Expect new Hyperblobs ref
+    const isValidBlobsRef =
+      downloadRef &&
+      typeof downloadRef === "object" &&
+      downloadRef.type === "hyperblobs";
+    if (!isValidBlobsRef) {
+      this.#log.error(
+        "Expected a Hyperblobs downloadRef { type:'hyperblobs', key, id }"
+      );
+      throw new Error("Invalid download reference (expected Hyperblobs)");
+    }
+
     try {
       this.markTransfer(filePath, "download", peerId);
-      await this._createDownloadDrive(filePath, driveKey);
-      await this._executeDownload(filePath);
+      await this._createDownloadBlob(filePath, downloadRef.key);
+      await this._executeDownloadBlob(filePath, downloadRef.id);
     } catch (err) {
       this.#log.error(
         `Download process failed for file: ${filePath} from peer ${peerId}`,
         err
       );
       return false;
-    }
-  }
-
-  /**
-   * Close and delete a download drive.
-   *
-   * @param {string} path - Local file path to close the download drive for
-   *
-   * @param {boolean} [force=false] - Whether to force close the drive
-   *
-   * @return {Promise<void>}
-   */
-  async closeDownloadDrive(path, force = false) {
-    this.#log.info(`Closing download drive for file: ${path}`);
-
-    const dPath = utils.asDrivePath(path);
-    const download = this._downloads.get(dPath);
-    if (!download) {
-      this.#log.warn(`No download found for file: ${path}`);
-      return;
-    }
-
-    // Ensure type safety
-    const { drive, store } = download;
-    try {
-      if (!drive || !store) {
-        this.#log.warn(`Invalid download entry for file: ${path}`);
-        this._downloads.delete(dPath);
-        return;
-      }
-    } catch (err) {
-      this.#log.error(`Error accessing download entry for file: ${path}`, err);
-      this._downloads.delete(dPath);
-      return;
-    }
-
-    // Check if the drive is still in use
-    if (this.hasActiveDownloads(dPath) && !force) {
-      this.#log.warn(
-        `Cannot close download for ${path} while downloads in progress`
-      );
-      return;
-    }
-
-    try {
-      // Close the download
-      await drive.clear(dPath);
-      await drive.close();
-      this._downloads.delete(dPath);
-      this.#log.info(`Download drive closed for file: ${path}`);
-    } catch (err) {
-      this.#log.error(`Failed to close download drive for file: ${path}`, err);
-      throw err;
-    }
-  }
-
-  /**
-   * Close and delete an upload drive.
-   *
-   * @param {string} path - Local file path to close the upload drive for
-   *
-   * @param {boolean} [force=false] - Whether to force close the drive
-   *
-   * @return {Promise<void>}
-   */
-  async closeUploadDrive(path, force = false) {
-    this.#log.info(`Closing upload drive for file: ${path}`);
-
-    const dPath = utils.asDrivePath(path);
-
-    const upload = this._uploads.get(dPath);
-    if (!upload) {
-      this.#log.warn(`No upload drive found for file: ${path}`);
-      return;
-    }
-
-    // Check if the drive is still in use
-    if (this.hasActiveUploads(dPath) && !force) {
-      this.#log.warn(
-        `Cannot close upload drive for ${path} while uploads in progress`
-      );
-      return;
-    }
-
-    try {
-      const { drive, store } = upload;
-      await drive.clear(dPath);
-      await drive.close();
-      this._uploads.delete(dPath);
-      this.#log.info(`Upload drive closed for file: ${path}`);
-    } catch (err) {
-      this.#log.error(`Failed to close upload drive for file: ${path}`, err);
-      throw err;
     }
   }
 
@@ -572,77 +502,71 @@ export class IndexManager extends ReadyResource {
   //////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Create and configure the hyperdrive for downloading a file from a remote
-   * peardrive.
+   *  Create and configure download blob, a Hyperblobs instance, for a file from
+   *  a remote peer.
    *
-   * @param {string} path - Remote file path to download
-   * @param {string | Uint8Array | ArrayBuffer} driveKey - Drive key.
+   * @param {string} filePath
+   * @param {string | Uint8Array | ArrayBuffer} coreKey
    *
-   * @returns {Promise<Hyperdrive>} - Readable hyperdrive
-   *
-   * @private
+   * @returns {Promise<void>}
    */
-  async _createDownloadDrive(path, driveKey) {
-    this.#log.info(`Creating download drive for file: ${path}`);
+  async _createDownloadBlob(filePath, coreKey) {
+    this.#log.info(`Creating download blob for file: ${filePath}`);
 
-    try {
-      // Create / load the hyperdrive
-      const keyBuf = utils.formatToBuffer(driveKey);
-      const store = this._createNamespace(path, "download");
-      await store.ready();
-      const drive = new Hyperdrive(store, keyBuf);
-      await drive.ready();
-      this._downloads.set(utils.asDrivePath(path), {
-        drive,
-        store,
-      });
-      return drive;
-    } catch (err) {
-      this.#log.error(`Failed to create download drive for file: ${path}`, err);
-      throw err;
-    }
+    const keyBuf = utils.formatToBuffer(coreKey);
+    const store = this._createNamespace(filePath, "download:blobs");
+    await store.ready();
+
+    const core = store.get({ key: keyBuf });
+    await core.ready();
+
+    const blobs = new Hyperblobs(core);
+    this._downloads.set(utils.asDrivePath(filePath), {
+      store,
+      core,
+      blobs,
+      type: "hyperblobs",
+    });
   }
 
   /**
-   * Execute a download from a given path through the corresponding upload
-   * and download drives.
+   * Execute a download of a blob from a Hyperblobs instance to the local file
    *
-   * @param {string} path - Local file path to download
-   *
-   * @private
+   * @param {string} filePath
+   * @param {string | Uint8Array | ArrayBuffer} id
    */
-  async _executeDownload(path) {
-    this.#log.info(`Executing download for file: ${path}`);
+  async _executeDownloadBlob(filePath, id) {
+    this.#log.info(`Executing Hyperblobs download for: ${filePath}`);
 
-    // Ensure download drive exists and has the file
-    const download = this._downloads.get(utils.asDrivePath(path));
-    if (download === undefined) {
-      this.#log.error(`No download drive found for file: ${path}`);
-      throw new Error(`No download drive found for file: ${path}`);
+    // Get / validate download blob
+    const download = this._downloads.get(utils.asDrivePath(filePath));
+    if (!download) {
+      this.#log.error(`No download blob found for file: ${filePath}`);
+      throw new Error(`No download blob found for file: ${filePath}`);
     }
 
+    // Create read/write streams from hyperblobs to local file
+    const { blobs } = download;
+    const readStream = blobs.createReadStream(id, {
+      wait: true,
+      timeout: 10000,
+    });
+    const writeStream = fs.createWriteStream(
+      utils.createAbsPath(filePath, this.watchPath)
+    );
+
     try {
-      this.#log.info(`Download starting for ${path}`);
-
-      const { drive } = download;
-      const readStream = drive.createReadStream(utils.asDrivePath(path), {
-        timeout: 10000,
-      });
-      const writeStream = fs.createWriteStream(
-        utils.createAbsPath(path, this.watchPath)
-      );
-
       await new Promise((resolve, reject) => {
         writeStream.on("error", reject);
         readStream.on("error", reject);
-        writeStream.on("close", () => {
-          this.#log.info(`Download completed for ${path}`);
-          resolve();
-        });
+        writeStream.on("close", resolve);
         readStream.pipe(writeStream);
       });
     } catch (err) {
-      this.#log.error(`Failed to execute download for file: ${path}`, err);
+      this.#log.error(
+        `Failed to execute Hyperblobs download for file: ${filePath}`,
+        err
+      );
       throw err;
     }
   }
@@ -675,19 +599,18 @@ export class IndexManager extends ReadyResource {
    */
   async _relayDownload(peerId, fileKey) {
     this.#log.info(`Relay: Downloading file ${fileKey} from peer ${peerId}`);
+
     try {
-      const peerDownloadKey = await this._sendFileRequest(peerId, fileKey);
-      if (typeof peerDownloadKey !== "string") {
+      // Get Hyperblobs ref from peer
+      const ref = await this._sendFileRequest(peerId, fileKey);
+      if (!ref || ref.type !== "hyperblobs" || !ref.key || !ref.id) {
         this.#log.warn(
-          `Relay: No key received for file ${fileKey} from peer ${peerId}`
+          `Relay: Invalid Hyperblobs ref for ${fileKey} from ${peerId}`
         );
         return;
       }
 
-      // Handle download
-      await this.handleDownload(peerId, fileKey, peerDownloadKey);
-
-      // Cleanup
+      await this.handleDownload(peerId, fileKey, ref);
       await this.unmarkTransfer(fileKey, "download", peerId);
       await this._sendFileRelease(peerId, fileKey);
     } catch (err) {
