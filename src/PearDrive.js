@@ -64,9 +64,9 @@ export default class PearDrive extends ReadyResource {
   _swarmOpts;
   /** @private Logger options */
   _logOpts;
-  /** @protected {Map} Map of download drives and corestore subspaces*/
+  /** @protected {Map} Map of download blobs and corestore subspaces*/
   _downloads;
-  /** @protected {Map} Map of upload drives and corestore subspaces */
+  /** @protected {Map} Map of upload blobs and corestore subspaces */
   _uploads;
   /** @private {Object} In-progress downloads meta-data */
   _inProgress;
@@ -328,25 +328,33 @@ export default class PearDrive extends ReadyResource {
    * @param {string | Uint8Array | ArrayBuffer} peerId - Hex string identifier
    *  of the peer
    * @param {string} filePath - Path of the file on the remote peer
+   *
+   * @returns {Promise<void>}
+   * @throws {Error} If download fails
    */
   async downloadFileFromPeer(peerId, filePath) {
     this.#log.info(`Downloading file "${filePath}" from peer ${peerId}...`);
 
     try {
-      // Create a hyperdrive on peer, get the key
-      const peerDownloadKey = await this._sendFileRequest(peerId, filePath);
-      if (typeof peerDownloadKey !== "string") {
+      // Ask the peer for a Hyperblobs reference for this file
+      const blobRef = await this._sendFileRequest(peerId, filePath);
+
+      // Validate hyperblob ref type
+      const valid =
+        blobRef &&
+        typeof blobRef === "object" &&
+        blobRef.type === "hyperblobs" &&
+        typeof blobRef.key === "string" &&
+        blobRef.id &&
+        typeof blobRef.id === "object";
+      if (!valid) {
         throw new Error(
-          `Invalid peer download key type: ${typeof peerDownloadKey}`
+          `Invalid FILE_REQUEST response (expected {type:'hyperblobs', key:string, id:object})`
         );
       }
 
       // Handle download
-      await this._indexManager.handleDownload(
-        peerId,
-        filePath,
-        peerDownloadKey
-      );
+      await this._indexManager.handleDownload(peerId, filePath, blobRef);
 
       // Cleanup
       await this._indexManager.unmarkTransfer(filePath, "download", peerId);
@@ -567,8 +575,26 @@ export default class PearDrive extends ReadyResource {
         conn.remotePublicKey
       )}`
     );
+
+    // Init RPC / teardown
     const rpc = new RPC(conn, { valueEncoding: c.json });
     rpc.on("close", () => this._onDisconnect(conn));
+
+    /** Ensure all responses to RPC responses are JSON encodable */
+    const safeResponse = async (response) => {
+      try {
+        const rawOutput = await response();
+
+        // Never send undefined
+        let output = rawOutput === undefined ? null : rawOutput;
+
+        this.#log.info("Response data:", output);
+        return output;
+      } catch (error) {
+        // Let RPC send RPC request error
+        throw error;
+      }
+    };
 
     // Wire up RPC methods
     rpc.respond(C.RPC.LOCAL_INDEX_KEY_SEND, async (payload) => {
@@ -577,7 +603,7 @@ export default class PearDrive extends ReadyResource {
           conn.remotePublicKey
         )}`
       );
-      return this._onLocalIndexKeySend(conn, payload);
+      return safeResponse(() => this._onLocalIndexKeySend(conn, payload));
     });
     rpc.respond(C.RPC.LOCAL_INDEX_KEY_REQUEST, async () => {
       this.#log.info(
@@ -585,26 +611,25 @@ export default class PearDrive extends ReadyResource {
           conn.remotePublicKey
         )}`
       );
-      return this._onLocalIndexKeyRequest(conn);
+      return safeResponse(() => this._onLocalIndexKeyRequest(conn));
     });
     rpc.respond(C.RPC.FILE_REQUEST, async (payload) => {
       this.#log.info(
         `Handling FILE_REQUEST from ${utils.formatToStr(conn.remotePublicKey)}`
       );
-      return this._onFileRequest(conn, payload);
+      return safeResponse(() => this._onFileRequest(conn, payload));
     });
     rpc.respond(C.RPC.FILE_RELEASE, async (payload) => {
       this.#log.info(
         `Handling FILE_RELEASE from ${utils.formatToStr(conn.remotePublicKey)}`
       );
-      return this._onFileRelease(conn, payload);
+      return safeResponse(() => this._onFileRelease(conn, payload));
     });
     rpc.respond(C.RPC.MESSAGE, async (payload) => {
       this.#log.info(
         `Handling MESSAGE from ${utils.formatToStr(conn.remotePublicKey)}`
       );
-      // Custom request handling can be added here
-      return this._onMessage(conn, payload);
+      return safeResponse(() => this._onMessage(conn, payload));
     });
 
     return rpc;
@@ -666,8 +691,7 @@ export default class PearDrive extends ReadyResource {
       return keyHex;
     } catch (err) {
       this.#log.error(`Error in LOCAL_INDEX_KEY_REQUEST for ${peerId}`, err);
-      // emit ERROR hooks
-      (this._hooks[C.EVENT.ERROR] || []).forEach((cb) => cb(err));
+      this._emitEvent(C.EVENT.ERROR, err);
       throw err;
     }
   }
@@ -829,15 +853,14 @@ export default class PearDrive extends ReadyResource {
       }
 
       this._indexManager.markTransfer(payload, "upload", conn.remotePublicKey);
-      const response = await this._indexManager.createUploadDrive(payload);
-      const responseStr = utils.formatToStr(response);
-      if (!responseStr) {
+      const response = await this._indexManager.createUploadBlob(payload);
+      if (!response) {
         const peer = utils.formatToStr(conn.remotePublicKey);
         throw new Error(
-          `Failed to create upload drive for file ${payload} on peer ${peer}`
+          `Failed to create upload blob for file ${payload} on peer ${peer}`
         );
       }
-      return responseStr;
+      return response;
     } catch (err) {
       this.#log.error(
         `Error handling file request from ${utils.formatToStr(
@@ -846,7 +869,6 @@ export default class PearDrive extends ReadyResource {
         err
       );
       this._emitEvent(C.EVENT.ERROR, err);
-      throw err;
     }
   }
 
@@ -884,6 +906,9 @@ export default class PearDrive extends ReadyResource {
 
   /**
    * Handler for messages from sisters
+   *
+   * @param {RPC.Connection} conn - RPC connection
+   * @param {string} rawPayload - Raw JSON string payload
    *
    * @private
    */
@@ -926,9 +951,26 @@ export default class PearDrive extends ReadyResource {
    * @private
    */
   async _sendInternalMessageToPeer(peerId, type, payload) {
+    this.#log.debug(
+      "Sending internal message",
+      type,
+      payload,
+      "to peer",
+      peerId
+    );
+
+    // Validate RPC (Receiving peer)
     const rpc = this._rpcConnections.get(peerId);
     if (!rpc) {
       const err = new Error(`No RPC connection found for peer ${peerId}`);
+      this.#log.error(err);
+      this._emitEvent(C.EVENT.ERROR, err);
+      throw err;
+    }
+
+    // Validate payload (Cannot send undefined)
+    if (typeof payload === "undefined") {
+      const err = new Error(`Cannot send undefined payload to peer ${peerId}`);
       this.#log.error(err);
       this._emitEvent(C.EVENT.ERROR, err);
       throw err;
