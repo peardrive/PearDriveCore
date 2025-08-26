@@ -368,7 +368,7 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 
 ### 1.4.0
 
-- TODO: Send files with hyperblobs
+- Send files with hyperblobs instead of hyperdrives
 
 ### 1.3.1
 
