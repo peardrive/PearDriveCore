@@ -23,7 +23,6 @@ import ReadyResource from "ready-resource";
 import * as C from "./constants.js";
 import * as utils from "./utils/index.js";
 import LocalFileIndex from "./LocalFileIndex.js";
-import { blob } from "stream/consumers";
 
 /*******************************************************************************
  * IndexManager

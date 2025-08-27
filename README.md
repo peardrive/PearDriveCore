@@ -366,6 +366,10 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 
 ## 🚧 Changelog
 
+### 1.4.1
+
+- Remove unused import causing compat issues
+
 ### 1.4.0
 
 - Send files with hyperblobs instead of hyperdrives
