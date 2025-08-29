@@ -1,5 +1,5 @@
 {
-  "name": "@hopets/pear-core",
+  "name": "@peardrive/core",
   "version": "1.4.2",
   "main": "./dist/PearDrive.js",
   "module": "./dist/PearDrive.js",
