@@ -667,37 +667,99 @@ export class IndexManager extends ReadyResource {
   async _executeDownloadBlob(filePath, id) {
     this.#log.info(`Executing Hyperblobs download for: ${filePath}`);
 
-    // Get / validate download blob
     const download = this._downloads.get(utils.asDrivePath(filePath));
+    const { blobs } = download;
     if (!download) {
       this.#log.error(`No download blob found for file: ${filePath}`);
       throw new Error(`No download blob found for file: ${filePath}`);
     }
 
-    // Create read/write streams from hyperblobs to local file
-    const { blobs } = download;
+    // Create read/write streams
     const rs = blobs.createReadStream(id, {
       wait: true,
-      timeout: 10000,
+      timeout: 0,
     });
     const ws = fs.createWriteStream(
       utils.createAbsPath(filePath, this.watchPath)
     );
 
-    try {
-      await new Promise((resolve, reject) => {
-        ws.once("error", reject);
-        rs.once("error", reject);
-        ws.once("close", resolve);
-        rs.pipe(ws);
+    // Monitor progress
+    const totalBytes = id.byteLength;
+    let downloadedBytes = 0;
+
+    // Activity timer for managing timeouts
+    let inactivityTimer = null;
+    let INACTIVITY_TIMEOUT = 30000; // 30 seconds of inactivity to timeout
+    /** Reset inactivity timer (on data) */
+    const resetInactivityTimer = () => {
+      if (inactivityTimer) {
+        clearTimeout(inactivityTimer);
+      }
+      inactivityTimer = setTimeout(() => {
+        const error = new Error(
+          "Download timed out due to inactivity" +
+            `(${downloadedBytes}/${totalBytes} bytes received)`
+        );
+        rs.destroy(error);
+        ws.destroy(error);
+      }, INACTIVITY_TIMEOUT);
+    };
+
+    // Configure read/write stream events, execute download
+    await new Promise((resolve, reject) => {
+      // Start the inactivity timer
+      resetInactivityTimer();
+
+      ws.once("error", (err) => {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        reject(err);
       });
-    } catch (err) {
-      this.#log.error(
-        `Failed to execute Hyperblobs download for file: ${filePath}`,
-        err
-      );
-      throw err;
-    }
+
+      rs.once("error", (err) => {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        reject(err);
+      });
+
+      let prevPercent = 0;
+
+      rs.on("data", (chunk) => {
+        downloadedBytes += chunk.length;
+
+        // Reset inactivity timer on every data chunk
+        resetInactivityTimer();
+
+        // Log Download Progress
+        const curPercent = Math.floor((downloadedBytes / totalBytes) * 100);
+        if (curPercent >= prevPercent + 1) {
+          // Log every 1% by checking against lastLoggedPercent
+          const mbDownloaded = Math.round(downloadedBytes / 1024 / 1024);
+          const mbTotal = Math.round(totalBytes / 1024 / 1024);
+          this.#log.info(
+            `Download progress: ${curPercent}% (${mbDownloaded}MB/${mbTotal}MB)`
+          );
+          prevPercent = curPercent;
+        }
+      });
+
+      ws.once("close", () => {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+
+        if (downloadedBytes !== totalBytes) {
+          reject(
+            new Error(
+              `Incomplete download: ${downloadedBytes}/${totalBytes} bytes`
+            )
+          );
+        } else {
+          this.#log.info(
+            `Download complete and verified: ${downloadedBytes} bytes`
+          );
+          resolve();
+        }
+      });
+
+      rs.pipe(ws);
+    });
   }
 
   /**
