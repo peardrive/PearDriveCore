@@ -23,6 +23,7 @@ import ReadyResource from "ready-resource";
 
 import * as utils from "./utils/index.js";
 import * as C from "./constants.js";
+const { LFI_EVENT } = C;
 
 /**
  * Handles watching and indexing local files.
@@ -510,16 +511,18 @@ export default class LocalFileIndex extends ReadyResource {
       }
 
       if (!exists) {
-        // File was deleted
+        // If file is currently being uploaded/downloaded, noop
         if (this.#isBusy(relativePath)) {
           this.#log.info("Busy file not deleted!", relativePath);
           return;
         }
 
+        // File must have been deleted
         if (this.#metadataCache.has(relativePath)) {
           this.#log.info("File deleted:", relativePath);
           await this.#bee.del(relativePath);
           this.#metadataCache.delete(relativePath);
+          this.emit(LFI_EVENT.FILE_REMOVED, relativePath);
           this._emitEvent(C.EVENT.LOCAL, null);
         }
       } else if (isDirectory) {
@@ -550,19 +553,32 @@ export default class LocalFileIndex extends ReadyResource {
       // Check if we need to recalculate hash
       const cachedMeta = this.#metadataCache.get(relativePath);
       let needsHash = true;
+      let prevHash;
       let hash;
 
+      if (cachedMeta) {
+        prevHash = cachedMeta.hash;
+        hash = cachedMeta.hash;
+      }
+
+      // File hasn't changed, use cached hash
       if (
         cachedMeta &&
         cachedMeta.size === fileStat.size &&
         cachedMeta.modified === fileStat.mtimeMs
       ) {
-        // File hasn't changed, use cached hash
         needsHash = false;
-        hash = cachedMeta.hash;
-      } else {
+      }
+
+      // Must be dealing with a new or changed file
+      else {
         // File changed, recalculate hash
         hash = await this.#hashFile(fullPath);
+        this.emit(LFI_EVENT.FILE_CHANGED, {
+          path: relativePath,
+          prevHash,
+          hash,
+        });
       }
 
       const metadata = {
@@ -574,12 +590,35 @@ export default class LocalFileIndex extends ReadyResource {
 
       // Only update if metadata actually changed
       if (needsHash) {
+        // If dealing with an existing file that was changed
+        if (cachedMeta) {
+          this.#log.info("File updated:", relativePath);
+          await this.#bee.put(relativePath, metadata);
+          this.#metadataCache.set(relativePath, metadata);
+          this.emit(LFI_EVENT.FILE_CHANGED, {
+            path: relativePath,
+            prevHash,
+            hash,
+          });
+        }
+
+        // If dealing with new file
+        else {
+          this.#log.info("New file added:", relativePath);
+          await this.#bee.put(relativePath, metadata);
+          this.#metadataCache.set(relativePath, metadata);
+          this.emit(LFI_EVENT.FILE_ADDED, {
+            path: relativePath,
+            hash,
+          });
+        }
+
         this.#log.info(
           cachedMeta ? "File updated:" : "New file added:",
           relativePath
         );
-        await this.#bee.put(relativePath, metadata);
-        this.#metadataCache.set(relativePath, metadata);
+
+        // If file was added
         this._emitEvent(C.EVENT.LOCAL, null);
       }
     } catch (err) {
@@ -618,11 +657,14 @@ export default class LocalFileIndex extends ReadyResource {
 
     await this.#loadMetadataCache();
 
-    // Start native file watching if enabled
+    // File polling / watching
     if (this._useNativeWatching) {
       await this.#startNativeWatching();
     } else {
       this.#log.info("Native file watching disabled, using polling mode.");
+    }
+    if (this._indexOpts.poll) {
+      this.startPolling();
     }
 
     this.#log.info("LocalFileIndex opened successfully!");

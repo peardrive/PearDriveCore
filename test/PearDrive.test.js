@@ -21,7 +21,7 @@ utils.createTestFolders();
 // PearDrive core functionality tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("PearDrive: Initialization"), { stealth: false }, async (t) => {
+test(txt.main("PearDrive: Initialization"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -669,7 +669,7 @@ test(
   }
 );
 
-test(txt.main("PearDrive: File relaying"), { stealth: false }, async (t) => {
+test(txt.main("PearDrive: File relaying"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 

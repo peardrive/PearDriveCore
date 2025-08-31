@@ -54,3 +54,36 @@ export const EVENT = {
   /** Download progress info */
   DOWNLOAD_PROGRESS: "[PD]: download_progress",
 };
+
+/**
+ * Events emitted from LocalFileIndex
+ *
+ * @protected
+ */
+export const LFI_EVENT = {
+  /** Emitted when a file is added to the local file index
+   *
+   * Emitted with the following data:
+   * - `path`: The (relative) path of the file
+   * - `hash`: The hash of the file
+   */
+  FILE_ADDED: "[LFI]: local_file_index_file_added",
+  /** Emitted when a file is removed from the local file index */
+  FILE_REMOVED: "[LFI]: local_file_index_file_removed",
+  /**
+   * Emitted when a file's contents have changed
+   *
+   * Emitted with the following data:
+   * - `path`: The (relative) path of the file
+   * - `prevHash`: The previous hash of the file
+   * - `hash`: The new hash of the file
+   */
+  FILE_CHANGED: "[LFI]: local_file_index_file_changed",
+};
+
+/**
+ * Events emitted from IndexManager
+ *
+ * @protected
+ */
+export const IM_EVENT = {};

@@ -23,6 +23,7 @@ import ReadyResource from "ready-resource";
 import * as C from "./constants.js";
 import * as utils from "./utils/index.js";
 import LocalFileIndex from "./LocalFileIndex.js";
+const { LFI_EVENT, IM_EVENT } = C;
 
 /*******************************************************************************
  * IndexManager
@@ -837,6 +838,7 @@ export class IndexManager extends ReadyResource {
 
     try {
       // Make sure local index is ready
+      // TODO: Polling stuff should be ready if localIndex.opened
       await this.localIndex.pollOnce();
       // Create set of all local files
       const localFiles = new Set();
@@ -882,9 +884,22 @@ export class IndexManager extends ReadyResource {
   async _open() {
     this.#log.info("Opening IndexManager...");
 
+    // Local index initialization
     await this.localIndex.ready();
+
+    // Connect events
+    /* this.localIndex.on(LFI_EVENT.FILE_ADDED, (data) =>
+      console.log("FILE ADDED:", data)
+    );
+    this.localIndex.on(LFI_EVENT.FILE_REMOVED, (data) => {
+      console.log("FILE REMOVED:", data);
+    });
+    this.localIndex.on(LFI_EVENT.FILE_CHANGED, (data) => {
+      console.log("FILE CHANGED:", data);
+    }); */
+
+    // Relay initialization
     if (this.relay) this.startRelay();
-    if (this._indexOpts.poll) this.localIndex.startPolling();
 
     this.#log.info("IndexManager opened successfully!");
   }
