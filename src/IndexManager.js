@@ -738,7 +738,7 @@ export class IndexManager extends ReadyResource {
           // Log every 1% by checking against lastLoggedPercent
           const mbDownloaded = Math.round(downloadedBytes / 1024 / 1024);
           const mbTotal = Math.round(totalBytes / 1024 / 1024);
-          this.#log.info(
+          this.#log.debug(
             `Download progress: ${curPercent}% (${mbDownloaded}MB/${mbTotal}MB)`
           );
           prevPercent = curPercent;
