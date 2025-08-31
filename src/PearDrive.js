@@ -991,6 +991,26 @@ export default class PearDrive extends ReadyResource {
     }
   }
 
+  /** Build save data */
+  #buildSaveData() {
+    return {
+      corestorePath: this.corestorePath,
+      watchPath: this.watchPath,
+      indexName: this._indexName,
+      swarmOpts: {
+        seed: this.seed,
+      },
+      logOpts: this.logOpts,
+      networkKey: this.networkKey,
+      relay: this.relay,
+      indexOpts: this.indexOpts,
+    };
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Lifecycle methods
+  //////////////////////////////////////////////////////////////////////////////
+
   async _open() {
     this.#log.info("Opening PearDrive...");
 
@@ -1008,21 +1028,5 @@ export default class PearDrive extends ReadyResource {
     await this._store.close();
 
     this.#log.info("PearDrive closed successfully!");
-  }
-
-  /** Build save data */
-  #buildSaveData() {
-    return {
-      corestorePath: this.corestorePath,
-      watchPath: this.watchPath,
-      indexName: this._indexName,
-      swarmOpts: {
-        seed: this.seed,
-      },
-      logOpts: this.logOpts,
-      networkKey: this.networkKey,
-      relay: this.relay,
-      indexOpts: this.indexOpts,
-    };
   }
 }

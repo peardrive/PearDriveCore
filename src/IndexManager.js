@@ -636,6 +636,8 @@ export class IndexManager extends ReadyResource {
    * @param {string | Uint8Array | ArrayBuffer} coreKey
    *
    * @returns {Promise<void>}
+   *
+   * @private
    */
   async _createDownloadBlob(filePath, coreKey) {
     this.#log.info(`Creating download blob for file: ${filePath}`);
@@ -663,6 +665,8 @@ export class IndexManager extends ReadyResource {
    * @param {Object} id - The ID of the blob to download
    *
    * @returns {Promise<void>}
+   *
+   * @private
    */
   async _executeDownloadBlob(filePath, id) {
     this.#log.info(`Executing Hyperblobs download for: ${filePath}`);
@@ -787,6 +791,10 @@ export class IndexManager extends ReadyResource {
    * @param {string | Uint8Array | ArrayBuffer} peerId - Peer ID to download
    *   from
    * @param {string} fileKey - Key of the file to download
+   *
+   * @returns {Promise<void>}
+   *
+   * @private
    */
   async _relayDownload(peerId, fileKey) {
     this.#log.info(`Relay: Downloading file ${fileKey} from peer ${peerId}`);
@@ -866,6 +874,10 @@ export class IndexManager extends ReadyResource {
       );
     }
   }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Lifecycle methods
+  //////////////////////////////////////////////////////////////////////////////
 
   async _open() {
     this.#log.info("Opening IndexManager...");

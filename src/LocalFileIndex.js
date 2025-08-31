@@ -601,7 +601,9 @@ export default class LocalFileIndex extends ReadyResource {
   }
   //-- End file watching system ----------------------------------------------//
 
-  // -- Lifecycle methods ----------------------------------------------------//
+  //////////////////////////////////////////////////////////////////////////////
+  // Lifecycle methods
+  //////////////////////////////////////////////////////////////////////////////
 
   async _open() {
     this.#log.info("Opening LocalFileIndex...");
@@ -652,5 +654,4 @@ export default class LocalFileIndex extends ReadyResource {
 
     this.#log.info("LocalFileIndex closed successfully!");
   }
-  //-- End lifecycle methods -------------------------------------------------//
 }
