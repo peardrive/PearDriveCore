@@ -56,8 +56,6 @@ export default class PearDrive extends ReadyResource {
   _watchPath;
   /** @private {string} Name of the local indexer */
   _indexName;
-  /** @private List of event callbacks*/
-  _hooks;
   /** @private Stored indexer options */
   _indexOpts;
   /** @private Stored hyperswarm options */
@@ -115,7 +113,6 @@ export default class PearDrive extends ReadyResource {
     super();
 
     this._emitEvent = this._emitEvent.bind(this);
-    this._hooks = {};
 
     // Set save data
     this._networkKey = networkKey
@@ -274,20 +271,6 @@ export default class PearDrive extends ReadyResource {
   //////////////////////////////////////////////////////////////////////////////
   // Public functions
   //////////////////////////////////////////////////////////////////////////////
-
-  /**
-   * Wire up hooks for events here.
-   *
-   * @param {string} event - Event name to hook into
-   * @param {Function} cb - Callback function to run when the event is emitted
-   */
-  on(event, cb) {
-    this.#log.info(`Registering hook for event: ${event}`);
-    if (this._hooks[event]) {
-      this.#log.warn(`Overwriting existing hook for event: ${event}`);
-    }
-    this._hooks[event] = cb;
-  }
 
   /** Activate 'relay' mode */
   activateRelay() {

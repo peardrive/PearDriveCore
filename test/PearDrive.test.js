@@ -21,7 +21,7 @@ utils.createTestFolders();
 // PearDrive core functionality tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("PearDrive: Initialization"), { stealth: true }, async (t) => {
+test(txt.main("PearDrive: Initialization"), { stealth: false }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -173,7 +173,7 @@ test(txt.main("PearDrive: Initialization"), { stealth: true }, async (t) => {
 // Network Event Emitter tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("PearDrive: NETWORK events"), { stealth: true }, async (t) => {
+test(txt.main("PearDrive: NETWORK events"), { stealth: false }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -257,7 +257,7 @@ test(txt.main("PearDrive: NETWORK events"), { stealth: true }, async (t) => {
   t.ok(systemBFired, "SYSTEM event fired on pearDriveB after file deletion");
 });
 
-test(txt.main("PearDrive: PEER events"), { stealth: true }, async (t) => {
+test(txt.main("PearDrive: PEER events"), { stealth: false }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -325,7 +325,7 @@ test(txt.main("PearDrive: PEER events"), { stealth: true }, async (t) => {
   );
 });
 
-test(txt.main("PearDrive: LOCAL events"), { stealth: true }, async (t) => {
+test(txt.main("PearDrive: LOCAL events"), { stealth: false }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -388,11 +388,79 @@ test(txt.main("PearDrive: LOCAL events"), { stealth: true }, async (t) => {
   t.ok(systemFired, "SYSTEM event fired on file deletion");
 });
 
-///////////////////////////////////////////////////////////////////////////////
-// Network communication tests
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+// 1.5.0 Events tests
+////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("PearDrive: Custom message"), { stealth: true }, async (t) => {
+solo(
+  txt.main("PearDrive: Local file events"),
+  { stealth: false },
+  async (t) => {
+    const testnet = await createTestnet();
+    const { bootstrap } = testnet;
+
+    let pd1, pd2;
+    let pd1data, pd2data;
+
+    // Set up PearDrive instance
+    const { pd, localDrivePath, corestorePath, logPath } =
+      await utils.createPearDrive({
+        name: "local-file-events",
+        bootstrap,
+        onError: (err) => t.fail(txt.fail("onError called"), err),
+        indexOpts: {
+          disablePolling: true,
+        },
+      });
+    pd1 = pd;
+    pd1data = {
+      watchPath: localDrivePath,
+      corestorePath,
+      logFilePath: logPath,
+    };
+    await pd1.ready();
+
+    // Test LOCAL_FILE_ADDED event
+    await t.test("LOCAL_FILE_ADDED event", async (subtest) => {
+      try {
+        // Add event hook
+        let hookFired = false;
+        pd1.on(C.EVENT.LOCAL_FILE_ADDED, (data) => {
+          hookFired = true;
+          subtest.pass("LOCAL_FILE_ADDED event fired");
+        });
+
+        // Create a file
+        const file = utils.createRandomFile(localDrivePath);
+        await pd1.syncLocalFilesOnce();
+
+        await utils.wait(5);
+        if (!hookFired) subtest.fail("LOCAL_FILE_ADDED event not fired");
+      } catch (error) {
+        subtest.fail("Error occurred", error);
+      }
+    });
+
+    // Test LOCAL_FILE_CHANGED event
+    await t.test("LOCAL_FILE_CHANGED event", async (subtest) => {
+      // Create a file
+      await pd1.syncLocalFilesOnce();
+    });
+
+    // Test LOCAL_FILE_REMOVED event
+    await t.test("LOCAL_FILE_REMOVED event", async (subtest) => {
+      // Create a file
+      const file = utils.createRandomFile(localDrivePath);
+      await pd1.syncLocalFilesOnce();
+    });
+  }
+);
+
+////////////////////////////////////////////////////////////////////////////////
+// Network communication tests
+////////////////////////////////////////////////////////////////////////////////
+
+test(txt.main("PearDrive: Custom message"), { stealth: false }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -430,7 +498,7 @@ test(txt.main("PearDrive: Custom message"), { stealth: true }, async (t) => {
 // File viewing tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("PearDrive: List local files"), { stealth: true }, async (t) => {
+test(txt.main("PearDrive: List local files"), { stealth: false }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -467,7 +535,7 @@ test(txt.main("PearDrive: List local files"), { stealth: true }, async (t) => {
 
 test(
   txt.main("PearDrive: List network files"),
-  { stealth: true },
+  { stealth: false },
   async (t) => {
     const testnet = await createTestnet();
     const { bootstrap } = testnet;
@@ -558,7 +626,7 @@ test(
 
 test(
   txt.main("PearDrive: Test single file download"),
-  { stealth: true },
+  { stealth: false },
   async (t) => {
     const testnet = await createTestnet();
     const { bootstrap } = testnet;
@@ -605,7 +673,7 @@ test(
 
 test(
   txt.main("PearDrive: Download five files"),
-  { stealth: true },
+  { stealth: false },
   async (t) => {
     const testnet = await createTestnet();
     const { bootstrap } = testnet;
@@ -669,7 +737,7 @@ test(
   }
 );
 
-test(txt.main("PearDrive: File relaying"), { stealth: true }, async (t) => {
+test(txt.main("PearDrive: File relaying"), { stealth: false }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 

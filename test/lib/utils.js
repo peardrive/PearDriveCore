@@ -199,6 +199,8 @@ export function areObjectsEqual(obj1, obj2) {
  *    @param {Uint8Array[]} opts.bootstrap - DHT bootstrap nodes
  *    @param {Function} [opts.onError] - Optional error handler callback
  *    @param {Object} [opts.indexOpts] - Optional index options
+ *    @param {boolean} [opts.indexOpts.disablePolling] - Option to disable
+ *      automatic polling
  *
  * @returns {Promise<Object>} - { pd, localDrivePath, corestorePath, logPath }
  */
@@ -207,7 +209,7 @@ export async function createPearDrive({
   bootstrap,
   onError = () => {},
   indexOpts = {
-    poll: true,
+    disablePolling: !!indexOpts.disablePolling,
     pollInterval: 500,
   },
 }) {
