@@ -23,7 +23,6 @@ import ReadyResource from "ready-resource";
 import * as C from "./constants.js";
 import * as utils from "./utils/index.js";
 import LocalFileIndex from "./LocalFileIndex.js";
-const { LFI_EVENT, IM_EVENT } = C;
 
 /*******************************************************************************
  * IndexManager
@@ -887,16 +886,19 @@ export class IndexManager extends ReadyResource {
     // Local index initialization
     await this.localIndex.ready();
 
-    // Connect events
-    /* this.localIndex.on(LFI_EVENT.FILE_ADDED, (data) =>
-      console.log("FILE ADDED:", data)
-    );
-    this.localIndex.on(LFI_EVENT.FILE_REMOVED, (data) => {
+    // Wire up LFI event listeners
+    this.localIndex.on(C.LFI_EVENT.FILE_ADDED, (data) => {
+      this.emit(C.IM_EVENT.LOCAL_FILE_ADDED, data);
+      console.log("FILE ADDED:", data);
+    });
+    this.localIndex.on(C.LFI_EVENT.FILE_REMOVED, (data) => {
+      this.emit(C.IM_EVENT.LOCAL_FILE_REMOVED, data);
       console.log("FILE REMOVED:", data);
     });
-    this.localIndex.on(LFI_EVENT.FILE_CHANGED, (data) => {
+    this.localIndex.on(C.LFI_EVENT.FILE_CHANGED, (data) => {
+      this.emit(C.IM_EVENT.LOCAL_FILE_CHANGED, data);
       console.log("FILE CHANGED:", data);
-    }); */
+    });
 
     // Relay initialization
     if (this.relay) this.startRelay();

@@ -53,6 +53,13 @@ export const EVENT = {
   ERROR: "[PD]: error_update",
   /** Download progress info */
   DOWNLOAD_PROGRESS: "[PD]: download_progress",
+
+  /** Local file added (Wrapper for IM event) */
+  LOCAL_FILE_ADDED: "[PD]: local_file_added",
+  /** Local file removed (Wrapper for IM event) */
+  LOCAL_FILE_REMOVED: "[PD]: local_file_removed",
+  /** Local file changed (Wrapper for IM event) */
+  LOCAL_FILE_CHANGED: "[PD]: local_file_changed",
 };
 
 /**
@@ -86,4 +93,11 @@ export const LFI_EVENT = {
  *
  * @protected
  */
-export const IM_EVENT = {};
+export const IM_EVENT = {
+  /** Mirrors emitted from LFI FILE_ADDED */
+  LOCAL_FILE_ADDED: "[IM]: local_file_added",
+  /** Mirrors emitted from LFI FILE_REMOVED */
+  LOCAL_FILE_REMOVED: "[IM]: local_file_removed",
+  /** Mirrors emitted from LFI FILE_CHANGED */
+  LOCAL_FILE_CHANGED: "[IM]: local_file_changed",
+};

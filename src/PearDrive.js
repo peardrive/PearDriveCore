@@ -92,8 +92,9 @@ export default class PearDrive extends ReadyResource {
    *      log file (if logToFile=true).
    *    @param {string} [opts.logOpts.level=LOG_LEVELS.INFO] - Log level.
    *    @param {Object} [opts.indexOpts] - Options for the index manager.
-   *    @param {boolean} [opts.indexOpts.poll=true] - Whether to poll for
-   *      changes in the local file index automatically.
+   *    @param {boolean} [opts.indexOpts.disablePolling=false] - Whether to poll
+   *      for changes in the local file index automatically. (Only disable
+   *      polling for testing purposes)
    *    @param {number} [opts.indexOpts.pollInterval=500] - Interval in
    *      milliseconds for polling the local file index.
    *    @param {boolean} [opts.indexOpts.relay] - Whether to automaically
@@ -131,9 +132,13 @@ export default class PearDrive extends ReadyResource {
       seed: normalizedSeed,
     };
     this._logOpts = logOpts;
-    const { poll = true, pollInterval = 500, relay = false } = indexOpts;
+    const {
+      disablePolling = false,
+      pollInterval = 500,
+      relay = false,
+    } = indexOpts;
     this._indexOpts = {
-      poll,
+      disablePolling,
       pollInterval,
       relay,
     };
@@ -465,7 +470,7 @@ export default class PearDrive extends ReadyResource {
    * @returns {Promise<void>}
    */
   async syncLocalFilesOnce() {
-    if (this._indexOpts.poll) {
+    if (!this._indexOpts.disablePolling) {
       this.#log.warn(
         "Can't manually sync local files, automatic syncing is enabled."
       );
@@ -1014,8 +1019,20 @@ export default class PearDrive extends ReadyResource {
   async _open() {
     this.#log.info("Opening PearDrive...");
 
+    // Ready resources
     await this._store.ready();
     await this._indexManager.ready();
+
+    // Wire up IM event listeners
+    this._indexManager.on(C.IM_EVENT.LOCAL_FILE_ADDED, (data) => {
+      this.emit(C.EVENT.LOCAL_FILE_ADDED, data);
+    });
+    this._indexManager.on(C.IM_EVENT.LOCAL_FILE_REMOVED, (data) => {
+      this.emit(C.EVENT.LOCAL_FILE_REMOVED, data);
+    });
+    this._indexManager.on(C.IM_EVENT.LOCAL_FILE_CHANGED, (data) => {
+      this.emit(C.EVENT.LOCAL_FILE_CHANGED, data);
+    });
 
     this.#log.info("PearDrive opened successfully!");
   }

@@ -188,7 +188,7 @@ export default class LocalFileIndex extends ReadyResource {
     this.#log.info("Starting automatic polling for local files...");
 
     this._running = true;
-    this._indexOpts.poll = true;
+    this._indexOpts.disablePolling = false;
 
     this.#pollAndSync(true);
   }
