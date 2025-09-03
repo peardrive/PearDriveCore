@@ -889,15 +889,12 @@ export class IndexManager extends ReadyResource {
     // Wire up LFI event listeners
     this.localIndex.on(C.LFI_EVENT.FILE_ADDED, (data) => {
       this.emit(C.IM_EVENT.LOCAL_FILE_ADDED, data);
-      console.log("FILE ADDED:", data);
     });
     this.localIndex.on(C.LFI_EVENT.FILE_REMOVED, (data) => {
       this.emit(C.IM_EVENT.LOCAL_FILE_REMOVED, data);
-      console.log("FILE REMOVED:", data);
     });
     this.localIndex.on(C.LFI_EVENT.FILE_CHANGED, (data) => {
       this.emit(C.IM_EVENT.LOCAL_FILE_CHANGED, data);
-      console.log("FILE CHANGED:", data);
     });
 
     // Relay initialization
