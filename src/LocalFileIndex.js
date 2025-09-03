@@ -543,22 +543,43 @@ export default class LocalFileIndex extends ReadyResource {
   /** Update a single file in the index */
   async #updateFile(relativePath, fullPath) {
     if (this.#isBusy(relativePath)) {
-      this.#log.info("Skipping busy file:", relativePath);
+      this.#log.debug("Skipping busy file:", relativePath);
       return;
     }
 
     try {
       const fileStat = fs.statSync(fullPath);
 
-      // Check if we need to recalculate hash
+      // Check if we need to hash
       const cachedMeta = this.#metadataCache.get(relativePath);
-      let needsHash = true;
-      let prevHash;
-      let hash;
+      let needsWrite = false;
+      let changed = false;
+      let prevHash, hash;
 
+      // If the file was previously registered
       if (cachedMeta) {
         prevHash = cachedMeta.hash;
         hash = cachedMeta.hash;
+
+        // Check if file has already been logged and is unchanged. If so, noop
+        const unchanged =
+          cachedMeta.size === fileStat.size &&
+          cachedMeta.modified === fileStat.mtimeMs;
+        if (unchanged) {
+          this.#log.debug("File unchanged no event emitting:", relativePath);
+          return;
+        }
+
+        // A change has occurred, rehash and check if hash has changed
+        hash = await this.#hashFile(fullPath);
+        changed = hash !== prevHash;
+        needsWrite = true;
+      }
+
+      // If the file is new since last init/first init, always hash
+      else {
+        hash = await this.#hashFile(fullPath);
+        needsWrite = true;
       }
 
       // File hasn't changed, use cached hash
@@ -570,17 +591,13 @@ export default class LocalFileIndex extends ReadyResource {
         needsHash = false;
       }
 
-      // Must be dealing with a new or changed file
-      else {
-        // File changed, recalculate hash
-        hash = await this.#hashFile(fullPath);
-        this.emit(LFI_EVENT.FILE_CHANGED, {
-          path: relativePath,
-          prevHash,
-          hash,
-        });
+      // If nothing is supposed to change from last record of this file, return
+      if (!needsWrite) {
+        this.#log.debug("File unchanged no event emitting:", relativePath);
+        return;
       }
 
+      // Handle writing to bee
       const metadata = {
         path: relativePath,
         size: fileStat.size,
@@ -588,39 +605,33 @@ export default class LocalFileIndex extends ReadyResource {
         hash,
       };
 
-      // Only update if metadata actually changed
-      if (needsHash) {
-        // If dealing with an existing file that was changed
-        if (cachedMeta) {
-          this.#log.info("File updated:", relativePath);
-          await this.#bee.put(relativePath, metadata);
-          this.#metadataCache.set(relativePath, metadata);
+      // Update bee/metadata
+      await this.#bee.put(relativePath, metadata);
+      this.#metadataCache.set(relativePath, metadata);
+
+      // If indexed file got updated
+      if (cachedMeta) {
+        if (changed) {
+          this.#log.debug("File changed:", relativePath);
           this.emit(LFI_EVENT.FILE_CHANGED, {
             path: relativePath,
             prevHash,
             hash,
           });
         }
-
-        // If dealing with new file
-        else {
-          this.#log.info("New file added:", relativePath);
-          await this.#bee.put(relativePath, metadata);
-          this.#metadataCache.set(relativePath, metadata);
-          this.emit(LFI_EVENT.FILE_ADDED, {
-            path: relativePath,
-            hash,
-          });
-        }
-
-        this.#log.info(
-          cachedMeta ? "File updated:" : "New file added:",
-          relativePath
-        );
-
-        // If file was added
-        this._emitEvent(C.EVENT.LOCAL, null);
       }
+
+      // Unindexed file added
+      else {
+        this.#log.debug("New file added:", relativePath);
+        this.emit(LFI_EVENT.FILE_ADDED, {
+          path: relativePath,
+          hash,
+        });
+      }
+
+      // Backwards compat (remove in v1.6)
+      this._emitEvent(C.EVENT.LOCAL, null);
     } catch (err) {
       this.#log.error(`Error updating file ${relativePath}:`, err);
     }
