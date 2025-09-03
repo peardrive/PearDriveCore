@@ -401,6 +401,7 @@ solo(
 
     let pd1, pd2;
     let pd1data, pd2data;
+    let file;
 
     // Set up PearDrive instance
     const { pd, localDrivePath, corestorePath, logPath } =
@@ -422,18 +423,20 @@ solo(
 
     // Test LOCAL_FILE_ADDED event
     await t.test("LOCAL_FILE_ADDED event", async (subtest) => {
+      let hookFired = false;
+
       try {
         // Add event hook
-        let hookFired = false;
         pd1.on(C.EVENT.LOCAL_FILE_ADDED, (data) => {
           hookFired = true;
           subtest.pass("LOCAL_FILE_ADDED event fired");
         });
 
         // Create a file
-        const file = utils.createRandomFile(localDrivePath);
+        file = utils.createRandomFile(localDrivePath);
         await pd1.syncLocalFilesOnce();
 
+        // 5 second max wait timeout, fails if event not fired
         await utils.wait(5);
         if (!hookFired) subtest.fail("LOCAL_FILE_ADDED event not fired");
       } catch (error) {
@@ -443,15 +446,47 @@ solo(
 
     // Test LOCAL_FILE_CHANGED event
     await t.test("LOCAL_FILE_CHANGED event", async (subtest) => {
-      // Create a file
-      await pd1.syncLocalFilesOnce();
+      let hookFired = false;
+      try {
+        // Add event hook
+        pd1.on(C.EVENT.LOCAL_FILE_CHANGED, (data) => {
+          hookFired = true;
+          subtest.pass("LOCAL_FILE_CHANGED event fired");
+        });
+
+        // Modify the file
+        const modifiedContent = "modified content";
+        fs.writeFileSync(file.path, modifiedContent);
+        await pd1.syncLocalFilesOnce();
+
+        // 5 second max wait timeout, fails if event not fired
+        await utils.wait(5);
+        if (!hookFired) subtest.fail("LOCAL_FILE_CHANGED event not fired");
+      } catch (error) {
+        subtest.fail("Error occurred", error);
+      }
     });
 
     // Test LOCAL_FILE_REMOVED event
     await t.test("LOCAL_FILE_REMOVED event", async (subtest) => {
-      // Create a file
-      const file = utils.createRandomFile(localDrivePath);
-      await pd1.syncLocalFilesOnce();
+      let hookFired = false;
+      try {
+        // Add event hook
+        pd1.on(C.EVENT.LOCAL_FILE_REMOVED, (data) => {
+          hookFired = true;
+          subtest.pass("LOCAL_FILE_REMOVED event fired");
+        });
+
+        // Remove the file
+        fs.unlinkSync(file.path);
+        await pd1.syncLocalFilesOnce();
+
+        // 5 second max wait timeout, fails if event not fired
+        await utils.wait(5);
+        if (!hookFired) subtest.fail("LOCAL_FILE_REMOVED event not fired");
+      } catch (error) {
+        subtest.fail("Error occurred", error);
+      }
     });
   }
 );
