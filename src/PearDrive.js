@@ -948,7 +948,6 @@ export default class PearDrive extends ReadyResource {
       this.emit(C.EVENT.LOCAL_FILE_CHANGED, data);
     });
     this._indexManager.on(C.IM_EVENT.PEER_FILE_ADDED, (data) => {
-      console.log("Peer file added!", data);
       this.emit(C.EVENT.PEER_FILE_ADDED, data);
     });
     this._indexManager.on(C.IM_EVENT.PEER_FILE_REMOVED, (data) => {

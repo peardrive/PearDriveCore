@@ -157,8 +157,7 @@ export class IndexManager extends ReadyResource {
 
     // Initialize the snapshot update for this peer
     await bee.core.update();
-    const initialUpdate =
-      typeof bee.version === "number" ? bee.version : bee.core.length;
+    const initialUpdate = bee.version;
     this._peerUpdates.set(peerId, initialUpdate);
 
     // Emit network event if bee has data
@@ -905,8 +904,7 @@ export class IndexManager extends ReadyResource {
     const prevUpdate = this._peerUpdates.get(peerId) ?? 0;
 
     // If called without an update, noop
-    const curUpdate =
-      typeof bee.version === "number" ? bee.version : bee.core.length;
+    const curUpdate = bee.version;
     if (curUpdate === prevUpdate) return;
 
     // Create snapshot at previous head
@@ -917,47 +915,64 @@ export class IndexManager extends ReadyResource {
       keys: true,
       values: true,
     })) {
-      const keyBuf = entry.key;
-      const filePath = utils.formatToStr(keyBuf);
+      // Parse diff stream data for file path
+      const keySide = entry.right ?? entry.left;
+      if (!keySide || typeof keySide.key === "undefined") {
+        this.#log.warn("Diff entry missing key; skipping", entry?.type);
+        continue;
+      }
+      const filePath = keySide.key;
       const peerKey = utils.formatToStr(bee.key);
 
-      if (entry.type === "del") {
-        // Deleted: no hashes needed
-        this.emit(C.IM_EVENT.PEER_FILE_REMOVED, { filePath, peerKey });
-        continue;
+      // Diff stream values
+      const curVal = entry.left?.value ?? null; // current
+      const prevVal = entry.right?.value ?? null; // previous
+
+      // Determine if this is a file addition, deletion or change
+      let updateType = null;
+      if (curVal && prevVal) {
+        updateType = "changed";
+      } else if (curVal && !prevVal) {
+        updateType = "added";
+      } else if (!curVal && prevVal) {
+        updateType = "removed";
       }
 
-      // 'put' — could be ADDED or CHANGED
-      const leftVal =
-        entry.left && entry.left.value
-          ? utils.decodeBeeValue(entry.left.value)
-          : null;
-      const rightVal =
-        entry.right && entry.right.value
-          ? utils.decodeBeeValue(entry.right.value)
-          : null;
+      // If an updateType cannot be determined (this shouldn't ever happen)
+      if (!updateType) {
+        this.#log.warn("Could not determine update type. skipping:", entry);
+        return;
+      }
 
-      // If there was no left value -> ADDED
-      if (!leftVal && rightVal) {
+      // Handle file addition
+      if (updateType === "added") {
         this.emit(C.IM_EVENT.PEER_FILE_ADDED, {
           filePath,
-          peerKey,
-          hash: rightVal?.hash ?? null,
+          peerKey: peerId,
+          hash: curVal.hash,
         });
-        continue;
       }
 
-      // If both exist, compare hashes. Different = CHANGED
-      const prevHash = leftVal?.hash ?? null;
-      const nextHash = rightVal?.hash ?? null;
+      // Handle file change
+      if (updateType === "changed") {
+        // Make sure hashes have changed. If not, noop
+        const hash = curVal.hash;
+        const prevHash = prevVal.hash;
+        if (hash === prevHash) return;
 
-      // Only emit CHANGED if content actually changed
-      if (prevHash !== nextHash) {
         this.emit(C.IM_EVENT.PEER_FILE_CHANGED, {
           filePath,
-          peerKey,
-          hash: nextHash,
-          prevHash,
+          peerKey: peerId,
+          hash: curVal.hash,
+          prevHash: prevVal.hash,
+        });
+      }
+
+      // Handle file removal
+      if (updateType === "removed") {
+        this.emit(C.IM_EVENT.PEER_FILE_REMOVED, {
+          filePath,
+          peerKey: peerId,
         });
       }
     }

@@ -513,7 +513,8 @@ solo(txt.main("PearDrive: Peer file events"), { stealth: false }, async (t) => {
 
   let file;
   let filePath;
-  let peerKeyOnA;
+  let peerKeyOnA = peerA.pd.publicKey;
+  let peerKeyOnB = peerB.pd.publicKey;
   let firstHash;
   let secondHash;
 
@@ -522,7 +523,7 @@ solo(txt.main("PearDrive: Peer file events"), { stealth: false }, async (t) => {
     let hookFired = false;
 
     // Listen on peer A for peer events about peer B’s files
-    peerA.pd.on(C.EVENT.PEER_FILE_ADDED, (data) => {
+    peerA.pd.on(C.EVENT.PEER_FILE_ADDED, async (data) => {
       try {
         hookFired = true;
 
@@ -548,7 +549,7 @@ solo(txt.main("PearDrive: Peer file events"), { stealth: false }, async (t) => {
 
     // give replication/diff a moment to propagate
     await utils.wait(5);
-    if (!hookFired) subtest.fail("PEER_FILE_ADDED event not fired");
+    if (!hookFired) subtest.fail("PEER_FILE_ADDED event not fired, timed out");
   });
 
   // Test PEER_FILE_CHANGED event
@@ -559,29 +560,25 @@ solo(txt.main("PearDrive: Peer file events"), { stealth: false }, async (t) => {
       try {
         hookFired = true;
 
-        subtest.equal(
+        subtest.is(
           data.peerKey,
-          peerKeyOnA,
+          peerKeyOnB,
           "peerKey matches the remote peer index key"
         );
-        subtest.equal(
+        subtest.is(
           data.filePath,
           filePath,
           "filePath matches the previously added file"
         );
         subtest.ok(!!data.hash, "has new hash");
         subtest.ok(!!data.prevHash, "has prevHash");
-        subtest.notEqual(
-          data.hash,
-          data.prevHash,
-          "hash changed from prevHash"
-        );
+        subtest.not(data.hash, data.prevHash, "hash changed from prevHash");
 
         secondHash = data.hash;
 
         subtest.pass("PEER_FILE_CHANGED event fired");
       } catch (e) {
-        subtest.fail("Bad payload for PEER_FILE_CHANGED", e);
+        subtest.fail("Bad payload for PEER_FILE_CHANGED", data, e);
       }
     });
 
@@ -593,7 +590,7 @@ solo(txt.main("PearDrive: Peer file events"), { stealth: false }, async (t) => {
 
     if (!hookFired) subtest.fail("PEER_FILE_CHANGED event not fired");
     else if (firstHash && secondHash) {
-      subtest.notEqual(firstHash, secondHash, "content hash actually changed");
+      subtest.not(firstHash, secondHash, "content hash actually changed");
     }
   });
 
