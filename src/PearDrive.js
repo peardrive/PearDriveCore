@@ -114,6 +114,8 @@ export default class PearDrive extends ReadyResource {
 
     this._emitEvent = this._emitEvent.bind(this);
 
+    this._hooks = {};
+
     // Set save data
     this._networkKey = networkKey
       ? utils.formatToBuffer(networkKey)
@@ -769,7 +771,7 @@ export default class PearDrive extends ReadyResource {
    */
   _emitEvent(eventName, payload) {
     this.#log.info(`Emitting event: ${eventName}`, payload);
-    if (!this._hooks[eventName]) return;
+    if (!this._hooks || !this._hooks[eventName]) return;
 
     /**
      * Prevent infinite loop by running errors thrown inside callbacks in
@@ -1015,6 +1017,16 @@ export default class PearDrive extends ReadyResource {
     });
     this._indexManager.on(C.IM_EVENT.LOCAL_FILE_CHANGED, (data) => {
       this.emit(C.EVENT.LOCAL_FILE_CHANGED, data);
+    });
+    this._indexManager.on(C.IM_EVENT.PEER_FILE_ADDED, (data) => {
+      console.log("Peer file added!", data);
+      this.emit(C.EVENT.PEER_FILE_ADDED, data);
+    });
+    this._indexManager.on(C.IM_EVENT.PEER_FILE_REMOVED, (data) => {
+      this.emit(C.EVENT.PEER_FILE_REMOVED, data);
+    });
+    this._indexManager.on(C.IM_EVENT.PEER_FILE_CHANGED, (data) => {
+      this.emit(C.EVENT.PEER_FILE_CHANGED, data);
     });
 
     this.#log.info("PearDrive opened successfully!");

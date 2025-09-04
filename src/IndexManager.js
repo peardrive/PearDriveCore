@@ -89,8 +89,12 @@ export class IndexManager extends ReadyResource {
       uploads,
       downloads,
     });
-    /** @protected {Map<string, Hyperbee>} }All nonlocal PearDrives hyperbees */
+    /** @protected {Map<string, Hyperbee>} All nonlocal PearDrives hyperbees */
     this.remoteIndexes = new Map();
+    /**
+     * @private {Map<string, number>} previous read (version, length) per peer
+     */
+    this._peerUpdates = new Map();
     this.watchPath = watchPath;
     this._rpcConnections = rpcConnections;
     this._uploads = uploads;
@@ -147,7 +151,6 @@ export class IndexManager extends ReadyResource {
    * you fire a NETWORK update back to PearDrive.
    *
    * @param {string} peerId – Hex string of the peer’s public key
-   *
    * @param {Hyperbee} bee – An already–ready Hyperbee instance
    */
   async addBee(peerId, bee) {
@@ -155,6 +158,12 @@ export class IndexManager extends ReadyResource {
 
     // Add to index
     this.remoteIndexes.set(peerId, bee);
+
+    // Initialize the snapshot update for this peer
+    await bee.core.update();
+    const initialUpdate =
+      typeof bee.version === "number" ? bee.version : bee.core.length;
+    this._peerUpdates.set(peerId, initialUpdate);
 
     // Emit network event if bee has data
     let hasInitialData = false;
@@ -168,8 +177,15 @@ export class IndexManager extends ReadyResource {
     }
 
     // Emit event on append
-    bee.core.on("append", () => {
+    bee.core.on("append", async () => {
       this.#log.info(`Remote index updated for peer ${peerId}`);
+      try {
+        await this.#onPeerUpdate(peerId);
+      } catch (error) {
+        this.#log.error(
+          `Error updating remote index for peer ${peerId}: ${error}`
+        );
+      }
       this._emitEvent(C.EVENT.NETWORK, {
         type: C.EVENT.NETWORK,
         peerId,
@@ -184,6 +200,7 @@ export class IndexManager extends ReadyResource {
    */
   handlePeerDisconnected(peerId) {
     this.remoteIndexes.delete(peerId);
+    this._peerUpdates.delete(peerId);
     this.#log.info(`Remote index removed for peer ${peerId}`);
   }
 
@@ -874,6 +891,83 @@ export class IndexManager extends ReadyResource {
         this._indexOpts.pollInterval * 3
       );
     }
+  }
+
+  /** Handle peer bee appends */
+  async #onPeerUpdate(peerId) {
+    this.#log.info(`Peer ${peerId} updated`);
+
+    // Get bee
+    const bee = this.remoteIndexes.get(peerId);
+    if (!bee) {
+      this.#log.warn(`Peer ${peerId} not found`);
+      return;
+    }
+    await bee.core.update();
+
+    // Previous snapshot update
+    const prevUpdate = this._peerUpdates.get(peerId) ?? 0;
+
+    // If called without an update, noop
+    const curUpdate =
+      typeof bee.version === "number" ? bee.version : bee.core.length;
+    if (curUpdate === prevUpdate) return;
+
+    // Create snapshot at previous head
+    const prevSnap = bee.checkout(prevUpdate);
+
+    // Diff current (bee) vs previous snapshot
+    for await (const entry of bee.createDiffStream(prevSnap, {
+      keys: true,
+      values: true,
+    })) {
+      const keyBuf = entry.key;
+      const filePath = utils.formatToStr(keyBuf);
+      const peerKey = utils.formatToStr(bee.key);
+
+      if (entry.type === "del") {
+        // Deleted: no hashes needed
+        this.emit(C.IM_EVENT.PEER_FILE_REMOVED, { filePath, peerKey });
+        continue;
+      }
+
+      // 'put' — could be ADDED or CHANGED
+      const leftVal =
+        entry.left && entry.left.value
+          ? utils.decodeBeeValue(entry.left.value)
+          : null;
+      const rightVal =
+        entry.right && entry.right.value
+          ? utils.decodeBeeValue(entry.right.value)
+          : null;
+
+      // If there was no left value -> ADDED
+      if (!leftVal && rightVal) {
+        this.emit(C.IM_EVENT.PEER_FILE_ADDED, {
+          filePath,
+          peerKey,
+          hash: rightVal?.hash ?? null,
+        });
+        continue;
+      }
+
+      // If both exist, compare hashes. Different = CHANGED
+      const prevHash = leftVal?.hash ?? null;
+      const nextHash = rightVal?.hash ?? null;
+
+      // Only emit CHANGED if content actually changed
+      if (prevHash !== nextHash) {
+        this.emit(C.IM_EVENT.PEER_FILE_CHANGED, {
+          filePath,
+          peerKey,
+          hash: nextHash,
+          prevHash,
+        });
+      }
+    }
+
+    // Advance snapshot head
+    this._peerUpdates.set(peerId, curUpdate);
   }
 
   //////////////////////////////////////////////////////////////////////////////

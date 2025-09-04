@@ -60,6 +60,12 @@ export const EVENT = {
   LOCAL_FILE_REMOVED: "[PD]: local_file_removed",
   /** Local file changed (Wrapper for IM event) */
   LOCAL_FILE_CHANGED: "[PD]: local_file_changed",
+  /** Peer file added (Wrapper for IM event) */
+  PEER_FILE_ADDED: "[PD]: peer_file_added",
+  /** Peer file removed (Wrapper for IM event) */
+  PEER_FILE_REMOVED: "[PD]: peer_file_removed",
+  /** Peer file changed (Wrapper for IM event) */
+  PEER_FILE_CHANGED: "[PD]: peer_file_changed",
 };
 
 /**
@@ -100,4 +106,11 @@ export const IM_EVENT = {
   LOCAL_FILE_REMOVED: "[IM]: local_file_removed",
   /** Mirrors emitted from LFI FILE_CHANGED */
   LOCAL_FILE_CHANGED: "[IM]: local_file_changed",
+
+  /** When a peer has added a file */
+  PEER_FILE_ADDED: "[IM]: peer_file_added",
+  /** When a peer has removed a file */
+  PEER_FILE_REMOVED: "[IM]: peer_file_removed",
+  /** When a peer's file has changed */
+  PEER_FILE_CHANGED: "[IM]: peer_file_changed",
 };
