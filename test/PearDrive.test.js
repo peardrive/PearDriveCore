@@ -602,12 +602,12 @@ solo(txt.main("PearDrive: Peer file events"), { stealth: false }, async (t) => {
       try {
         hookFired = true;
 
-        subtest.equal(
+        subtest.is(
           data.peerKey,
           peerKeyOnA,
           "peerKey matches the remote peer index key"
         );
-        subtest.equal(
+        subtest.is(
           data.filePath,
           filePath,
           "filePath matches the previously tracked file"
