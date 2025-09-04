@@ -392,15 +392,15 @@ test(txt.main("PearDrive: LOCAL events"), { stealth: false }, async (t) => {
 // 1.5.0 Events tests
 ////////////////////////////////////////////////////////////////////////////////
 
-solo(
+test(
   txt.main("PearDrive: Local file events"),
   { stealth: false },
   async (t) => {
     const testnet = await createTestnet();
     const { bootstrap } = testnet;
 
-    let pd1, pd2;
-    let pd1data, pd2data;
+    let pd1;
+    let pd1data;
     let file;
 
     // Set up PearDrive instance
@@ -490,6 +490,149 @@ solo(
     });
   }
 );
+
+solo(txt.main("PearDrive: Peer file events"), { stealth: false }, async (t) => {
+  const testnet = await createTestnet();
+  const { bootstrap } = testnet;
+
+  const [peerA, peerB] = await utils.createNetwork({
+    baseName: "peer-file-events",
+    bootstrap,
+    n: 2,
+    onError: (err) => t.fail(txt.fail("onError called"), err),
+    indexOpts: {
+      // keep polling off so we control sync points deterministically
+      disablePolling: true,
+    },
+  });
+
+  t.teardown(async () => {
+    await peerA.pd.close();
+    await peerB.pd.close();
+  });
+
+  let file;
+  let filePath;
+  let peerKeyOnA;
+  let firstHash;
+  let secondHash;
+
+  // Test PEER_FILE_ADDED event
+  await t.test("PEER_FILE_ADDED event", async (subtest) => {
+    let hookFired = false;
+
+    // Listen on peer A for peer events about peer B’s files
+    peerA.pd.on(C.EVENT.PEER_FILE_ADDED, (data) => {
+      try {
+        hookFired = true;
+
+        // Basic shape checks
+        subtest.ok(typeof data.filePath === "string", "has filePath");
+        subtest.ok(typeof data.peerKey === "string", "has peerKey");
+        subtest.ok(!!data.hash, "has hash");
+
+        // Stash for next tests
+        filePath = data.filePath;
+        peerKeyOnA = data.peerKey;
+        firstHash = data.hash;
+
+        subtest.pass("PEER_FILE_ADDED event fired");
+      } catch (e) {
+        subtest.fail("Bad payload for PEER_FILE_ADDED", e);
+      }
+    });
+
+    // Create a file on peer B and sync its local index
+    file = utils.createRandomFile(peerB.pd.watchPath);
+    await peerB.pd.syncLocalFilesOnce();
+
+    // give replication/diff a moment to propagate
+    await utils.wait(5);
+    if (!hookFired) subtest.fail("PEER_FILE_ADDED event not fired");
+  });
+
+  // Test PEER_FILE_CHANGED event
+  await t.test("PEER_FILE_CHANGED event", async (subtest) => {
+    let hookFired = false;
+
+    peerA.pd.on(C.EVENT.PEER_FILE_CHANGED, (data) => {
+      try {
+        hookFired = true;
+
+        subtest.equal(
+          data.peerKey,
+          peerKeyOnA,
+          "peerKey matches the remote peer index key"
+        );
+        subtest.equal(
+          data.filePath,
+          filePath,
+          "filePath matches the previously added file"
+        );
+        subtest.ok(!!data.hash, "has new hash");
+        subtest.ok(!!data.prevHash, "has prevHash");
+        subtest.notEqual(
+          data.hash,
+          data.prevHash,
+          "hash changed from prevHash"
+        );
+
+        secondHash = data.hash;
+
+        subtest.pass("PEER_FILE_CHANGED event fired");
+      } catch (e) {
+        subtest.fail("Bad payload for PEER_FILE_CHANGED", e);
+      }
+    });
+
+    // Modify the file on peer B and sync
+    fs.writeFileSync(file.path, "modified content " + Date.now());
+    await peerB.pd.syncLocalFilesOnce();
+
+    await utils.wait(5);
+
+    if (!hookFired) subtest.fail("PEER_FILE_CHANGED event not fired");
+    else if (firstHash && secondHash) {
+      subtest.notEqual(firstHash, secondHash, "content hash actually changed");
+    }
+  });
+
+  // Test PEER_FILE_REMOVED event
+  await t.test("PEER_FILE_REMOVED event", async (subtest) => {
+    let hookFired = false;
+
+    peerA.pd.on(C.EVENT.PEER_FILE_REMOVED, (data) => {
+      try {
+        hookFired = true;
+
+        subtest.equal(
+          data.peerKey,
+          peerKeyOnA,
+          "peerKey matches the remote peer index key"
+        );
+        subtest.equal(
+          data.filePath,
+          filePath,
+          "filePath matches the previously tracked file"
+        );
+        subtest.ok(!("hash" in data), "no hash on removed");
+        subtest.ok(!("prevHash" in data), "no prevHash on removed");
+
+        subtest.pass("PEER_FILE_REMOVED event fired");
+      } catch (e) {
+        subtest.fail("Bad payload for PEER_FILE_REMOVED", e);
+      }
+    });
+
+    // Delete the file on peer B and sync
+    fs.unlinkSync(file.path);
+    await peerB.pd.syncLocalFilesOnce();
+
+    await utils.wait(5);
+
+    if (!hookFired) subtest.fail("PEER_FILE_REMOVED event not fired");
+  });
+});
 
 ////////////////////////////////////////////////////////////////////////////////
 // Network communication tests

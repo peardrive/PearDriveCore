@@ -112,10 +112,6 @@ export default class PearDrive extends ReadyResource {
   }) {
     super();
 
-    this._emitEvent = this._emitEvent.bind(this);
-
-    this._hooks = {};
-
     // Set save data
     this._networkKey = networkKey
       ? utils.formatToBuffer(networkKey)
@@ -164,7 +160,6 @@ export default class PearDrive extends ReadyResource {
       store: this._store,
       log: this.#log,
       watchPath: watchPath,
-      emitEvent: this._emitEvent,
       indexOpts: this._indexOpts,
       uploads: this._uploads,
       downloads: this._downloads,
@@ -377,7 +372,7 @@ export default class PearDrive extends ReadyResource {
     if (!rpc) {
       const err = new Error(`No RPC connection found for peer ${peerId}`);
       this.#log.error(err);
-      this._emitEvent(C.EVENT.ERROR, err);
+      this.emit(C.EVENT.ERROR, err);
       throw err;
     }
 
@@ -681,7 +676,7 @@ export default class PearDrive extends ReadyResource {
       return keyHex;
     } catch (err) {
       this.#log.error(`Error in LOCAL_INDEX_KEY_REQUEST for ${peerId}`, err);
-      this._emitEvent(C.EVENT.ERROR, err);
+      this.emit(C.EVENT.ERROR, err);
       throw err;
     }
   }
@@ -715,7 +710,7 @@ export default class PearDrive extends ReadyResource {
       this.#log.info(`Received LOCAL_INDEX_KEY from ${peerId}:`, peerKeyHex);
     } catch (err) {
       this.#log.error(`Error requesting local index key from ${peerId}`, err);
-      this._emitEvent(C.EVENT.ERROR, err);
+      this.emit(C.EVENT.ERROR, err);
       return;
     }
 
@@ -737,7 +732,7 @@ export default class PearDrive extends ReadyResource {
     }
 
     // Emit peer update event
-    this._emitEvent(C.EVENT.PEER, peerId);
+    // this._emitEvent(C.EVENT.PEER, peerId);
     this.#log.info(`Peer ${peerId} connected and ready!`);
   }
 
@@ -757,73 +752,7 @@ export default class PearDrive extends ReadyResource {
     this._indexManager.handlePeerDisconnected(peerId);
 
     // Emit peer update event
-    this._emitEvent(C.EVENT.PEER, peerId);
-  }
-
-  /**
-   * Emit events to registered hooks.
-   *
-   * @param {string} event - Event name
-   *
-   * @param {any} payload - Arguments to pass to the event handlers
-   *
-   * @private
-   */
-  _emitEvent(eventName, payload) {
-    this.#log.info(`Emitting event: ${eventName}`, payload);
-    if (!this._hooks || !this._hooks[eventName]) return;
-
-    /**
-     * Prevent infinite loop by running errors thrown inside callbacks in
-     * child function
-     */
-    const emitError = (error) => {
-      const cb = this._hooks[C.EVENT.ERROR];
-      if (!cb) return;
-      try {
-        cb(error);
-      } catch (err) {
-        this.#log.error("Error in ERROR hook for", eventName, err);
-      }
-    };
-
-    /**
-     * Run system events once when they are specifically called, and also
-     * run them when any other event is emitted.
-     */
-    const systemEvent = () => {
-      const cb = this._hooks[C.EVENT.SYSTEM];
-      if (!cb) return;
-      try {
-        cb(payload);
-      } catch (err) {
-        this.#log.error("Error in SYSTEM hook for", eventName, err);
-        emitError(err);
-        return;
-      }
-    };
-
-    // Only run system and error callbacks once
-    if (eventName === C.EVENT.SYSTEM) {
-      systemEvent();
-      return;
-    }
-    if (eventName === C.EVENT.ERROR) {
-      emitError(payload);
-      return;
-    }
-
-    systemEvent();
-
-    // Run user-defined hooks
-    const cb = this._hooks[eventName];
-    if (!cb) return;
-    try {
-      cb(payload);
-    } catch (err) {
-      this.#log.error("Error in hook for", eventName, err);
-      emitError(err);
-    }
+    // this._emitEvent(C.EVENT.PEER, peerId);
   }
 
   /**
@@ -858,7 +787,7 @@ export default class PearDrive extends ReadyResource {
         )}`,
         err
       );
-      this._emitEvent(C.EVENT.ERROR, err);
+      this.emit(C.EVENT.ERROR, err);
     }
   }
 
@@ -889,7 +818,7 @@ export default class PearDrive extends ReadyResource {
         )}`,
         err
       );
-      this._emitEvent(C.EVENT.ERROR, err);
+      this.emit(C.EVENT.ERROR, err);
       throw err;
     }
   }
@@ -925,7 +854,7 @@ export default class PearDrive extends ReadyResource {
         `Error handling MESSAGE from ${conn.remotePublicKey}`,
         err
       );
-      this._emitEvent(C.EVENT.ERROR, err);
+      this.emit(C.EVENT.ERROR, err);
     }
   }
 
@@ -954,7 +883,7 @@ export default class PearDrive extends ReadyResource {
     if (!rpc) {
       const err = new Error(`No RPC connection found for peer ${peerId}`);
       this.#log.error(err);
-      this._emitEvent(C.EVENT.ERROR, err);
+      this.emit(C.EVENT.ERROR, err);
       throw err;
     }
 
@@ -962,7 +891,7 @@ export default class PearDrive extends ReadyResource {
     if (typeof payload === "undefined") {
       const err = new Error(`Cannot send undefined payload to peer ${peerId}`);
       this.#log.error(err);
-      this._emitEvent(C.EVENT.ERROR, err);
+      this.emit(C.EVENT.ERROR, err);
       throw err;
     }
 

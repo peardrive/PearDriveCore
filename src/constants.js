@@ -49,11 +49,11 @@ export const EVENT = {
   NETWORK: "[PD]: network_update",
   /** Update on a file on the local filesystem */
   LOCAL: "[PD]: local_update",
-  /** Any error thrown in PearDrive */
-  ERROR: "[PD]: error_update",
   /** Download progress info */
   DOWNLOAD_PROGRESS: "[PD]: download_progress",
 
+  /** Any error thrown in PearDrive */
+  ERROR: "[PD]: error",
   /** Local file added (Wrapper for IM event) */
   LOCAL_FILE_ADDED: "[PD]: local_file_added",
   /** Local file removed (Wrapper for IM event) */
@@ -74,6 +74,8 @@ export const EVENT = {
  * @protected
  */
 export const LFI_EVENT = {
+  /** Any error occurring in the local file index */
+  ERROR: "[LFI]: local_file_index_error",
   /** Emitted when a file is added to the local file index
    *
    * Emitted with the following data:

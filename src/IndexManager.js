@@ -47,7 +47,6 @@ export class IndexManager extends ReadyResource {
    *      Hypercores
    *    @param {Logger} opts.log - Logger for informational output
    *    @param {string} opts.watchPath - Path to watch for local files
-   *    @param {any} opts.emitEvent - Function to emit events
    *    @param {Object} opts.indexOpts - Options for the local file index
    *    @param {Map<string, RPC>} opts.rpcConnections - Map of peer IDs to RPC
    *      instances
@@ -65,7 +64,6 @@ export class IndexManager extends ReadyResource {
     store,
     log,
     watchPath,
-    emitEvent,
     indexOpts,
     rpcConnections,
     uploads,
@@ -77,14 +75,12 @@ export class IndexManager extends ReadyResource {
     super();
 
     this._store = store.namespace("peardrive:indexmanager");
-    this._emitEvent = emitEvent;
     this._indexOpts = indexOpts;
     this.#log = log;
     this.localIndex = new LocalFileIndex({
       store,
       log,
       watchPath,
-      emitEvent: this._emitEvent,
       indexOpts,
       uploads,
       downloads,
@@ -173,7 +169,7 @@ export class IndexManager extends ReadyResource {
     }
     if (hasInitialData) {
       this.#log.info(`Remote index already has data for peer ${peerId}`);
-      this._emitEvent(C.EVENT.NETWORK, peerId);
+      // this._emitEvent(C.EVENT.NETWORK, peerId);
     }
 
     // Emit event on append
@@ -186,10 +182,10 @@ export class IndexManager extends ReadyResource {
           `Error updating remote index for peer ${peerId}: ${error}`
         );
       }
-      this._emitEvent(C.EVENT.NETWORK, {
-        type: C.EVENT.NETWORK,
-        peerId,
-      });
+      // this._emitEvent(C.EVENT.NETWORK, {
+      //   type: C.EVENT.NETWORK,
+      //   peerId,
+      // });
     });
   }
 

@@ -53,7 +53,6 @@ export default class LocalFileIndex extends ReadyResource {
    *    @param {any} opts.log - Optional logger instance
    *    @param {import('corestore')} opts.store - Corestore instance
    *    @param {string} opts.watchPath - Path to watch for local files
-   *    @param {Function} opts.emitEvent - Optional function to emit events
    *    @param {Object} opts.indexOpts - Index options
    *    @param {Map<string, HyperDrive} opts.downloads - Map of download drives
    *      and corestore subspaces
@@ -66,7 +65,6 @@ export default class LocalFileIndex extends ReadyResource {
     log,
     store,
     watchPath,
-    emitEvent,
     indexOpts,
     uploads,
     downloads,
@@ -78,8 +76,6 @@ export default class LocalFileIndex extends ReadyResource {
     this.#log = log;
     this.#log.info("Initializing LocalFileIndex...");
 
-    /** Event emitter */
-    this._emitEvent = emitEvent;
     /** Corestore instance */
     this._store = store.namespace("peardrive:localfileindex");
     /** Absolute path to folder being watched */
@@ -151,7 +147,7 @@ export default class LocalFileIndex extends ReadyResource {
       await this.#bee.put(relativePath, metaData);
     }
 
-    if (!isEmpty) this._emitEvent(C.EVENT.LOCAL, null);
+    // if (!isEmpty) this._emitEvent(C.EVENT.LOCAL, null);
     this.#log.info("Index build complete!");
   }
 
@@ -293,7 +289,7 @@ export default class LocalFileIndex extends ReadyResource {
           }
           this.#log.info("File deleted:", storedPath);
           await this.#bee.del(storedPath);
-          this._emitEvent(C.EVENT.LOCAL, null);
+          // this._emitEvent(C.EVENT.LOCAL, null);
         }
       }
 
@@ -306,7 +302,7 @@ export default class LocalFileIndex extends ReadyResource {
             path
           );
           await this.#bee.put(path, meta);
-          this._emitEvent(C.EVENT.LOCAL, null);
+          // this._emitEvent(C.EVENT.LOCAL, null);
         }
       }
 
@@ -523,7 +519,7 @@ export default class LocalFileIndex extends ReadyResource {
           await this.#bee.del(relativePath);
           this.#metadataCache.delete(relativePath);
           this.emit(LFI_EVENT.FILE_REMOVED, relativePath);
-          this._emitEvent(C.EVENT.LOCAL, null);
+          // this._emitEvent(C.EVENT.LOCAL, null);
         }
       } else if (isDirectory) {
         // New directory created - watch it
@@ -631,7 +627,7 @@ export default class LocalFileIndex extends ReadyResource {
       }
 
       // Backwards compat (remove in v1.6)
-      this._emitEvent(C.EVENT.LOCAL, null);
+      // this._emitEvent(C.EVENT.LOCAL, null);
     } catch (err) {
       this.#log.error(`Error updating file ${relativePath}:`, err);
     }
