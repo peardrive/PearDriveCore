@@ -54,6 +54,10 @@ export const EVENT = {
 
   /** Any error thrown in PearDrive */
   ERROR: "[PD]: error",
+  /** Peer connected */
+  CONNECTED: "[PD]: peer_connected",
+  /** Peer disconnected */
+  DISCONNECTED: "[PD]: peer_disconnected",
   /** Local file added (Wrapper for IM event) */
   LOCAL_FILE_ADDED: "[PD]: local_file_added",
   /** Local file removed (Wrapper for IM event) */
@@ -83,7 +87,11 @@ export const LFI_EVENT = {
    * - `hash`: The hash of the file
    */
   FILE_ADDED: "[LFI]: local_file_index_file_added",
-  /** Emitted when a file is removed from the local file index */
+  /**
+   * Emitted when a file is removed from the local file index
+   *
+   * Emits the path string
+   */
   FILE_REMOVED: "[LFI]: local_file_index_file_removed",
   /**
    * Emitted when a file's contents have changed

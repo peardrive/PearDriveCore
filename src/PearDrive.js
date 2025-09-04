@@ -732,7 +732,7 @@ export default class PearDrive extends ReadyResource {
     }
 
     // Emit peer update event
-    // this._emitEvent(C.EVENT.PEER, peerId);
+    this.emit(C.EVENT.PEER_CONNECT, peerId);
     this.#log.info(`Peer ${peerId} connected and ready!`);
   }
 
@@ -752,7 +752,7 @@ export default class PearDrive extends ReadyResource {
     this._indexManager.handlePeerDisconnected(peerId);
 
     // Emit peer update event
-    // this._emitEvent(C.EVENT.PEER, peerId);
+    this.emit(C.EVENT.PEER_DISCONNECT, peerId);
   }
 
   /**

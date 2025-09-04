@@ -491,7 +491,7 @@ test(
   }
 );
 
-solo(txt.main("PearDrive: Peer file events"), { stealth: false }, async (t) => {
+test(txt.main("PearDrive: Peer file events"), { stealth: false }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -630,6 +630,164 @@ solo(txt.main("PearDrive: Peer file events"), { stealth: false }, async (t) => {
     if (!hookFired) subtest.fail("PEER_FILE_REMOVED event not fired");
   });
 });
+
+solo(
+  txt.main("PearDrive: Peer connection events"),
+  { stealth: false },
+  async (t) => {
+    const testnet = await createTestnet();
+    const { bootstrap } = testnet;
+
+    const onError = (err) => t.fail(txt.fail("onError called"), err);
+
+    // Ready Peer A
+    const A = await utils.createPearDrive({
+      name: "peer-conn-A",
+      bootstrap,
+      onError,
+      indexOpts: { disablePolling: true },
+    });
+    const pdA = A.pd;
+    await pdA.ready();
+
+    // Create network with peer A
+    await pdA.joinNetwork();
+    const topic = pdA.networkKey;
+
+    // Ready Peer B
+    const B = await utils.createPearDrive({
+      name: "peer-conn-B",
+      bootstrap,
+      onError,
+      indexOpts: { disablePolling: true },
+    });
+    const pdB = B.pd;
+    await pdB.ready();
+
+    t.teardown(async () => {
+      try {
+        await pdB.close();
+      } catch {}
+      try {
+        await pdA.close();
+      } catch {}
+    });
+
+    // ---------------------------------------------------------------------------
+
+    await t.test("PEER_CONNECT events fire on both sides", async (subtest) => {
+      let aSawB = false;
+      let bSawA = false;
+
+      // A should see B connect
+      pdA.on(C.EVENT.PEER_CONNECT, (peerId) => {
+        try {
+          subtest.ok(typeof peerId === "string", "A received peerId as string");
+          subtest.is(peerId, pdB.publicKey, "A saw B's public key");
+          aSawB = true;
+          subtest.pass("PEER_CONNECT (A observed B) fired");
+        } catch (e) {
+          subtest.fail("Bad payload for PEER_CONNECT on A", e);
+        }
+      });
+
+      // B should see A connect
+      pdB.on(C.EVENT.PEER_CONNECT, (peerId) => {
+        try {
+          subtest.ok(typeof peerId === "string", "B received peerId as string");
+          subtest.is(peerId, pdA.publicKey, "B saw A's public key");
+          bSawA = true;
+          subtest.pass("PEER_CONNECT (B observed A) fired");
+        } catch (e) {
+          subtest.fail("Bad payload for PEER_CONNECT on B", e);
+        }
+      });
+
+      // Now connect B to A’s network (triggers both connect events)
+      await pdB.joinNetwork(topic);
+
+      await utils.wait(5);
+      if (!aSawB) subtest.fail("PEER_CONNECT not fired on A (timed out)");
+      if (!bSawA) subtest.fail("PEER_CONNECT not fired on B (timed out)");
+    });
+
+    // ---------------------------------------------------------------------------
+
+    await t.test(
+      "PEER_DISCONNECT event (A observes B leaving)",
+      async (subtest) => {
+        let aSawDisconnect = false;
+
+        pdA.on(C.EVENT.PEER_DISCONNECT, (peerId) => {
+          try {
+            subtest.ok(
+              typeof peerId === "string",
+              "A received peerId as string"
+            );
+            subtest.is(peerId, pdB.publicKey, "A saw B disconnect");
+            aSawDisconnect = true;
+            subtest.pass("PEER_DISCONNECT (A observed B) fired");
+          } catch (e) {
+            subtest.fail("Bad payload for PEER_DISCONNECT on A", e);
+          }
+        });
+
+        // Leave by closing peer B
+        await pdB.close();
+
+        await utils.wait(5);
+        if (!aSawDisconnect)
+          subtest.fail("PEER_DISCONNECT not fired on A (timed out)");
+      }
+    );
+
+    // ---------------------------------------------------------------------------
+
+    await t.test(
+      "PEER_DISCONNECT event (B observes A leaving)",
+      async (subtest) => {
+        // Bring up a fresh B2 so we can test the reverse direction cleanly
+        const B2 = await utils.createPearDrive({
+          name: "peer-conn-B2",
+          bootstrap,
+          onError,
+          indexOpts: { disablePolling: true },
+        });
+        const pdB2 = B2.pd;
+        await pdB2.ready();
+
+        // Reconnect to A’s topic
+        await pdB2.joinNetwork(topic);
+
+        let bSawDisconnect = false;
+
+        pdB2.on(C.EVENT.PEER_DISCONNECT, (peerId) => {
+          try {
+            subtest.ok(
+              typeof peerId === "string",
+              "B2 received peerId as string"
+            );
+            subtest.is(peerId, pdA.publicKey, "B2 saw A disconnect");
+            bSawDisconnect = true;
+            subtest.pass("PEER_DISCONNECT (B2 observed A) fired");
+          } catch (e) {
+            subtest.fail("Bad payload for PEER_DISCONNECT on B2", e);
+          }
+        });
+
+        // Now have A leave
+        await pdA.close();
+
+        await utils.wait(5);
+        if (!bSawDisconnect)
+          subtest.fail("PEER_DISCONNECT not fired on B2 (timed out)");
+
+        // Cleanup B2 (A already closed)
+        await pdB2.close();
+      }
+    );
+  }
+);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Network communication tests
@@ -960,7 +1118,6 @@ test(txt.main("PearDrive: File relaying"), { stealth: false }, async (t) => {
     const oldFileAhash = (await peerA.pd.listLocalFiles()).files.find(
       (f) => f.path === fileA1.name
     ).hash;
-    console.log("Old fileA hash:", oldFileAhash);
     const fileA1v2 = { ...fileA1, content: "modified content 1" };
     fs.writeFileSync(
       path.join(peerA.pd.watchPath, fileA1.name),
