@@ -523,7 +523,7 @@ test(txt.main("PearDrive: Peer file events"), { stealth: false }, async (t) => {
     let hookFired = false;
 
     // Listen on peer A for peer events about peer B’s files
-    peerA.pd.on(C.EVENT.PEER_FILE_ADDED, async (data) => {
+    peerA.pd.once(C.EVENT.PEER_FILE_ADDED, async (data) => {
       try {
         hookFired = true;
 
@@ -556,7 +556,7 @@ test(txt.main("PearDrive: Peer file events"), { stealth: false }, async (t) => {
   await t.test("PEER_FILE_CHANGED event", async (subtest) => {
     let hookFired = false;
 
-    peerA.pd.on(C.EVENT.PEER_FILE_CHANGED, (data) => {
+    peerA.pd.once(C.EVENT.PEER_FILE_CHANGED, (data) => {
       try {
         hookFired = true;
 
@@ -598,7 +598,7 @@ test(txt.main("PearDrive: Peer file events"), { stealth: false }, async (t) => {
   await t.test("PEER_FILE_REMOVED event", async (subtest) => {
     let hookFired = false;
 
-    peerA.pd.on(C.EVENT.PEER_FILE_REMOVED, (data) => {
+    peerA.pd.once(C.EVENT.PEER_FILE_REMOVED, (data) => {
       try {
         hookFired = true;
 
@@ -680,7 +680,7 @@ solo(
       let bSawA = false;
 
       // A should see B connect
-      pdA.on(C.EVENT.PEER_CONNECT, (peerId) => {
+      pdA.once(C.EVENT.PEER_CONNECT, (peerId) => {
         try {
           subtest.ok(typeof peerId === "string", "A received peerId as string");
           subtest.is(peerId, pdB.publicKey, "A saw B's public key");
@@ -692,7 +692,7 @@ solo(
       });
 
       // B should see A connect
-      pdB.on(C.EVENT.PEER_CONNECT, (peerId) => {
+      pdB.once(C.EVENT.PEER_CONNECT, (peerId) => {
         try {
           subtest.ok(typeof peerId === "string", "B received peerId as string");
           subtest.is(peerId, pdA.publicKey, "B saw A's public key");
@@ -711,14 +711,12 @@ solo(
       if (!bSawA) subtest.fail("PEER_CONNECT not fired on B (timed out)");
     });
 
-    // ---------------------------------------------------------------------------
-
     await t.test(
       "PEER_DISCONNECT event (A observes B leaving)",
       async (subtest) => {
         let aSawDisconnect = false;
 
-        pdA.on(C.EVENT.PEER_DISCONNECT, (peerId) => {
+        pdA.once(C.EVENT.PEER_DISCONNECT, (peerId) => {
           try {
             subtest.ok(
               typeof peerId === "string",
@@ -741,8 +739,6 @@ solo(
       }
     );
 
-    // ---------------------------------------------------------------------------
-
     await t.test(
       "PEER_DISCONNECT event (B observes A leaving)",
       async (subtest) => {
@@ -758,10 +754,11 @@ solo(
 
         // Reconnect to A’s topic
         await pdB2.joinNetwork(topic);
+        await utils.wait(1);
 
         let bSawDisconnect = false;
 
-        pdB2.on(C.EVENT.PEER_DISCONNECT, (peerId) => {
+        pdB2.once(C.EVENT.PEER_DISCONNECT, (peerId) => {
           try {
             subtest.ok(
               typeof peerId === "string",
