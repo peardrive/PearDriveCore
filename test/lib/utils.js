@@ -209,7 +209,7 @@ export async function createPearDrive({
   bootstrap,
   onError = () => {},
   indexOpts = {
-    disablePolling: !!indexOpts.disablePolling,
+    disablePolling: false,
     pollInterval: 500,
   },
 }) {

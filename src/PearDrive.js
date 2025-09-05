@@ -70,6 +70,8 @@ export default class PearDrive extends ReadyResource {
   _inProgress;
   /** @private {ArrayBuffer | Uint8Array} - Hyperswarm topic buffer */
   _networkKey;
+  /** @private {Object} - Holds custom message hooks */
+  _customMessageHooks = {};
 
   /**
    * @param {Object} opts
@@ -268,6 +270,12 @@ export default class PearDrive extends ReadyResource {
   //////////////////////////////////////////////////////////////////////////////
   // Public functions
   //////////////////////////////////////////////////////////////////////////////
+
+  /** Listen for a custom message and handle it */
+  listen(name, cb) {
+    this.#log.info(`Listening for custom message: ${name}`);
+    this._customMessageHooks[name] = cb;
+  }
 
   /** Activate 'relay' mode */
   activateRelay() {
@@ -839,7 +847,7 @@ export default class PearDrive extends ReadyResource {
       );
       this.#log.debug("MESSAGE Payload:", payload);
 
-      const cb = this._hooks[type];
+      const cb = this._customMessageHooks[type];
       if (!cb) {
         this.#log.warn(
           `No handler for message type "${type}" from ${conn.remotePublicKey}`
