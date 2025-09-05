@@ -47,7 +47,6 @@ export class IndexManager extends ReadyResource {
    *      Hypercores
    *    @param {Logger} opts.log - Logger for informational output
    *    @param {string} opts.watchPath - Path to watch for local files
-   *    @param {any} opts.emitEvent - Function to emit events
    *    @param {Object} opts.indexOpts - Options for the local file index
    *    @param {Map<string, RPC>} opts.rpcConnections - Map of peer IDs to RPC
    *      instances
@@ -65,7 +64,6 @@ export class IndexManager extends ReadyResource {
     store,
     log,
     watchPath,
-    emitEvent,
     indexOpts,
     rpcConnections,
     uploads,
@@ -77,20 +75,22 @@ export class IndexManager extends ReadyResource {
     super();
 
     this._store = store.namespace("peardrive:indexmanager");
-    this._emitEvent = emitEvent;
     this._indexOpts = indexOpts;
     this.#log = log;
     this.localIndex = new LocalFileIndex({
       store,
       log,
       watchPath,
-      emitEvent: this._emitEvent,
       indexOpts,
       uploads,
       downloads,
     });
-    /** @protected {Map<string, Hyperbee>} }All nonlocal PearDrives hyperbees */
+    /** @protected {Map<string, Hyperbee>} All nonlocal PearDrives hyperbees */
     this.remoteIndexes = new Map();
+    /**
+     * @private {Map<string, number>} previous read (version, length) per peer
+     */
+    this._peerUpdates = new Map();
     this.watchPath = watchPath;
     this._rpcConnections = rpcConnections;
     this._uploads = uploads;
@@ -147,7 +147,6 @@ export class IndexManager extends ReadyResource {
    * you fire a NETWORK update back to PearDrive.
    *
    * @param {string} peerId – Hex string of the peer’s public key
-   *
    * @param {Hyperbee} bee – An already–ready Hyperbee instance
    */
   async addBee(peerId, bee) {
@@ -155,6 +154,11 @@ export class IndexManager extends ReadyResource {
 
     // Add to index
     this.remoteIndexes.set(peerId, bee);
+
+    // Initialize the snapshot update for this peer
+    await bee.core.update();
+    const initialUpdate = bee.version;
+    this._peerUpdates.set(peerId, initialUpdate);
 
     // Emit network event if bee has data
     let hasInitialData = false;
@@ -164,16 +168,23 @@ export class IndexManager extends ReadyResource {
     }
     if (hasInitialData) {
       this.#log.info(`Remote index already has data for peer ${peerId}`);
-      this._emitEvent(C.EVENT.NETWORK, peerId);
+      // this._emitEvent(C.EVENT.NETWORK, peerId);
     }
 
     // Emit event on append
-    bee.core.on("append", () => {
+    bee.core.on("append", async () => {
       this.#log.info(`Remote index updated for peer ${peerId}`);
-      this._emitEvent(C.EVENT.NETWORK, {
-        type: C.EVENT.NETWORK,
-        peerId,
-      });
+      try {
+        await this.#onPeerUpdate(peerId);
+      } catch (error) {
+        this.#log.error(
+          `Error updating remote index for peer ${peerId}: ${error}`
+        );
+      }
+      // this._emitEvent(C.EVENT.NETWORK, {
+      //   type: C.EVENT.NETWORK,
+      //   peerId,
+      // });
     });
   }
 
@@ -184,6 +195,7 @@ export class IndexManager extends ReadyResource {
    */
   handlePeerDisconnected(peerId) {
     this.remoteIndexes.delete(peerId);
+    this._peerUpdates.delete(peerId);
     this.#log.info(`Remote index removed for peer ${peerId}`);
   }
 
@@ -636,6 +648,8 @@ export class IndexManager extends ReadyResource {
    * @param {string | Uint8Array | ArrayBuffer} coreKey
    *
    * @returns {Promise<void>}
+   *
+   * @private
    */
   async _createDownloadBlob(filePath, coreKey) {
     this.#log.info(`Creating download blob for file: ${filePath}`);
@@ -663,6 +677,8 @@ export class IndexManager extends ReadyResource {
    * @param {Object} id - The ID of the blob to download
    *
    * @returns {Promise<void>}
+   *
+   * @private
    */
   async _executeDownloadBlob(filePath, id) {
     this.#log.info(`Executing Hyperblobs download for: ${filePath}`);
@@ -734,7 +750,7 @@ export class IndexManager extends ReadyResource {
           // Log every 1% by checking against lastLoggedPercent
           const mbDownloaded = Math.round(downloadedBytes / 1024 / 1024);
           const mbTotal = Math.round(totalBytes / 1024 / 1024);
-          this.#log.info(
+          this.#log.debug(
             `Download progress: ${curPercent}% (${mbDownloaded}MB/${mbTotal}MB)`
           );
           prevPercent = curPercent;
@@ -787,6 +803,10 @@ export class IndexManager extends ReadyResource {
    * @param {string | Uint8Array | ArrayBuffer} peerId - Peer ID to download
    *   from
    * @param {string} fileKey - Key of the file to download
+   *
+   * @returns {Promise<void>}
+   *
+   * @private
    */
   async _relayDownload(peerId, fileKey) {
     this.#log.info(`Relay: Downloading file ${fileKey} from peer ${peerId}`);
@@ -829,6 +849,7 @@ export class IndexManager extends ReadyResource {
 
     try {
       // Make sure local index is ready
+      // TODO: Polling stuff should be ready if localIndex.opened
       await this.localIndex.pollOnce();
       // Create set of all local files
       const localFiles = new Set();
@@ -867,12 +888,122 @@ export class IndexManager extends ReadyResource {
     }
   }
 
+  /** Handle peer bee appends */
+  async #onPeerUpdate(peerId) {
+    this.#log.info(`Peer ${peerId} updated`);
+
+    // Get bee
+    const bee = this.remoteIndexes.get(peerId);
+    if (!bee) {
+      this.#log.warn(`Peer ${peerId} not found`);
+      return;
+    }
+    await bee.core.update();
+
+    // Previous snapshot update
+    const prevUpdate = this._peerUpdates.get(peerId) ?? 0;
+
+    // If called without an update, noop
+    const curUpdate = bee.version;
+    if (curUpdate === prevUpdate) return;
+
+    // Create snapshot at previous head
+    const prevSnap = bee.checkout(prevUpdate);
+
+    // Diff current (bee) vs previous snapshot
+    for await (const entry of bee.createDiffStream(prevSnap, {
+      keys: true,
+      values: true,
+    })) {
+      // Parse diff stream data for file path
+      const keySide = entry.right ?? entry.left;
+      if (!keySide || typeof keySide.key === "undefined") {
+        this.#log.warn("Diff entry missing key; skipping", entry?.type);
+        continue;
+      }
+      const filePath = keySide.key;
+      const peerKey = utils.formatToStr(bee.key);
+
+      // Diff stream values
+      const curVal = entry.left?.value ?? null; // current
+      const prevVal = entry.right?.value ?? null; // previous
+
+      // Determine if this is a file addition, deletion or change
+      let updateType = null;
+      if (curVal && prevVal) {
+        updateType = "changed";
+      } else if (curVal && !prevVal) {
+        updateType = "added";
+      } else if (!curVal && prevVal) {
+        updateType = "removed";
+      }
+
+      // If an updateType cannot be determined (this shouldn't ever happen)
+      if (!updateType) {
+        this.#log.warn("Could not determine update type. skipping:", entry);
+        return;
+      }
+
+      // Handle file addition
+      if (updateType === "added") {
+        this.emit(C.IM_EVENT.PEER_FILE_ADDED, {
+          filePath,
+          peerKey: peerId,
+          hash: curVal.hash,
+        });
+      }
+
+      // Handle file change
+      if (updateType === "changed") {
+        // Make sure hashes have changed. If not, noop
+        const hash = curVal.hash;
+        const prevHash = prevVal.hash;
+        if (hash === prevHash) return;
+
+        this.emit(C.IM_EVENT.PEER_FILE_CHANGED, {
+          filePath,
+          peerKey: peerId,
+          hash: curVal.hash,
+          prevHash: prevVal.hash,
+        });
+      }
+
+      // Handle file removal
+      if (updateType === "removed") {
+        this.emit(C.IM_EVENT.PEER_FILE_REMOVED, {
+          filePath,
+          peerKey: peerId,
+        });
+      }
+    }
+
+    // Advance snapshot head
+    this._peerUpdates.set(peerId, curUpdate);
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Lifecycle methods
+  //////////////////////////////////////////////////////////////////////////////
+
   async _open() {
     this.#log.info("Opening IndexManager...");
 
+    // Local index initialization
     await this.localIndex.ready();
+
+    // Wire up LFI event listeners
+    this.localIndex.on(C.LFI_EVENT.FILE_ADDED, (data) => {
+      this.emit(C.IM_EVENT.LOCAL_FILE_ADDED, data);
+    });
+    this.localIndex.on(C.LFI_EVENT.FILE_REMOVED, (data) => {
+      this.emit(C.IM_EVENT.LOCAL_FILE_REMOVED, data);
+    });
+    this.localIndex.on(C.LFI_EVENT.FILE_CHANGED, (data) => {
+      this.emit(C.IM_EVENT.LOCAL_FILE_CHANGED, data);
+    });
+
+    // Relay initialization
     if (this.relay) this.startRelay();
-    if (this._indexOpts.poll) this.localIndex.startPolling();
 
     this.#log.info("IndexManager opened successfully!");
   }

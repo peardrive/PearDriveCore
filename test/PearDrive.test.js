@@ -21,7 +21,7 @@ utils.createTestFolders();
 // PearDrive core functionality tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("PearDrive: Initialization"), { stealth: false }, async (t) => {
+test(txt.main("PearDrive: Initialization"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -170,227 +170,400 @@ test(txt.main("PearDrive: Initialization"), { stealth: false }, async (t) => {
 });
 
 ////////////////////////////////////////////////////////////////////////////////
-// Network Event Emitter tests
+// PearDrive Event Emitter tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("PearDrive: NETWORK events"), { stealth: true }, async (t) => {
+test(txt.main("PearDrive: Local file events"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  const [pearDriveA, pearDriveB] = await utils.createNetwork({
-    baseName: "network-events",
+  let pd1;
+  let pd1data;
+  let file;
+
+  // Set up PearDrive instance
+  const { pd, localDrivePath, corestorePath, logPath } =
+    await utils.createPearDrive({
+      name: "local-file-events",
+      bootstrap,
+      onError: (err) => t.fail(txt.fail("onError called"), err),
+      indexOpts: {
+        disablePolling: true,
+      },
+    });
+  pd1 = pd;
+  pd1data = {
+    watchPath: localDrivePath,
+    corestorePath,
+    logFilePath: logPath,
+  };
+  await pd1.ready();
+
+  // Test LOCAL_FILE_ADDED event
+  await t.test("LOCAL_FILE_ADDED event", async (subtest) => {
+    let hookFired = false;
+
+    try {
+      // Add event hook
+      pd1.on(C.EVENT.LOCAL_FILE_ADDED, (data) => {
+        hookFired = true;
+        subtest.pass("LOCAL_FILE_ADDED event fired");
+      });
+
+      // Create a file
+      file = utils.createRandomFile(localDrivePath);
+      await pd1.syncLocalFilesOnce();
+
+      // 5 second max wait timeout, fails if event not fired
+      await utils.wait(5);
+      if (!hookFired) subtest.fail("LOCAL_FILE_ADDED event not fired");
+    } catch (error) {
+      subtest.fail("Error occurred", error);
+    }
+  });
+
+  // Test LOCAL_FILE_CHANGED event
+  await t.test("LOCAL_FILE_CHANGED event", async (subtest) => {
+    let hookFired = false;
+    try {
+      // Add event hook
+      pd1.on(C.EVENT.LOCAL_FILE_CHANGED, (data) => {
+        hookFired = true;
+        subtest.pass("LOCAL_FILE_CHANGED event fired");
+      });
+
+      // Modify the file
+      const modifiedContent = "modified content";
+      fs.writeFileSync(file.path, modifiedContent);
+      await pd1.syncLocalFilesOnce();
+
+      // 5 second max wait timeout, fails if event not fired
+      await utils.wait(5);
+      if (!hookFired) subtest.fail("LOCAL_FILE_CHANGED event not fired");
+    } catch (error) {
+      subtest.fail("Error occurred", error);
+    }
+  });
+
+  // Test LOCAL_FILE_REMOVED event
+  await t.test("LOCAL_FILE_REMOVED event", async (subtest) => {
+    let hookFired = false;
+    try {
+      // Add event hook
+      pd1.on(C.EVENT.LOCAL_FILE_REMOVED, (data) => {
+        hookFired = true;
+        subtest.pass("LOCAL_FILE_REMOVED event fired");
+      });
+
+      // Remove the file
+      fs.unlinkSync(file.path);
+      await pd1.syncLocalFilesOnce();
+
+      // 5 second max wait timeout, fails if event not fired
+      await utils.wait(5);
+      if (!hookFired) subtest.fail("LOCAL_FILE_REMOVED event not fired");
+    } catch (error) {
+      subtest.fail("Error occurred", error);
+    }
+  });
+});
+
+test(txt.main("PearDrive: Peer file events"), { stealth: true }, async (t) => {
+  const testnet = await createTestnet();
+  const { bootstrap } = testnet;
+
+  const [peerA, peerB] = await utils.createNetwork({
+    baseName: "peer-file-events",
     bootstrap,
     n: 2,
     onError: (err) => t.fail(txt.fail("onError called"), err),
     indexOpts: {
-      poll: false, // Disable polling for this test
-      pollInterval: 500,
+      // keep polling off so we control sync points deterministically
+      disablePolling: true,
     },
   });
+
   t.teardown(async () => {
-    pearDriveA.pd.close();
-    pearDriveB.pd.close();
+    await peerA.pd.close();
+    await peerB.pd.close();
   });
 
-  let networkAFired = false;
-  let systemAFired = false;
-  let networkBFired = false;
-  let systemBFired = false;
-  pearDriveA.pd.on(C.EVENT.NETWORK, () => {
-    networkAFired = true;
+  let file;
+  let filePath;
+  let peerKeyOnA = peerA.pd.publicKey;
+  let peerKeyOnB = peerB.pd.publicKey;
+  let firstHash;
+  let secondHash;
+
+  // Test PEER_FILE_ADDED event
+  await t.test("PEER_FILE_ADDED event", async (subtest) => {
+    let hookFired = false;
+
+    // Listen on peer A for peer events about peer B’s files
+    peerA.pd.once(C.EVENT.PEER_FILE_ADDED, async (data) => {
+      try {
+        hookFired = true;
+
+        // Basic shape checks
+        subtest.ok(typeof data.filePath === "string", "has filePath");
+        subtest.ok(typeof data.peerKey === "string", "has peerKey");
+        subtest.ok(!!data.hash, "has hash");
+
+        // Stash for next tests
+        filePath = data.filePath;
+        peerKeyOnA = data.peerKey;
+        firstHash = data.hash;
+
+        subtest.pass("PEER_FILE_ADDED event fired");
+      } catch (e) {
+        subtest.fail("Bad payload for PEER_FILE_ADDED", e);
+      }
+    });
+
+    // Create a file on peer B and sync its local index
+    file = utils.createRandomFile(peerB.pd.watchPath);
+    await peerB.pd.syncLocalFilesOnce();
+
+    // give replication/diff a moment to propagate
+    await utils.wait(5);
+    if (!hookFired) subtest.fail("PEER_FILE_ADDED event not fired, timed out");
   });
-  pearDriveA.pd.on(C.EVENT.SYSTEM, () => {
-    systemAFired = true;
+
+  // Test PEER_FILE_CHANGED event
+  await t.test("PEER_FILE_CHANGED event", async (subtest) => {
+    let hookFired = false;
+
+    peerA.pd.once(C.EVENT.PEER_FILE_CHANGED, (data) => {
+      try {
+        hookFired = true;
+
+        subtest.is(
+          data.peerKey,
+          peerKeyOnB,
+          "peerKey matches the remote peer index key"
+        );
+        subtest.is(
+          data.filePath,
+          filePath,
+          "filePath matches the previously added file"
+        );
+        subtest.ok(!!data.hash, "has new hash");
+        subtest.ok(!!data.prevHash, "has prevHash");
+        subtest.not(data.hash, data.prevHash, "hash changed from prevHash");
+
+        secondHash = data.hash;
+
+        subtest.pass("PEER_FILE_CHANGED event fired");
+      } catch (e) {
+        subtest.fail("Bad payload for PEER_FILE_CHANGED", data, e);
+      }
+    });
+
+    // Modify the file on peer B and sync
+    fs.writeFileSync(file.path, "modified content " + Date.now());
+    await peerB.pd.syncLocalFilesOnce();
+
+    await utils.wait(5);
+
+    if (!hookFired) subtest.fail("PEER_FILE_CHANGED event not fired");
+    else if (firstHash && secondHash) {
+      subtest.not(firstHash, secondHash, "content hash actually changed");
+    }
   });
-  pearDriveB.pd.on(C.EVENT.NETWORK, () => {
-    networkBFired = true;
+
+  // Test PEER_FILE_REMOVED event
+  await t.test("PEER_FILE_REMOVED event", async (subtest) => {
+    let hookFired = false;
+
+    peerA.pd.once(C.EVENT.PEER_FILE_REMOVED, (data) => {
+      try {
+        hookFired = true;
+
+        subtest.is(
+          data.peerKey,
+          peerKeyOnA,
+          "peerKey matches the remote peer index key"
+        );
+        subtest.is(
+          data.filePath,
+          filePath,
+          "filePath matches the previously tracked file"
+        );
+        subtest.ok(!("hash" in data), "no hash on removed");
+        subtest.ok(!("prevHash" in data), "no prevHash on removed");
+
+        subtest.pass("PEER_FILE_REMOVED event fired");
+      } catch (e) {
+        subtest.fail("Bad payload for PEER_FILE_REMOVED", e);
+      }
+    });
+
+    // Delete the file on peer B and sync
+    fs.unlinkSync(file.path);
+    await peerB.pd.syncLocalFilesOnce();
+
+    await utils.wait(5);
+
+    if (!hookFired) subtest.fail("PEER_FILE_REMOVED event not fired");
   });
-  pearDriveB.pd.on(C.EVENT.SYSTEM, () => {
-    systemBFired = true;
-  });
-
-  //
-  // Test NETWORK event on file addition
-  //
-
-  utils.createRandomFile(pearDriveA.localDrivePath);
-  await pearDriveA.pd.syncLocalFilesOnce();
-  await utils.wait(1);
-
-  t.ok(networkBFired, "NETWORK event fired on pearDriveB after file addition");
-  t.ok(systemBFired, "SYSTEM event fired on pearDriveB after file addition");
-
-  //
-  // Test NETWORK event on file modification
-  //
-
-  networkBFired = false;
-  systemBFired = false;
-
-  const modifiedContent = "modified content";
-  const filePath = path.join(pearDriveA.localDrivePath, "to-modify.txt");
-  fs.writeFileSync(filePath, modifiedContent);
-  await pearDriveA.pd.syncLocalFilesOnce();
-  await utils.wait(1);
-
-  t.ok(
-    networkBFired,
-    "NETWORK event fired on pearDriveB after file modification"
-  );
-  t.ok(
-    systemBFired,
-    "SYSTEM event fired on pearDriveB after file modification"
-  );
-
-  //
-  // Test NETWORK event on file deletion
-  //
-
-  networkBFired = false;
-  systemBFired = false;
-
-  fs.unlinkSync(filePath);
-  await pearDriveA.pd.syncLocalFilesOnce();
-  await utils.wait(1);
-
-  t.ok(networkBFired, "NETWORK event fired on pearDriveB after file deletion");
-  t.ok(systemBFired, "SYSTEM event fired on pearDriveB after file deletion");
 });
 
-test(txt.main("PearDrive: PEER events"), { stealth: true }, async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
+test(
+  txt.main("PearDrive: Peer connection events"),
+  { stealth: true },
+  async (t) => {
+    const testnet = await createTestnet();
+    const { bootstrap } = testnet;
 
-  const pearDriveA = await utils.createPearDrive({
-    name: "pearDriveA",
-    bootstrap,
-    onError: (err) => t.fail(txt.fail("onError called"), err),
-  });
-  const pearDriveB = await utils.createPearDrive({
-    name: "pearDriveB",
-    bootstrap,
-    onError: (err) => t.fail(txt.fail("onError called"), err),
-  });
-  t.teardown(async () => {
-    await pearDriveA.pd.close();
-    await pearDriveB.pd.close();
-  });
-  await pearDriveA.pd.ready();
-  await pearDriveB.pd.ready();
+    const onError = (err) => t.fail(txt.fail("onError called"), err);
 
-  let peerAFired = false;
-  let systemAFired = false;
-  let peerBFired = false;
-  let systemBFired = false;
-  pearDriveA.pd.on(C.EVENT.PEER, () => {
-    peerAFired = true;
-  });
-  pearDriveA.pd.on(C.EVENT.SYSTEM, () => {
-    systemAFired = true;
-  });
-  pearDriveB.pd.on(C.EVENT.PEER, () => {
-    peerBFired = true;
-  });
-  pearDriveB.pd.on(C.EVENT.SYSTEM, () => {
-    systemBFired = true;
-  });
+    // Ready Peer A
+    const A = await utils.createPearDrive({
+      name: "peer-conn-A",
+      bootstrap,
+      onError,
+      indexOpts: { disablePolling: true },
+    });
+    const pdA = A.pd;
+    await pdA.ready();
 
-  //
-  // Test PEER event on connect
-  //
-  await pearDriveA.pd.joinNetwork();
-  await pearDriveB.pd.joinNetwork(pearDriveA.pd.networkKey);
-  await utils.awaitAllConnected([pearDriveA.pd, pearDriveB.pd]);
+    // Create network with peer A
+    await pdA.joinNetwork();
+    const topic = pdA.networkKey;
 
-  t.ok(peerAFired, "PEER event fired on pearDriveA");
-  t.ok(systemAFired, "SYSTEM event fired on pearDriveA");
-  t.ok(peerBFired, "PEER event fired on pearDriveB");
-  t.ok(systemBFired, "SYSTEM event fired on pearDriveB");
+    // Ready Peer B
+    const B = await utils.createPearDrive({
+      name: "peer-conn-B",
+      bootstrap,
+      onError,
+      indexOpts: { disablePolling: true },
+    });
+    const pdB = B.pd;
+    await pdB.ready();
 
-  //
-  // Test PEER event on disconnect
-  //
-  // Only look at peer A, because B will be removed from A's peer list
-  peerAFired = false;
-  systemAFired = false;
-  await pearDriveB.pd.close();
-  await utils.wait(1);
-  t.ok(
-    peerAFired,
-    "PEER event fired on pearDriveA after pearDriveB disconnects"
-  );
-  t.ok(
-    systemAFired,
-    "SYSTEM event fired on pearDriveA after pearDriveB disconnects"
-  );
-});
+    t.teardown(async () => {
+      try {
+        await pdB.close();
+      } catch {}
+      try {
+        await pdA.close();
+      } catch {}
+    });
 
-test(txt.main("PearDrive: LOCAL events"), { stealth: true }, async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
+    await t.test("PEER_CONNECT events fire on both sides", async (subtest) => {
+      let aSawB = false;
+      let bSawA = false;
 
-  const { pd, localDrivePath } = await utils.createPearDrive({
-    name: "local-events",
-    bootstrap,
-    onError: (err) => t.fail(txt.fail("onError called"), err),
-    indexOpts: {
-      poll: false, // Disable polling for this test
-      pollInterval: 500,
-    },
-  });
-  t.teardown(() => pd.close());
-  await pd.ready();
+      // A should see B connect
+      pdA.once(C.EVENT.PEER_CONNECT, (peerId) => {
+        try {
+          subtest.ok(typeof peerId === "string", "A received peerId as string");
+          subtest.is(peerId, pdB.publicKey, "A saw B's public key");
+          aSawB = true;
+          subtest.pass("PEER_CONNECT (A observed B) fired");
+        } catch (e) {
+          subtest.fail("Bad payload for PEER_CONNECT on A", e);
+        }
+      });
 
-  //
-  // Test file addition event
-  //
+      // B should see A connect
+      pdB.once(C.EVENT.PEER_CONNECT, (peerId) => {
+        try {
+          subtest.ok(typeof peerId === "string", "B received peerId as string");
+          subtest.is(peerId, pdA.publicKey, "B saw A's public key");
+          bSawA = true;
+          subtest.pass("PEER_CONNECT (B observed A) fired");
+        } catch (e) {
+          subtest.fail("Bad payload for PEER_CONNECT on B", e);
+        }
+      });
 
-  let localFired = false;
-  let systemFired = false;
-  pd.on(C.EVENT.LOCAL, () => {
-    localFired = true;
-  });
-  pd.on(C.EVENT.SYSTEM, () => {
-    systemFired = true;
-  });
+      // Now connect B to A’s network (triggers both connect events)
+      await pdB.joinNetwork(topic);
 
-  const file = utils.createRandomFile(localDrivePath);
-  await pd.syncLocalFilesOnce();
+      await utils.wait(5);
+      if (!aSawB) subtest.fail("PEER_CONNECT not fired on A (timed out)");
+      if (!bSawA) subtest.fail("PEER_CONNECT not fired on B (timed out)");
+    });
 
-  t.ok(localFired, "LOCAL event fired on file addition");
-  t.ok(systemFired, "SYSTEM event fired on file addition");
+    await t.test(
+      "PEER_DISCONNECT event (A observes B leaving)",
+      async (subtest) => {
+        let aSawDisconnect = false;
 
-  //
-  // Test file modification event
-  //
+        pdA.once(C.EVENT.PEER_DISCONNECT, (peerId) => {
+          try {
+            subtest.ok(
+              typeof peerId === "string",
+              "A received peerId as string"
+            );
+            subtest.is(peerId, pdB.publicKey, "A saw B disconnect");
+            aSawDisconnect = true;
+            subtest.pass("PEER_DISCONNECT (A observed B) fired");
+          } catch (e) {
+            subtest.fail("Bad payload for PEER_DISCONNECT on A", e);
+          }
+        });
 
-  localFired = false;
-  systemFired = false;
+        // Leave by closing peer B
+        await pdB.close();
 
-  const modifiedContent = "modified content";
-  fs.writeFileSync(file.path, modifiedContent);
-  await pd.syncLocalFilesOnce();
+        await utils.wait(5);
+        if (!aSawDisconnect)
+          subtest.fail("PEER_DISCONNECT not fired on A (timed out)");
+      }
+    );
 
-  t.ok(localFired, "LOCAL event fired on file modification");
-  t.ok(systemFired, "SYSTEM event fired on file modification");
+    await t.test(
+      "PEER_DISCONNECT event (B observes A leaving)",
+      async (subtest) => {
+        // Bring up a fresh B2 so we can test the reverse direction cleanly
+        const B2 = await utils.createPearDrive({
+          name: "peer-conn-B2",
+          bootstrap,
+          onError,
+          indexOpts: { disablePolling: true },
+        });
+        const pdB2 = B2.pd;
+        await pdB2.ready();
 
-  //
-  // Test file deletion event
-  //
+        // Reconnect to A’s topic
+        await pdB2.joinNetwork(topic);
+        await utils.wait(1);
 
-  localFired = false;
-  systemFired = false;
+        let bSawDisconnect = false;
 
-  fs.unlinkSync(file.path);
-  await pd.syncLocalFilesOnce();
+        pdB2.once(C.EVENT.PEER_DISCONNECT, (peerId) => {
+          try {
+            subtest.ok(
+              typeof peerId === "string",
+              "B2 received peerId as string"
+            );
+            subtest.is(peerId, pdA.publicKey, "B2 saw A disconnect");
+            bSawDisconnect = true;
+            subtest.pass("PEER_DISCONNECT (B2 observed A) fired");
+          } catch (e) {
+            subtest.fail("Bad payload for PEER_DISCONNECT on B2", e);
+          }
+        });
 
-  t.ok(localFired, "LOCAL event fired on file deletion");
-  t.ok(systemFired, "SYSTEM event fired on file deletion");
-});
+        // Now have A leave
+        await pdA.close();
 
-///////////////////////////////////////////////////////////////////////////////
+        await utils.wait(5);
+        if (!bSawDisconnect)
+          subtest.fail("PEER_DISCONNECT not fired on B2 (timed out)");
+
+        // Cleanup B2 (A already closed)
+        await pdB2.close();
+      }
+    );
+  }
+);
+
+////////////////////////////////////////////////////////////////////////////////
 // Network communication tests
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 test(txt.main("PearDrive: Custom message"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
@@ -413,7 +586,7 @@ test(txt.main("PearDrive: Custom message"), { stealth: true }, async (t) => {
   });
 
   let customRequestReceived = false;
-  peerB.pd.on("custom_message", (_payload) => {
+  peerB.pd.listen("custom_message", (_payload) => {
     customRequestReceived = true;
     return true;
   });
@@ -669,7 +842,7 @@ test(
   }
 );
 
-test(txt.main("PearDrive: File relaying"), { stealth: false }, async (t) => {
+test(txt.main("PearDrive: File relaying"), { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -717,7 +890,6 @@ test(txt.main("PearDrive: File relaying"), { stealth: false }, async (t) => {
     const oldFileAhash = (await peerA.pd.listLocalFiles()).files.find(
       (f) => f.path === fileA1.name
     ).hash;
-    console.log("Old fileA hash:", oldFileAhash);
     const fileA1v2 = { ...fileA1, content: "modified content 1" };
     fs.writeFileSync(
       path.join(peerA.pd.watchPath, fileA1.name),

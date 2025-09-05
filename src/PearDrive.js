@@ -56,8 +56,6 @@ export default class PearDrive extends ReadyResource {
   _watchPath;
   /** @private {string} Name of the local indexer */
   _indexName;
-  /** @private List of event callbacks*/
-  _hooks;
   /** @private Stored indexer options */
   _indexOpts;
   /** @private Stored hyperswarm options */
@@ -72,6 +70,8 @@ export default class PearDrive extends ReadyResource {
   _inProgress;
   /** @private {ArrayBuffer | Uint8Array} - Hyperswarm topic buffer */
   _networkKey;
+  /** @private {Object} - Holds custom message hooks */
+  _customMessageHooks = {};
 
   /**
    * @param {Object} opts
@@ -92,8 +92,9 @@ export default class PearDrive extends ReadyResource {
    *      log file (if logToFile=true).
    *    @param {string} [opts.logOpts.level=LOG_LEVELS.INFO] - Log level.
    *    @param {Object} [opts.indexOpts] - Options for the index manager.
-   *    @param {boolean} [opts.indexOpts.poll=true] - Whether to poll for
-   *      changes in the local file index automatically.
+   *    @param {boolean} [opts.indexOpts.disablePolling=false] - Whether to poll
+   *      for changes in the local file index automatically. (Only disable
+   *      polling for testing purposes)
    *    @param {number} [opts.indexOpts.pollInterval=500] - Interval in
    *      milliseconds for polling the local file index.
    *    @param {boolean} [opts.indexOpts.relay] - Whether to automaically
@@ -113,9 +114,6 @@ export default class PearDrive extends ReadyResource {
   }) {
     super();
 
-    this._emitEvent = this._emitEvent.bind(this);
-    this._hooks = {};
-
     // Set save data
     this._networkKey = networkKey
       ? utils.formatToBuffer(networkKey)
@@ -131,9 +129,13 @@ export default class PearDrive extends ReadyResource {
       seed: normalizedSeed,
     };
     this._logOpts = logOpts;
-    const { poll = true, pollInterval = 500, relay = false } = indexOpts;
+    const {
+      disablePolling = false,
+      pollInterval = 500,
+      relay = false,
+    } = indexOpts;
     this._indexOpts = {
-      poll,
+      disablePolling,
       pollInterval,
       relay,
     };
@@ -160,7 +162,6 @@ export default class PearDrive extends ReadyResource {
       store: this._store,
       log: this.#log,
       watchPath: watchPath,
-      emitEvent: this._emitEvent,
       indexOpts: this._indexOpts,
       uploads: this._uploads,
       downloads: this._downloads,
@@ -270,18 +271,10 @@ export default class PearDrive extends ReadyResource {
   // Public functions
   //////////////////////////////////////////////////////////////////////////////
 
-  /**
-   * Wire up hooks for events here.
-   *
-   * @param {string} event - Event name to hook into
-   * @param {Function} cb - Callback function to run when the event is emitted
-   */
-  on(event, cb) {
-    this.#log.info(`Registering hook for event: ${event}`);
-    if (this._hooks[event]) {
-      this.#log.warn(`Overwriting existing hook for event: ${event}`);
-    }
-    this._hooks[event] = cb;
+  /** Listen for a custom message and handle it */
+  listen(name, cb) {
+    this.#log.info(`Listening for custom message: ${name}`);
+    this._customMessageHooks[name] = cb;
   }
 
   /** Activate 'relay' mode */
@@ -387,7 +380,7 @@ export default class PearDrive extends ReadyResource {
     if (!rpc) {
       const err = new Error(`No RPC connection found for peer ${peerId}`);
       this.#log.error(err);
-      this._emitEvent(C.EVENT.ERROR, err);
+      this.emit(C.EVENT.ERROR, err);
       throw err;
     }
 
@@ -465,7 +458,7 @@ export default class PearDrive extends ReadyResource {
    * @returns {Promise<void>}
    */
   async syncLocalFilesOnce() {
-    if (this._indexOpts.poll) {
+    if (!this._indexOpts.disablePolling) {
       this.#log.warn(
         "Can't manually sync local files, automatic syncing is enabled."
       );
@@ -691,7 +684,7 @@ export default class PearDrive extends ReadyResource {
       return keyHex;
     } catch (err) {
       this.#log.error(`Error in LOCAL_INDEX_KEY_REQUEST for ${peerId}`, err);
-      this._emitEvent(C.EVENT.ERROR, err);
+      this.emit(C.EVENT.ERROR, err);
       throw err;
     }
   }
@@ -725,7 +718,7 @@ export default class PearDrive extends ReadyResource {
       this.#log.info(`Received LOCAL_INDEX_KEY from ${peerId}:`, peerKeyHex);
     } catch (err) {
       this.#log.error(`Error requesting local index key from ${peerId}`, err);
-      this._emitEvent(C.EVENT.ERROR, err);
+      this.emit(C.EVENT.ERROR, err);
       return;
     }
 
@@ -747,7 +740,7 @@ export default class PearDrive extends ReadyResource {
     }
 
     // Emit peer update event
-    this._emitEvent(C.EVENT.PEER, peerId);
+    this.emit(C.EVENT.PEER_CONNECT, peerId);
     this.#log.info(`Peer ${peerId} connected and ready!`);
   }
 
@@ -767,73 +760,7 @@ export default class PearDrive extends ReadyResource {
     this._indexManager.handlePeerDisconnected(peerId);
 
     // Emit peer update event
-    this._emitEvent(C.EVENT.PEER, peerId);
-  }
-
-  /**
-   * Emit events to registered hooks.
-   *
-   * @param {string} event - Event name
-   *
-   * @param {any} payload - Arguments to pass to the event handlers
-   *
-   * @private
-   */
-  _emitEvent(eventName, payload) {
-    this.#log.info(`Emitting event: ${eventName}`, payload);
-    if (!this._hooks[eventName]) return;
-
-    /**
-     * Prevent infinite loop by running errors thrown inside callbacks in
-     * child function
-     */
-    const emitError = (error) => {
-      const cb = this._hooks[C.EVENT.ERROR];
-      if (!cb) return;
-      try {
-        cb(error);
-      } catch (err) {
-        this.#log.error("Error in ERROR hook for", eventName, err);
-      }
-    };
-
-    /**
-     * Run system events once when they are specifically called, and also
-     * run them when any other event is emitted.
-     */
-    const systemEvent = () => {
-      const cb = this._hooks[C.EVENT.SYSTEM];
-      if (!cb) return;
-      try {
-        cb(payload);
-      } catch (err) {
-        this.#log.error("Error in SYSTEM hook for", eventName, err);
-        emitError(err);
-        return;
-      }
-    };
-
-    // Only run system and error callbacks once
-    if (eventName === C.EVENT.SYSTEM) {
-      systemEvent();
-      return;
-    }
-    if (eventName === C.EVENT.ERROR) {
-      emitError(payload);
-      return;
-    }
-
-    systemEvent();
-
-    // Run user-defined hooks
-    const cb = this._hooks[eventName];
-    if (!cb) return;
-    try {
-      cb(payload);
-    } catch (err) {
-      this.#log.error("Error in hook for", eventName, err);
-      emitError(err);
-    }
+    this.emit(C.EVENT.PEER_DISCONNECT, peerId);
   }
 
   /**
@@ -868,7 +795,7 @@ export default class PearDrive extends ReadyResource {
         )}`,
         err
       );
-      this._emitEvent(C.EVENT.ERROR, err);
+      this.emit(C.EVENT.ERROR, err);
     }
   }
 
@@ -899,7 +826,7 @@ export default class PearDrive extends ReadyResource {
         )}`,
         err
       );
-      this._emitEvent(C.EVENT.ERROR, err);
+      this.emit(C.EVENT.ERROR, err);
       throw err;
     }
   }
@@ -920,7 +847,7 @@ export default class PearDrive extends ReadyResource {
       );
       this.#log.debug("MESSAGE Payload:", payload);
 
-      const cb = this._hooks[type];
+      const cb = this._customMessageHooks[type];
       if (!cb) {
         this.#log.warn(
           `No handler for message type "${type}" from ${conn.remotePublicKey}`
@@ -935,7 +862,7 @@ export default class PearDrive extends ReadyResource {
         `Error handling MESSAGE from ${conn.remotePublicKey}`,
         err
       );
-      this._emitEvent(C.EVENT.ERROR, err);
+      this.emit(C.EVENT.ERROR, err);
     }
   }
 
@@ -964,7 +891,7 @@ export default class PearDrive extends ReadyResource {
     if (!rpc) {
       const err = new Error(`No RPC connection found for peer ${peerId}`);
       this.#log.error(err);
-      this._emitEvent(C.EVENT.ERROR, err);
+      this.emit(C.EVENT.ERROR, err);
       throw err;
     }
 
@@ -972,7 +899,7 @@ export default class PearDrive extends ReadyResource {
     if (typeof payload === "undefined") {
       const err = new Error(`Cannot send undefined payload to peer ${peerId}`);
       this.#log.error(err);
-      this._emitEvent(C.EVENT.ERROR, err);
+      this.emit(C.EVENT.ERROR, err);
       throw err;
     }
 
@@ -991,25 +918,6 @@ export default class PearDrive extends ReadyResource {
     }
   }
 
-  async _open() {
-    this.#log.info("Opening PearDrive...");
-
-    await this._store.ready();
-    await this._indexManager.ready();
-
-    this.#log.info("PearDrive opened successfully!");
-  }
-
-  async _close() {
-    this.#log.info("Closing PearDrive...");
-
-    await this._indexManager.close();
-    this._swarm.destroy();
-    await this._store.close();
-
-    this.#log.info("PearDrive closed successfully!");
-  }
-
   /** Build save data */
   #buildSaveData() {
     return {
@@ -1024,5 +932,49 @@ export default class PearDrive extends ReadyResource {
       relay: this.relay,
       indexOpts: this.indexOpts,
     };
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Lifecycle methods
+  //////////////////////////////////////////////////////////////////////////////
+
+  async _open() {
+    this.#log.info("Opening PearDrive...");
+
+    // Ready resources
+    await this._store.ready();
+    await this._indexManager.ready();
+
+    // Wire up IM event listeners
+    this._indexManager.on(C.IM_EVENT.LOCAL_FILE_ADDED, (data) => {
+      this.emit(C.EVENT.LOCAL_FILE_ADDED, data);
+    });
+    this._indexManager.on(C.IM_EVENT.LOCAL_FILE_REMOVED, (data) => {
+      this.emit(C.EVENT.LOCAL_FILE_REMOVED, data);
+    });
+    this._indexManager.on(C.IM_EVENT.LOCAL_FILE_CHANGED, (data) => {
+      this.emit(C.EVENT.LOCAL_FILE_CHANGED, data);
+    });
+    this._indexManager.on(C.IM_EVENT.PEER_FILE_ADDED, (data) => {
+      this.emit(C.EVENT.PEER_FILE_ADDED, data);
+    });
+    this._indexManager.on(C.IM_EVENT.PEER_FILE_REMOVED, (data) => {
+      this.emit(C.EVENT.PEER_FILE_REMOVED, data);
+    });
+    this._indexManager.on(C.IM_EVENT.PEER_FILE_CHANGED, (data) => {
+      this.emit(C.EVENT.PEER_FILE_CHANGED, data);
+    });
+
+    this.#log.info("PearDrive opened successfully!");
+  }
+
+  async _close() {
+    this.#log.info("Closing PearDrive...");
+
+    await this._indexManager.close();
+    this._swarm.destroy();
+    await this._store.close();
+
+    this.#log.info("PearDrive closed successfully!");
   }
 }

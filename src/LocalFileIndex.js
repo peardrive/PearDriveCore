@@ -23,6 +23,7 @@ import ReadyResource from "ready-resource";
 
 import * as utils from "./utils/index.js";
 import * as C from "./constants.js";
+const { LFI_EVENT } = C;
 
 /**
  * Handles watching and indexing local files.
@@ -52,7 +53,6 @@ export default class LocalFileIndex extends ReadyResource {
    *    @param {any} opts.log - Optional logger instance
    *    @param {import('corestore')} opts.store - Corestore instance
    *    @param {string} opts.watchPath - Path to watch for local files
-   *    @param {Function} opts.emitEvent - Optional function to emit events
    *    @param {Object} opts.indexOpts - Index options
    *    @param {Map<string, HyperDrive} opts.downloads - Map of download drives
    *      and corestore subspaces
@@ -65,7 +65,6 @@ export default class LocalFileIndex extends ReadyResource {
     log,
     store,
     watchPath,
-    emitEvent,
     indexOpts,
     uploads,
     downloads,
@@ -77,8 +76,6 @@ export default class LocalFileIndex extends ReadyResource {
     this.#log = log;
     this.#log.info("Initializing LocalFileIndex...");
 
-    /** Event emitter */
-    this._emitEvent = emitEvent;
     /** Corestore instance */
     this._store = store.namespace("peardrive:localfileindex");
     /** Absolute path to folder being watched */
@@ -150,7 +147,7 @@ export default class LocalFileIndex extends ReadyResource {
       await this.#bee.put(relativePath, metaData);
     }
 
-    if (!isEmpty) this._emitEvent(C.EVENT.LOCAL, null);
+    // if (!isEmpty) this._emitEvent(C.EVENT.LOCAL, null);
     this.#log.info("Index build complete!");
   }
 
@@ -187,7 +184,7 @@ export default class LocalFileIndex extends ReadyResource {
     this.#log.info("Starting automatic polling for local files...");
 
     this._running = true;
-    this._indexOpts.poll = true;
+    this._indexOpts.disablePolling = false;
 
     this.#pollAndSync(true);
   }
@@ -292,7 +289,7 @@ export default class LocalFileIndex extends ReadyResource {
           }
           this.#log.info("File deleted:", storedPath);
           await this.#bee.del(storedPath);
-          this._emitEvent(C.EVENT.LOCAL, null);
+          // this._emitEvent(C.EVENT.LOCAL, null);
         }
       }
 
@@ -305,7 +302,7 @@ export default class LocalFileIndex extends ReadyResource {
             path
           );
           await this.#bee.put(path, meta);
-          this._emitEvent(C.EVENT.LOCAL, null);
+          // this._emitEvent(C.EVENT.LOCAL, null);
         }
       }
 
@@ -510,17 +507,19 @@ export default class LocalFileIndex extends ReadyResource {
       }
 
       if (!exists) {
-        // File was deleted
+        // If file is currently being uploaded/downloaded, noop
         if (this.#isBusy(relativePath)) {
           this.#log.info("Busy file not deleted!", relativePath);
           return;
         }
 
+        // File must have been deleted
         if (this.#metadataCache.has(relativePath)) {
           this.#log.info("File deleted:", relativePath);
           await this.#bee.del(relativePath);
           this.#metadataCache.delete(relativePath);
-          this._emitEvent(C.EVENT.LOCAL, null);
+          this.emit(LFI_EVENT.FILE_REMOVED, relativePath);
+          // this._emitEvent(C.EVENT.LOCAL, null);
         }
       } else if (isDirectory) {
         // New directory created - watch it
@@ -540,31 +539,61 @@ export default class LocalFileIndex extends ReadyResource {
   /** Update a single file in the index */
   async #updateFile(relativePath, fullPath) {
     if (this.#isBusy(relativePath)) {
-      this.#log.info("Skipping busy file:", relativePath);
+      this.#log.debug("Skipping busy file:", relativePath);
       return;
     }
 
     try {
       const fileStat = fs.statSync(fullPath);
 
-      // Check if we need to recalculate hash
+      // Check if we need to hash
       const cachedMeta = this.#metadataCache.get(relativePath);
-      let needsHash = true;
-      let hash;
+      let needsWrite = false;
+      let changed = false;
+      let prevHash, hash;
 
+      // If the file was previously registered
+      if (cachedMeta) {
+        prevHash = cachedMeta.hash;
+        hash = cachedMeta.hash;
+
+        // Check if file has already been logged and is unchanged. If so, noop
+        const unchanged =
+          cachedMeta.size === fileStat.size &&
+          cachedMeta.modified === fileStat.mtimeMs;
+        if (unchanged) {
+          this.#log.debug("File unchanged no event emitting:", relativePath);
+          return;
+        }
+
+        // A change has occurred, rehash and check if hash has changed
+        hash = await this.#hashFile(fullPath);
+        changed = hash !== prevHash;
+        needsWrite = true;
+      }
+
+      // If the file is new since last init/first init, always hash
+      else {
+        hash = await this.#hashFile(fullPath);
+        needsWrite = true;
+      }
+
+      // File hasn't changed, use cached hash
       if (
         cachedMeta &&
         cachedMeta.size === fileStat.size &&
         cachedMeta.modified === fileStat.mtimeMs
       ) {
-        // File hasn't changed, use cached hash
         needsHash = false;
-        hash = cachedMeta.hash;
-      } else {
-        // File changed, recalculate hash
-        hash = await this.#hashFile(fullPath);
       }
 
+      // If nothing is supposed to change from last record of this file, return
+      if (!needsWrite) {
+        this.#log.debug("File unchanged no event emitting:", relativePath);
+        return;
+      }
+
+      // Handle writing to bee
       const metadata = {
         path: relativePath,
         size: fileStat.size,
@@ -572,16 +601,33 @@ export default class LocalFileIndex extends ReadyResource {
         hash,
       };
 
-      // Only update if metadata actually changed
-      if (needsHash) {
-        this.#log.info(
-          cachedMeta ? "File updated:" : "New file added:",
-          relativePath
-        );
-        await this.#bee.put(relativePath, metadata);
-        this.#metadataCache.set(relativePath, metadata);
-        this._emitEvent(C.EVENT.LOCAL, null);
+      // Update bee/metadata
+      await this.#bee.put(relativePath, metadata);
+      this.#metadataCache.set(relativePath, metadata);
+
+      // If indexed file got updated
+      if (cachedMeta) {
+        if (changed) {
+          this.#log.debug("File changed:", relativePath);
+          this.emit(LFI_EVENT.FILE_CHANGED, {
+            path: relativePath,
+            prevHash,
+            hash,
+          });
+        }
       }
+
+      // Unindexed file added
+      else {
+        this.#log.debug("New file added:", relativePath);
+        this.emit(LFI_EVENT.FILE_ADDED, {
+          path: relativePath,
+          hash,
+        });
+      }
+
+      // Backwards compat (remove in v1.6)
+      // this._emitEvent(C.EVENT.LOCAL, null);
     } catch (err) {
       this.#log.error(`Error updating file ${relativePath}:`, err);
     }
@@ -601,7 +647,9 @@ export default class LocalFileIndex extends ReadyResource {
   }
   //-- End file watching system ----------------------------------------------//
 
-  // -- Lifecycle methods ----------------------------------------------------//
+  //////////////////////////////////////////////////////////////////////////////
+  // Lifecycle methods
+  //////////////////////////////////////////////////////////////////////////////
 
   async _open() {
     this.#log.info("Opening LocalFileIndex...");
@@ -616,11 +664,14 @@ export default class LocalFileIndex extends ReadyResource {
 
     await this.#loadMetadataCache();
 
-    // Start native file watching if enabled
+    // File polling / watching
     if (this._useNativeWatching) {
       await this.#startNativeWatching();
     } else {
       this.#log.info("Native file watching disabled, using polling mode.");
+    }
+    if (this._indexOpts.poll) {
+      this.startPolling();
     }
 
     this.#log.info("LocalFileIndex opened successfully!");
@@ -652,5 +703,4 @@ export default class LocalFileIndex extends ReadyResource {
 
     this.#log.info("LocalFileIndex closed successfully!");
   }
-  //-- End lifecycle methods -------------------------------------------------//
 }

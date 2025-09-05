@@ -49,8 +49,78 @@ export const EVENT = {
   NETWORK: "[PD]: network_update",
   /** Update on a file on the local filesystem */
   LOCAL: "[PD]: local_update",
-  /** Any error thrown in PearDrive */
-  ERROR: "[PD]: error_update",
   /** Download progress info */
   DOWNLOAD_PROGRESS: "[PD]: download_progress",
+
+  /** Any error thrown in PearDrive */
+  ERROR: "[PD]: error",
+  /** Peer connected */
+  CONNECTED: "[PD]: peer_connected",
+  /** Peer disconnected */
+  DISCONNECTED: "[PD]: peer_disconnected",
+  /** Local file added (Wrapper for IM event) */
+  LOCAL_FILE_ADDED: "[PD]: local_file_added",
+  /** Local file removed (Wrapper for IM event) */
+  LOCAL_FILE_REMOVED: "[PD]: local_file_removed",
+  /** Local file changed (Wrapper for IM event) */
+  LOCAL_FILE_CHANGED: "[PD]: local_file_changed",
+  /** Peer file added (Wrapper for IM event) */
+  PEER_FILE_ADDED: "[PD]: peer_file_added",
+  /** Peer file removed (Wrapper for IM event) */
+  PEER_FILE_REMOVED: "[PD]: peer_file_removed",
+  /** Peer file changed (Wrapper for IM event) */
+  PEER_FILE_CHANGED: "[PD]: peer_file_changed",
+};
+
+/**
+ * Events emitted from LocalFileIndex
+ *
+ * @protected
+ */
+export const LFI_EVENT = {
+  /** Any error occurring in the local file index */
+  ERROR: "[LFI]: local_file_index_error",
+  /** Emitted when a file is added to the local file index
+   *
+   * Emitted with the following data:
+   * - `path`: The (relative) path of the file
+   * - `hash`: The hash of the file
+   */
+  FILE_ADDED: "[LFI]: local_file_index_file_added",
+  /**
+   * Emitted when a file is removed from the local file index
+   *
+   * Emits the path string
+   */
+  FILE_REMOVED: "[LFI]: local_file_index_file_removed",
+  /**
+   * Emitted when a file's contents have changed
+   *
+   * Emitted with the following data:
+   * - `path`: The (relative) path of the file
+   * - `prevHash`: The previous hash of the file
+   * - `hash`: The new hash of the file
+   */
+  FILE_CHANGED: "[LFI]: local_file_index_file_changed",
+};
+
+/**
+ * Events emitted from IndexManager
+ *
+ * @protected
+ */
+export const IM_EVENT = {
+  /** Mirrors emitted from LFI FILE_ADDED */
+  LOCAL_FILE_ADDED: "[IM]: local_file_added",
+  /** Mirrors emitted from LFI FILE_REMOVED */
+  LOCAL_FILE_REMOVED: "[IM]: local_file_removed",
+  /** Mirrors emitted from LFI FILE_CHANGED */
+  LOCAL_FILE_CHANGED: "[IM]: local_file_changed",
+
+  /** When a peer has added a file */
+  PEER_FILE_ADDED: "[IM]: peer_file_added",
+  /** When a peer has removed a file */
+  PEER_FILE_REMOVED: "[IM]: peer_file_removed",
+  /** When a peer's file has changed */
+  PEER_FILE_CHANGED: "[IM]: peer_file_changed",
 };
