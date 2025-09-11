@@ -674,6 +674,8 @@ test(
     }
     await pearDriveB.pd.syncLocalFilesOnce();
 
+    await utils.wait(1); // Give replication a moment to propagate
+
     // Test file indexing on pearDriveB
     const pearDriveAkey = pearDriveA.pd.publicKey;
     const networkFilesB = await pearDriveB.pd.listNetworkFiles();
