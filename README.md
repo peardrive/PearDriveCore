@@ -366,6 +366,16 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 
 ## 🚧 Changelog
 
+### 1.5.1
+
+- Update dependencies
+- Fix listNetworkFiles test
+
+### 1.5.0
+
+- Event system rework
+- Performance improvements
+
 ### 1.4.2
 
 - Fix timeout system for downloading files through hyperblobs
