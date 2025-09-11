@@ -369,6 +369,7 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 ### 1.5.1
 
 - Update dependencies
+- Fix listNetworkFiles test
 
 ### 1.5.0
 
