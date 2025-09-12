@@ -55,9 +55,9 @@ export const EVENT = {
   /** Any error thrown in PearDrive */
   ERROR: "[PD]: error",
   /** Peer connected */
-  CONNECTED: "[PD]: peer_connected",
+  PEER_CONNECTED: "[PD]: peer_connected",
   /** Peer disconnected */
-  DISCONNECTED: "[PD]: peer_disconnected",
+  PEER_DISCONNECTED: "[PD]: peer_disconnected",
   /** Local file added (Wrapper for IM event) */
   LOCAL_FILE_ADDED: "[PD]: local_file_added",
   /** Local file removed (Wrapper for IM event) */
