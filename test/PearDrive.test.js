@@ -450,48 +450,59 @@ test(
       } catch {}
     });
 
-    await t.test("PEER_CONNECT events fire on both sides", async (subtest) => {
-      let aSawB = false;
-      let bSawA = false;
+    await t.test(
+      "PEER_CONNECTED events fire on both sides",
+      async (subtest) => {
+        subtest.plan(6);
+        let aSawB = false;
+        let bSawA = false;
 
-      // A should see B connect
-      pdA.once(C.EVENT.PEER_CONNECT, (peerId) => {
-        try {
-          subtest.ok(typeof peerId === "string", "A received peerId as string");
-          subtest.is(peerId, pdB.publicKey, "A saw B's public key");
-          aSawB = true;
-          subtest.pass("PEER_CONNECT (A observed B) fired");
-        } catch (e) {
-          subtest.fail("Bad payload for PEER_CONNECT on A", e);
-        }
-      });
+        // A should see B connect
+        pdA.once(C.EVENT.PEER_CONNECTED, (peerId) => {
+          try {
+            subtest.ok(
+              typeof peerId === "string",
+              "A received peerId as string"
+            );
+            subtest.is(peerId, pdB.publicKey, "A saw B's public key");
+            aSawB = true;
+            subtest.pass("PEER_CONNECTED (A observed B) fired");
+          } catch (e) {
+            subtest.fail("Bad payload for PEER_CONNECTED on A", e);
+          }
+        });
 
-      // B should see A connect
-      pdB.once(C.EVENT.PEER_CONNECT, (peerId) => {
-        try {
-          subtest.ok(typeof peerId === "string", "B received peerId as string");
-          subtest.is(peerId, pdA.publicKey, "B saw A's public key");
-          bSawA = true;
-          subtest.pass("PEER_CONNECT (B observed A) fired");
-        } catch (e) {
-          subtest.fail("Bad payload for PEER_CONNECT on B", e);
-        }
-      });
+        // B should see A connect
+        pdB.once(C.EVENT.PEER_CONNECTED, (peerId) => {
+          try {
+            subtest.ok(
+              typeof peerId === "string",
+              "B received peerId as string"
+            );
+            subtest.is(peerId, pdA.publicKey, "B saw A's public key");
+            bSawA = true;
+            subtest.pass("PEER_CONNECTED (B observed A) fired");
+          } catch (e) {
+            subtest.fail("Bad payload for PEER_CONNECTED on B", e);
+          }
+        });
 
-      // Now connect B to A’s network (triggers both connect events)
-      await pdB.joinNetwork(topic);
+        // Now connect B to A’s network (triggers both connect events)
+        await pdB.joinNetwork(topic);
 
-      await utils.wait(5);
-      if (!aSawB) subtest.fail("PEER_CONNECT not fired on A (timed out)");
-      if (!bSawA) subtest.fail("PEER_CONNECT not fired on B (timed out)");
-    });
+        await utils.wait(5);
+        if (!aSawB) subtest.fail("PEER_CONNECTED not fired on A (timed out)");
+        if (!bSawA) subtest.fail("PEER_CONNECTED not fired on B (timed out)");
+      }
+    );
 
     await t.test(
-      "PEER_DISCONNECT event (A observes B leaving)",
+      "PEER_DISCONNECTED event (A observes B leaving)",
       async (subtest) => {
+        subtest.plan(3);
         let aSawDisconnect = false;
 
-        pdA.once(C.EVENT.PEER_DISCONNECT, (peerId) => {
+        pdA.once(C.EVENT.PEER_DISCONNECTED, (peerId) => {
           try {
             subtest.ok(
               typeof peerId === "string",
@@ -499,9 +510,9 @@ test(
             );
             subtest.is(peerId, pdB.publicKey, "A saw B disconnect");
             aSawDisconnect = true;
-            subtest.pass("PEER_DISCONNECT (A observed B) fired");
+            subtest.pass("PEER_DISCONNECTED (A observed B) fired");
           } catch (e) {
-            subtest.fail("Bad payload for PEER_DISCONNECT on A", e);
+            subtest.fail("Bad payload for PEER_DISCONNECTED on A", e);
           }
         });
 
@@ -510,13 +521,15 @@ test(
 
         await utils.wait(5);
         if (!aSawDisconnect)
-          subtest.fail("PEER_DISCONNECT not fired on A (timed out)");
+          subtest.fail("PEER_DISCONNECTED not fired on A (timed out)");
       }
     );
 
     await t.test(
-      "PEER_DISCONNECT event (B observes A leaving)",
+      "PEER_DISCONNECTED event (B observes A leaving)",
       async (subtest) => {
+        subtest.plan(3);
+
         // Bring up a fresh B2 so we can test the reverse direction cleanly
         const B2 = await utils.createPearDrive({
           name: "peer-conn-B2",
@@ -533,7 +546,7 @@ test(
 
         let bSawDisconnect = false;
 
-        pdB2.once(C.EVENT.PEER_DISCONNECT, (peerId) => {
+        pdB2.once(C.EVENT.PEER_DISCONNECTED, (peerId) => {
           try {
             subtest.ok(
               typeof peerId === "string",
@@ -541,9 +554,9 @@ test(
             );
             subtest.is(peerId, pdA.publicKey, "B2 saw A disconnect");
             bSawDisconnect = true;
-            subtest.pass("PEER_DISCONNECT (B2 observed A) fired");
+            subtest.pass("PEER_DISCONNECTED (B2 observed A) fired");
           } catch (e) {
-            subtest.fail("Bad payload for PEER_DISCONNECT on B2", e);
+            subtest.fail("Bad payload for PEER_DISCONNECTED on B2", e);
           }
         });
 
@@ -552,7 +565,7 @@ test(
 
         await utils.wait(5);
         if (!bSawDisconnect)
-          subtest.fail("PEER_DISCONNECT not fired on B2 (timed out)");
+          subtest.fail("PEER_DISCONNECTED not fired on B2 (timed out)");
 
         // Cleanup B2 (A already closed)
         await pdB2.close();
