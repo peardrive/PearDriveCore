@@ -124,3 +124,12 @@ export const IM_EVENT = {
   /** When a peer's file has changed */
   PEER_FILE_CHANGED: "[IM]: peer_file_changed",
 };
+
+/**
+ * Message status codes for RPC communications
+ */
+export const MESSAGE_STATUS = {
+  ERROR: "error",
+  SUCCESS: "success",
+  UNKNOWN_MESSAGE_TYPE: "unknown_message_type",
+};

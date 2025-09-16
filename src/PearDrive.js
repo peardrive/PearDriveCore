@@ -498,7 +498,7 @@ export default class PearDrive extends ReadyResource {
    *  to
    * @param {string} filePath - Path of the file to request on remote peer
    *
-   * @returns {Promise<string>} - Peer download drive key
+   * @returns {Promise<Object>} - Peer download blob reference
    *
    * @private
    */
@@ -508,11 +508,16 @@ export default class PearDrive extends ReadyResource {
       this.#log.info(
         `Sending FILE_REQUEST to peer ${peerIdStr} for file ${filePath}`
       );
-      const peerDownloadInfo = await this._sendInternalMessageToPeer(
+
+      const response = await this._sendInternalMessageToPeer(
         peerIdStr,
         C.RPC.FILE_REQUEST,
         filePath
       );
+      if (response.status !== C.MESSAGE_STATUS.SUCCESS)
+        throw new Error(`File request failed on peer ${peerIdStr}`);
+      const peerDownloadInfo = response.data;
+
       return peerDownloadInfo;
     } catch (err) {
       this.#log.error(`Error sending file request to peer ${peerId}`, err);
@@ -542,7 +547,7 @@ export default class PearDrive extends ReadyResource {
         C.RPC.FILE_RELEASE,
         filePath
       );
-      if (response !== "true") {
+      if (response.status !== C.MESSAGE_STATUS.SUCCESS) {
         throw new Error("File release failed on peer");
       }
 
@@ -653,10 +658,16 @@ export default class PearDrive extends ReadyResource {
       await this._indexManager.addBee(peerId, bee);
       this.#log.info(`Registered remote index for peer ${peerId}`);
 
-      return true;
+      return {
+        status: C.MESSAGE_STATUS.SUCCESS,
+        data: "Registered remote index successfully",
+      };
     } catch (err) {
       this.#log.error(`Error registering remote index for peer ${peerId}`, err);
-      throw err;
+      return {
+        status: C.MESSAGE_STATUS.ERROR,
+        data: `Error registering index for peer ${peerId}: ${err.message}`,
+      };
     }
   }
 
@@ -666,7 +677,7 @@ export default class PearDrive extends ReadyResource {
    * @param {Connection} conn – Hyperswarm connection
    * @param {any} _payload – Ignored
    *
-   * @returns {Promise<string>}    – Hex-encoded local file-index key
+   * @returns {Promise<string>} – Hex-encoded local file-index key
    *
    * @private
    */
@@ -681,11 +692,17 @@ export default class PearDrive extends ReadyResource {
 
       // Send key back to peer
       this.#log.info(`Sending local index key to ${peerId}: ${keyHex}`);
-      return keyHex;
+      return {
+        status: C.MESSAGE_STATUS.SUCCESS,
+        data: keyHex,
+      };
     } catch (err) {
       this.#log.error(`Error in LOCAL_INDEX_KEY_REQUEST for ${peerId}`, err);
       this.emit(C.EVENT.ERROR, err);
-      throw err;
+      return {
+        status: C.MESSAGE_STATUS.ERROR,
+        data: `Error retrieving local index key: ${err.message}`,
+      };
     }
   }
 
@@ -710,11 +727,16 @@ export default class PearDrive extends ReadyResource {
     let peerKeyHex;
     try {
       this.#log.info(`Requesting LOCAL_INDEX_KEY from ${peerId}…`);
-      peerKeyHex = await this._sendInternalMessageToPeer(
+
+      const response = await this._sendInternalMessageToPeer(
         peerId,
         C.RPC.LOCAL_INDEX_KEY_REQUEST,
         null
       );
+      if (response.status !== C.MESSAGE_STATUS.SUCCESS)
+        throw new Error(`Failed to retrieve local index key from ${peerId}`);
+      peerKeyHex = response.data;
+
       this.#log.info(`Received LOCAL_INDEX_KEY from ${peerId}:`, peerKeyHex);
     } catch (err) {
       this.#log.error(`Error requesting local index key from ${peerId}`, err);
@@ -780,14 +802,18 @@ export default class PearDrive extends ReadyResource {
       }
 
       this._indexManager.markTransfer(payload, "upload", conn.remotePublicKey);
-      const response = await this._indexManager.createUploadBlob(payload);
-      if (!response) {
+      const uploadBlobRef = await this._indexManager.createUploadBlob(payload);
+      if (!uploadBlobRef) {
         const peer = utils.formatToStr(conn.remotePublicKey);
         throw new Error(
           `Failed to create upload blob for file ${payload} on peer ${peer}`
         );
       }
-      return response;
+
+      return {
+        status: C.MESSAGE_STATUS.SUCCESS,
+        data: uploadBlobRef,
+      };
     } catch (err) {
       this.#log.error(
         `Error handling file request from ${utils.formatToStr(
@@ -796,6 +822,10 @@ export default class PearDrive extends ReadyResource {
         err
       );
       this.emit(C.EVENT.ERROR, err);
+      return {
+        status: C.MESSAGE_STATUS.ERROR,
+        data: `Error handling file request: ${err.message}`,
+      };
     }
   }
 
@@ -818,7 +848,10 @@ export default class PearDrive extends ReadyResource {
       const peerId = utils.formatToStr(conn.remotePublicKey);
       await this._indexManager.unmarkTransfer(payload, "upload", peerId);
 
-      return "true";
+      return {
+        status: C.MESSAGE_STATUS.SUCCESS,
+        data: "File release successful",
+      };
     } catch (err) {
       this.#log.error(
         `Error handling file release from ${utils.formatToStr(
@@ -827,7 +860,10 @@ export default class PearDrive extends ReadyResource {
         err
       );
       this.emit(C.EVENT.ERROR, err);
-      throw err;
+      return {
+        status: C.MESSAGE_STATUS.ERROR,
+        data: `Error handling file release: ${err.message}`,
+      };
     }
   }
 
@@ -847,16 +883,40 @@ export default class PearDrive extends ReadyResource {
       );
       this.#log.debug("MESSAGE Payload:", payload);
 
+      // Retrieve callback function associated with this message type
       const cb = this._customMessageHooks[type];
       if (!cb) {
-        this.#log.warn(
-          `No handler for message type "${type}" from ${conn.remotePublicKey}`
-        );
-        return { status: "error", message: `No handler for type "${type}"` };
+        const errorMessage = `No handler for message type "${type}" \
+        from ${conn.remotePublicKey} (did you forget to call listen()?)`;
+        this.#log.error(errorMessage);
+        this.emit(C.EVENT.ERROR, errorMessage);
+        return {
+          status: C.MESSAGE_STATUS.UNKNOWN_MESSAGE_TYPE,
+          data: `No handler for type "${type}"`,
+        };
       }
 
-      const response = await cb(payload);
-      return response;
+      // Run the callback and escape any errors
+      let response;
+      try {
+        response = await cb(payload);
+      } catch (err) {
+        this.#log.error(
+          `Error handling MESSAGE of type "${type}" from ${conn.remotePublicKey}`,
+          err
+        );
+        this.emit(C.EVENT.ERROR, err);
+        return {
+          status: C.MESSAGE_STATUS.ERROR,
+          data: `Error handling message of type "${type}"`,
+        };
+      }
+
+      // Response must have been successful, return
+      return {
+        status: C.MESSAGE_STATUS.SUCCESS,
+        data: response,
+      };
     } catch (err) {
       this.#log.error(
         `Error handling MESSAGE from ${conn.remotePublicKey}`,
@@ -873,7 +933,11 @@ export default class PearDrive extends ReadyResource {
    * @param {string} type – RPC method name (e.g. C.RPC.LOCAL_INDEX_KEY_SEND)
    * @param {string|Uint8Array} payload – Data to send
    *
-   * @returns {Promise<any>} – Whatever the RPC method returns
+   * @returns {Promise<{status: string, data: any}>} – Whatever the RPC method
+   * returns
+   *
+   * @throws {Error} If no RPC connection is found for the peer or if payload is
+   * undefined
    *
    * @private
    */

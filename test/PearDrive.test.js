@@ -601,7 +601,7 @@ test(txt.main("PearDrive: Custom message"), { stealth: true }, async (t) => {
   let customRequestReceived = false;
   peerB.pd.listen("custom_message", (_payload) => {
     customRequestReceived = true;
-    return true;
+    return "test";
   });
 
   const peerId = peerA.pd.listPeersStringified()[0].publicKey;
@@ -609,7 +609,12 @@ test(txt.main("PearDrive: Custom message"), { stealth: true }, async (t) => {
     data: "test",
   });
   t.ok(customRequestReceived, "Custom request received by pearDriveB");
-  t.is(response, true, "Custom response received by pearDriveA");
+  t.is(
+    response.status,
+    C.MESSAGE_STATUS.SUCCESS,
+    "Custom response received by pearDriveA successfully"
+  );
+  t.is(response.data, "test", "Custom response data is correct");
 });
 
 ////////////////////////////////////////////////////////////////////////////////
