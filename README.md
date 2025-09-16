@@ -369,6 +369,8 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 ### 1.5.3
 
 - Improve error handling
+- All RPC messages, internal and user-created, now return the format: {status, data}
+- All RPC messages, internal and user-created, no longer throw errors directly through the RPC. Instead, they return an error status code and the data payload contains the error message.
 
 ### 1.5.2
 
