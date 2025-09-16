@@ -366,6 +366,14 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 
 ## 🚧 Changelog
 
+### 1.5.3
+
+- Improve error handling
+
+### 1.5.2
+
+- fix PEER\_(DIS)CONNECTED events
+
 ### 1.5.1
 
 - Update dependencies
