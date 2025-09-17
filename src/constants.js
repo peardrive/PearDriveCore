@@ -32,7 +32,6 @@ export const RPC = {
   LOCAL_INDEX_KEY_REQUEST: "local_index_key_request",
 
   FILE_REQUEST: "file_request",
-  FILE_SEND: "file_send",
   FILE_RELEASE: "file_release",
 };
 
