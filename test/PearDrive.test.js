@@ -588,7 +588,7 @@ test(txt.main("PearDrive: Custom message"), { stealth: true }, async (t) => {
     n: 2,
     onError: (err) => t.fail(txt.fail("onError called"), err),
     indexOpts: {
-      poll: false, // Disable polling for this test
+      disablePolling: true, // Disable polling for this test
       pollInterval: 500,
     },
   });
@@ -598,23 +598,56 @@ test(txt.main("PearDrive: Custom message"), { stealth: true }, async (t) => {
     await peerB.pd.close();
   });
 
-  let customRequestReceived = false;
-  peerB.pd.listen("custom_message", (_payload) => {
-    customRequestReceived = true;
-    return "test";
+  await t.test("Send custom message to peer", async (subtest) => {
+    let customRequestReceived = false;
+    peerB.pd.listen("custom_message", (_payload) => {
+      customRequestReceived = true;
+      return "test";
+    });
+
+    const peerId = peerA.pd.listPeersStringified()[0].publicKey;
+    const response = await peerA.pd.sendMessage(peerId, "custom_message", {
+      data: "test",
+    });
+    subtest.ok(customRequestReceived, "Custom request received by pearDriveB");
+    subtest.is(
+      response.status,
+      C.MESSAGE_STATUS.SUCCESS,
+      "Custom response received by pearDriveA successfully"
+    );
+    subtest.is(response.data, "test", "Custom response data is correct");
   });
 
-  const peerId = peerA.pd.listPeersStringified()[0].publicKey;
-  const response = await peerA.pd.sendMessage(peerId, "custom_message", {
-    data: "test",
+  await t.test("Send once custom message to peer", async (subtest) => {
+    let customOnceRequestReceived = 0;
+    peerB.pd.listenOnce("custom_once_message", (_payload) => {
+      customOnceRequestReceived += 1;
+    });
+
+    const peerId = peerA.pd.listPeersStringified()[0].publicKey;
+    const response = await peerA.pd.sendMessage(peerId, "custom_once_message", {
+      data: "test",
+    });
+    const response2 = await peerA.pd.sendMessage(
+      peerId,
+      "custom_once_message",
+      {
+        data: "test",
+      }
+    );
+
+    subtest.is(
+      response.status,
+      C.MESSAGE_STATUS.SUCCESS,
+      "First send succeeded"
+    );
+    subtest.is(
+      response2.status,
+      C.MESSAGE_STATUS.UNKNOWN_MESSAGE_TYPE,
+      "Second send failed"
+    );
+    subtest.is(customOnceRequestReceived, 1, "Once listener fired once");
   });
-  t.ok(customRequestReceived, "Custom request received by pearDriveB");
-  t.is(
-    response.status,
-    C.MESSAGE_STATUS.SUCCESS,
-    "Custom response received by pearDriveA successfully"
-  );
-  t.is(response.data, "test", "Custom response data is correct");
 });
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -629,7 +662,7 @@ test(txt.main("PearDrive: List local files"), { stealth: true }, async (t) => {
     name: "list-local-files",
     bootstrap,
     onError: (err) => t.fail(txt.fail("onError called"), err),
-    indexOpts: { poll: false, pollInterval: 500 },
+    indexOpts: { disablePolling: true, pollInterval: 500 },
   });
   t.teardown(() => pd.close());
   await pd.ready();
@@ -669,7 +702,7 @@ test(
       n: 2,
       onError: (err) => t.fail(txt.fail("onError called"), err),
       indexOpts: {
-        poll: false, // Disable polling for this test
+        disablePolling: true, // Disable polling for this test
         pollInterval: 500,
       },
     });
@@ -762,7 +795,7 @@ test(
       n: 2,
       onError: (err) => t.fail(txt.fail("onError called"), err),
       indexOpts: {
-        poll: false, // Disable polling for this test
+        disablePolling: true, // Disable polling for this test
         pollInterval: 500,
       },
     });
@@ -809,7 +842,7 @@ test(
       n: 2,
       onError: (err) => t.fail(txt.fail("onError called"), err),
       indexOpts: {
-        poll: false, // Disable polling for this test
+        disablePolling: true, // Disable polling for this test
         pollInterval: 500,
       },
     });
@@ -872,7 +905,7 @@ test(txt.main("PearDrive: File relaying"), { stealth: true }, async (t) => {
     n: 2,
     onError: (err) => t.fail(txt.fail("onError called"), err),
     indexOpts: {
-      poll: false,
+      disablePolling: true, // Disable polling for this test
       pollInterval: 500,
       relay: true, // Enable relay mode
     },

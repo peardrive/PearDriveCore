@@ -72,6 +72,8 @@ export default class PearDrive extends ReadyResource {
   _networkKey;
   /** @private {Object} - Holds custom message hooks */
   _customMessageHooks = {};
+  /** @private {Object} - Holds custom message hooks for one-time exec */
+  _onceCustomMessageHooks = {};
 
   /**
    * @param {Object} opts
@@ -275,6 +277,24 @@ export default class PearDrive extends ReadyResource {
   listen(name, cb) {
     this.#log.info(`Listening for custom message: ${name}`);
     this._customMessageHooks[name] = cb;
+  }
+
+  /** Remove a listener for a custom message */
+  unlisten(name) {
+    this.#log.info(`Removing listener for custom message: ${name}`);
+    delete this._customMessageHooks[name];
+  }
+
+  /** Listen for a one-time custom message and handle it */
+  listenOnce(name, cb) {
+    this.#log.info(`Listening once for custom message: ${name}`);
+    this._onceCustomMessageHooks[name] = cb;
+  }
+
+  /** Remove a one-time 'once' listener for a custom message */
+  unlistenOnce(name) {
+    this.#log.info(`Removing one-time listener for custom message: ${name}`);
+    delete this._onceCustomMessageHooks[name];
   }
 
   /** Activate 'relay' mode */
@@ -836,6 +856,34 @@ export default class PearDrive extends ReadyResource {
         `Received MESSAGE of type "${type}" from ${conn.remotePublicKey}`
       );
       this.#log.debug("MESSAGE Payload:", payload);
+
+      // Check for one-time 'once' listener first
+      if (this._onceCustomMessageHooks[type]) {
+        const cb = this._onceCustomMessageHooks[type];
+        delete this._onceCustomMessageHooks[type];
+
+        // Run the callback and escape any errors
+        let response;
+        try {
+          response = await cb(payload);
+        } catch (err) {
+          this.#log.error(
+            `Error handling one-time MESSAGE of type "${type}" from ${conn.remotePublicKey}`,
+            err
+          );
+          this.emit(C.EVENT.ERROR, err);
+          return {
+            status: C.MESSAGE_STATUS.ERROR,
+            data: `Error handling one-time message of type "${type}"`,
+          };
+        }
+
+        // Response must have been successful, return
+        return {
+          status: C.MESSAGE_STATUS.SUCCESS,
+          data: response,
+        };
+      }
 
       // Retrieve callback function associated with this message type
       const cb = this._customMessageHooks[type];
