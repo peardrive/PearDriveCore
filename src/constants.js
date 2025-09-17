@@ -29,7 +29,6 @@ export const RPC = {
   NETWORK_NICKNAME_REQUEST: "network_nickname_request",
   MESSAGE: "custom_message",
 
-  LOCAL_INDEX_KEY_SEND: "local_index_key_send",
   LOCAL_INDEX_KEY_REQUEST: "local_index_key_request",
 
   FILE_REQUEST: "file_request",

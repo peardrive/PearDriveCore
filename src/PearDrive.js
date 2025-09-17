@@ -595,14 +595,6 @@ export default class PearDrive extends ReadyResource {
     };
 
     // Wire up RPC methods
-    rpc.respond(C.RPC.LOCAL_INDEX_KEY_SEND, async (payload) => {
-      this.#log.info(
-        `Handling LOCAL_INDEX_KEY_SEND from ${utils.formatToStr(
-          conn.remotePublicKey
-        )}`
-      );
-      return safeResponse(() => this._onLocalIndexKeySend(conn, payload));
-    });
     rpc.respond(C.RPC.LOCAL_INDEX_KEY_REQUEST, async () => {
       this.#log.info(
         `Handling LOCAL_INDEX_KEY_REQUEST from ${utils.formatToStr(
@@ -631,44 +623,6 @@ export default class PearDrive extends ReadyResource {
     });
 
     return rpc;
-  }
-
-  /**
-   * Handle RPC.LOCAL_INDEX_KEY_SEND
-   *
-   * @returns {Promise<void>}
-   *
-   * @private
-   */
-  async _onLocalIndexKeySend(conn, payload) {
-    this.#log.info("Handling LOCAL_INDEX_KEY_SEND…");
-    const peerId = utils.formatToStr(conn.remotePublicKey);
-
-    try {
-      // Get (and replicate) the core from corestore
-      const keyBuf = utils.formatToBuffer(payload);
-      const core = this._store.get({ key: keyBuf });
-
-      // Create and index the hyperbee instance
-      const bee = new Hyperbee(core, {
-        keyEncoding: "utf-8",
-        valueEncoding: "json",
-      });
-      await bee.ready();
-      await this._indexManager.addBee(peerId, bee);
-      this.#log.info(`Registered remote index for peer ${peerId}`);
-
-      return {
-        status: C.MESSAGE_STATUS.SUCCESS,
-        data: "Registered remote index successfully",
-      };
-    } catch (err) {
-      this.#log.error(`Error registering remote index for peer ${peerId}`, err);
-      return {
-        status: C.MESSAGE_STATUS.ERROR,
-        data: `Error registering index for peer ${peerId}: ${err.message}`,
-      };
-    }
   }
 
   /**

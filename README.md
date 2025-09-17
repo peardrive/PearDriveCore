@@ -366,6 +366,12 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 
 ## 🚧 Changelog
 
+### 1.6.0
+
+- Update dependencies
+- Add listenOnce function
+- Remove unused indexKeySend RPC method
+
 ### 1.5.3
 
 - Improve error handling
