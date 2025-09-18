@@ -31,14 +31,18 @@ export function generateString(length = 8) {
  * @param {number} [timeout=5000] - Maximum time to wait in milliseconds
  * @param {number} [interval=100] - Interval to check condition in milliseconds
  */
-export async function waitFor(conditionFn, timeout = 5000, interval = 100) {
-  const startTime = Date.now();
-  while (Date.now() - startTime < timeout) {
-    if (await conditionFn()) {
-      return true;
-    }
+export async function waitFor(conditionFn, timeout = 5000, interval = 10) {
+  const timeoutDate = Date.now() + timeout;
+
+  // Check condition immediately
+  if (await conditionFn()) return true;
+
+  // Poll at regular intervals
+  while (Date.now() < timeoutDate) {
     await new Promise((resolve) => setTimeout(resolve, interval));
+    if (await conditionFn()) return true;
   }
+
   return false;
 }
 
@@ -112,12 +116,10 @@ export function createCorestorePath(folderName) {
 /** Resolves when given array of PearDrives are all connected */
 export async function awaitAllConnected(instances, timeout = 60000) {
   // Flush all peers
-  for (const instance of instances) {
-    await instance._swarm.flush();
-  }
+  await Promise.all(instances.map((instance) => instance._swarm.flush()));
 
   // Wait for connected status to activate
-  let connected = await waitFor(() => {
+  const connected = waitFor(() => {
     instances.every((instance) => instance.connected, timeout, 50);
   });
 
