@@ -598,43 +598,71 @@ test(txt.main("PearDrive: Custom message"), { stealth: true }, async (t) => {
     await peerB.pd.close();
   });
 
+  const CUSTOM_MESSAGE = "custom_message";
+  let customMessageReceived = 0;
+
+  const CUSTOM_ONCE_MESSAGE = "custom_once_message";
+  let customOnceMessageReceived = 0;
+
   await t.test("Send custom message to peer", async (subtest) => {
-    let customRequestReceived = false;
-    peerB.pd.listen("custom_message", (_payload) => {
-      customRequestReceived = true;
+    peerB.pd.listen(CUSTOM_MESSAGE, (_payload) => {
+      customMessageReceived += 1;
       return "test";
     });
 
     const peerId = peerA.pd.listPeersStringified()[0].publicKey;
-    const response = await peerA.pd.sendMessage(peerId, "custom_message", {
+    const response = await peerA.pd.sendMessage(peerId, CUSTOM_MESSAGE, {
       data: "test",
     });
-    subtest.ok(customRequestReceived, "Custom request received by pearDriveB");
+    subtest.is(
+      customMessageReceived,
+      1,
+      "Custom message received by pearDriveB"
+    );
     subtest.is(
       response.status,
       C.MESSAGE_STATUS.SUCCESS,
-      "Custom response received by pearDriveA successfully"
+      "Custom message response received by pearDriveA successfully"
     );
-    subtest.is(response.data, "test", "Custom response data is correct");
+    subtest.is(
+      response.data,
+      "test",
+      "Custom message response data is correct"
+    );
+  });
+
+  await t.test("Unlisten custom message", async (subtest) => {
+    peerB.pd.unlisten(CUSTOM_MESSAGE);
+
+    const peerId = peerA.pd.listPeersStringified()[0].publicKey;
+    const response = await peerA.pd.sendMessage(peerId, CUSTOM_MESSAGE, {
+      data: "test",
+    });
+    subtest.is(
+      customMessageReceived,
+      1,
+      "Custom message not received by pearDriveB after unlisten"
+    );
+    subtest.is(
+      response.status,
+      C.MESSAGE_STATUS.UNKNOWN_MESSAGE_TYPE,
+      "Custom message response status is UNKNOWN_MESSAGE_TYPE after unlisten"
+    );
   });
 
   await t.test("Send once custom message to peer", async (subtest) => {
     let customOnceRequestReceived = 0;
-    peerB.pd.listenOnce("custom_once_message", (_payload) => {
+    peerB.pd.listenOnce(CUSTOM_ONCE_MESSAGE, (_payload) => {
       customOnceRequestReceived += 1;
     });
 
     const peerId = peerA.pd.listPeersStringified()[0].publicKey;
-    const response = await peerA.pd.sendMessage(peerId, "custom_once_message", {
+    const response = await peerA.pd.sendMessage(peerId, CUSTOM_ONCE_MESSAGE, {
       data: "test",
     });
-    const response2 = await peerA.pd.sendMessage(
-      peerId,
-      "custom_once_message",
-      {
-        data: "test",
-      }
-    );
+    const response2 = await peerA.pd.sendMessage(peerId, CUSTOM_ONCE_MESSAGE, {
+      data: "test",
+    });
 
     subtest.is(
       response.status,
