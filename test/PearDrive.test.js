@@ -4,9 +4,8 @@ import path from "path";
 import createTestnet from "hyperdht/testnet.js";
 
 import * as C from "../src/constants.js";
-import * as utils from "./lib/utils.js";
+import * as utils from "./lib/utils/index.js";
 import PearDrive from "../src/PearDrive.js";
-const { txt } = utils;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Setup
@@ -21,7 +20,7 @@ utils.createTestFolders();
 // PearDrive core functionality tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("PearDrive: Initialization"), { stealth: true }, async (t) => {
+test("PearDrive: Initialization", { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -30,16 +29,16 @@ test(txt.main("PearDrive: Initialization"), { stealth: true }, async (t) => {
 
   await t.test("Create PearDrive instance", async (subtest) => {
     try {
-      const { pd, localDrivePath, corestorePath, logPath } =
+      const { pd, watchPath, corestorePath, logPath } =
         await utils.createPearDrive({
           name: "init-test",
           bootstrap,
-          onError: (err) => t.fail(txt.fail("onError called"), err),
+          onError: (err) => t.fail("onError called", err),
         });
 
       pd1 = pd;
       data = {
-        watchPath: localDrivePath,
+        watchPath,
         corestorePath,
         logFilePath: logPath,
       };
@@ -112,7 +111,7 @@ test(txt.main("PearDrive: Initialization"), { stealth: true }, async (t) => {
         baseName: "two-node-test",
         bootstrap,
         n: 2,
-        onError: (err) => t.fail(txt.fail("onError called"), err),
+        onError: (err) => subtest.fail("onError called", err),
       });
 
       pd1 = pd1.pd;
@@ -137,7 +136,7 @@ test(txt.main("PearDrive: Initialization"), { stealth: true }, async (t) => {
         baseName: "five-node-test",
         bootstrap,
         n: 5,
-        onError: (err) => t.fail(txt.fail("onError called"), err),
+        onError: (err) => t.fail("onError called", err),
       });
 
       pd1 = pd1.pd;
@@ -173,7 +172,7 @@ test(txt.main("PearDrive: Initialization"), { stealth: true }, async (t) => {
 // PearDrive Event Emitter tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("PearDrive: Local file events"), { stealth: true }, async (t) => {
+test("PearDrive: Local file events", { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -182,18 +181,19 @@ test(txt.main("PearDrive: Local file events"), { stealth: true }, async (t) => {
   let file;
 
   // Set up PearDrive instance
-  const { pd, localDrivePath, corestorePath, logPath } =
-    await utils.createPearDrive({
+  const { pd, watchPath, corestorePath, logPath } = await utils.createPearDrive(
+    {
       name: "local-file-events",
       bootstrap,
-      onError: (err) => t.fail(txt.fail("onError called"), err),
+      onError: (err) => t.fail("onError called", err),
       indexOpts: {
         disablePolling: true,
       },
-    });
+    }
+  );
   pd1 = pd;
   pd1data = {
-    watchPath: localDrivePath,
+    watchPath,
     corestorePath,
     logFilePath: logPath,
   };
@@ -211,7 +211,7 @@ test(txt.main("PearDrive: Local file events"), { stealth: true }, async (t) => {
       });
 
       // Create a file
-      file = utils.createRandomFile(localDrivePath);
+      file = utils.createRandomFile(watchPath);
       await pd1.syncLocalFilesOnce();
 
       // 5 second max wait timeout, fails if event not fired
@@ -268,7 +268,7 @@ test(txt.main("PearDrive: Local file events"), { stealth: true }, async (t) => {
   });
 });
 
-test(txt.main("PearDrive: Peer file events"), { stealth: true }, async (t) => {
+test("PearDrive: Peer file events", { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -276,7 +276,7 @@ test(txt.main("PearDrive: Peer file events"), { stealth: true }, async (t) => {
     baseName: "peer-file-events",
     bootstrap,
     n: 2,
-    onError: (err) => t.fail(txt.fail("onError called"), err),
+    onError: (err) => t.fail("onError called", err),
     indexOpts: {
       // keep polling off so we control sync points deterministically
       disablePolling: true,
@@ -408,177 +408,161 @@ test(txt.main("PearDrive: Peer file events"), { stealth: true }, async (t) => {
   });
 });
 
-test(
-  txt.main("PearDrive: Peer connection events"),
-  { stealth: true },
-  async (t) => {
-    const testnet = await createTestnet();
-    const { bootstrap } = testnet;
+test("PearDrive: Peer connection events", { stealth: true }, async (t) => {
+  const testnet = await createTestnet();
+  const { bootstrap } = testnet;
 
-    const onError = (err) => t.fail(txt.fail("onError called"), err);
+  const onError = (err) => t.fail("onError called", err);
 
-    // Ready Peer A
-    const A = await utils.createPearDrive({
-      name: "peer-conn-A",
-      bootstrap,
-      onError,
-      indexOpts: { disablePolling: true },
-    });
-    const pdA = A.pd;
-    await pdA.ready();
+  // Ready Peer A
+  const A = await utils.createPearDrive({
+    name: "peer-conn-A",
+    bootstrap,
+    onError,
+    indexOpts: { disablePolling: true },
+  });
+  const pdA = A.pd;
+  await pdA.ready();
 
-    // Create network with peer A
-    await pdA.joinNetwork();
-    const topic = pdA.networkKey;
+  // Create network with peer A
+  await pdA.joinNetwork();
+  const topic = pdA.networkKey;
 
-    // Ready Peer B
-    const B = await utils.createPearDrive({
-      name: "peer-conn-B",
-      bootstrap,
-      onError,
-      indexOpts: { disablePolling: true },
-    });
-    const pdB = B.pd;
-    await pdB.ready();
+  // Ready Peer B
+  const B = await utils.createPearDrive({
+    name: "peer-conn-B",
+    bootstrap,
+    onError,
+    indexOpts: { disablePolling: true },
+  });
+  const pdB = B.pd;
+  await pdB.ready();
 
-    t.teardown(async () => {
+  t.teardown(async () => {
+    try {
+      await pdB.close();
+    } catch {}
+    try {
+      await pdA.close();
+    } catch {}
+  });
+
+  await t.test("PEER_CONNECTED events fire on both sides", async (subtest) => {
+    subtest.plan(6);
+    let aSawB = false;
+    let bSawA = false;
+
+    // A should see B connect
+    pdA.once(C.EVENT.PEER_CONNECTED, (peerId) => {
       try {
-        await pdB.close();
-      } catch {}
-      try {
-        await pdA.close();
-      } catch {}
+        subtest.ok(typeof peerId === "string", "A received peerId as string");
+        subtest.is(peerId, pdB.publicKey, "A saw B's public key");
+        aSawB = true;
+        subtest.pass("PEER_CONNECTED (A observed B) fired");
+      } catch (e) {
+        subtest.fail("Bad payload for PEER_CONNECTED on A", e);
+      }
     });
 
-    await t.test(
-      "PEER_CONNECTED events fire on both sides",
-      async (subtest) => {
-        subtest.plan(6);
-        let aSawB = false;
-        let bSawA = false;
-
-        // A should see B connect
-        pdA.once(C.EVENT.PEER_CONNECTED, (peerId) => {
-          try {
-            subtest.ok(
-              typeof peerId === "string",
-              "A received peerId as string"
-            );
-            subtest.is(peerId, pdB.publicKey, "A saw B's public key");
-            aSawB = true;
-            subtest.pass("PEER_CONNECTED (A observed B) fired");
-          } catch (e) {
-            subtest.fail("Bad payload for PEER_CONNECTED on A", e);
-          }
-        });
-
-        // B should see A connect
-        pdB.once(C.EVENT.PEER_CONNECTED, (peerId) => {
-          try {
-            subtest.ok(
-              typeof peerId === "string",
-              "B received peerId as string"
-            );
-            subtest.is(peerId, pdA.publicKey, "B saw A's public key");
-            bSawA = true;
-            subtest.pass("PEER_CONNECTED (B observed A) fired");
-          } catch (e) {
-            subtest.fail("Bad payload for PEER_CONNECTED on B", e);
-          }
-        });
-
-        // Now connect B to A’s network (triggers both connect events)
-        await pdB.joinNetwork(topic);
-
-        await utils.wait(5);
-        if (!aSawB) subtest.fail("PEER_CONNECTED not fired on A (timed out)");
-        if (!bSawA) subtest.fail("PEER_CONNECTED not fired on B (timed out)");
+    // B should see A connect
+    pdB.once(C.EVENT.PEER_CONNECTED, (peerId) => {
+      try {
+        subtest.ok(typeof peerId === "string", "B received peerId as string");
+        subtest.is(peerId, pdA.publicKey, "B saw A's public key");
+        bSawA = true;
+        subtest.pass("PEER_CONNECTED (B observed A) fired");
+      } catch (e) {
+        subtest.fail("Bad payload for PEER_CONNECTED on B", e);
       }
-    );
+    });
 
-    await t.test(
-      "PEER_DISCONNECTED event (A observes B leaving)",
-      async (subtest) => {
-        subtest.plan(3);
-        let aSawDisconnect = false;
+    // Now connect B to A’s network (triggers both connect events)
+    await pdB.joinNetwork(topic);
 
-        pdA.once(C.EVENT.PEER_DISCONNECTED, (peerId) => {
-          try {
-            subtest.ok(
-              typeof peerId === "string",
-              "A received peerId as string"
-            );
-            subtest.is(peerId, pdB.publicKey, "A saw B disconnect");
-            aSawDisconnect = true;
-            subtest.pass("PEER_DISCONNECTED (A observed B) fired");
-          } catch (e) {
-            subtest.fail("Bad payload for PEER_DISCONNECTED on A", e);
-          }
-        });
+    await utils.wait(5);
+    if (!aSawB) subtest.fail("PEER_CONNECTED not fired on A (timed out)");
+    if (!bSawA) subtest.fail("PEER_CONNECTED not fired on B (timed out)");
+  });
 
-        // Leave by closing peer B
-        await pdB.close();
+  await t.test(
+    "PEER_DISCONNECTED event (A observes B leaving)",
+    async (subtest) => {
+      subtest.plan(3);
+      let aSawDisconnect = false;
 
-        await utils.wait(5);
-        if (!aSawDisconnect)
-          subtest.fail("PEER_DISCONNECTED not fired on A (timed out)");
-      }
-    );
+      pdA.once(C.EVENT.PEER_DISCONNECTED, (peerId) => {
+        try {
+          subtest.ok(typeof peerId === "string", "A received peerId as string");
+          subtest.is(peerId, pdB.publicKey, "A saw B disconnect");
+          aSawDisconnect = true;
+          subtest.pass("PEER_DISCONNECTED (A observed B) fired");
+        } catch (e) {
+          subtest.fail("Bad payload for PEER_DISCONNECTED on A", e);
+        }
+      });
 
-    await t.test(
-      "PEER_DISCONNECTED event (B observes A leaving)",
-      async (subtest) => {
-        subtest.plan(3);
+      // Leave by closing peer B
+      await pdB.close();
 
-        // Bring up a fresh B2 so we can test the reverse direction cleanly
-        const B2 = await utils.createPearDrive({
-          name: "peer-conn-B2",
-          bootstrap,
-          onError,
-          indexOpts: { disablePolling: true },
-        });
-        const pdB2 = B2.pd;
-        await pdB2.ready();
+      await utils.wait(5);
+      if (!aSawDisconnect)
+        subtest.fail("PEER_DISCONNECTED not fired on A (timed out)");
+    }
+  );
 
-        // Reconnect to A’s topic
-        await pdB2.joinNetwork(topic);
-        await utils.wait(1);
+  await t.test(
+    "PEER_DISCONNECTED event (B observes A leaving)",
+    async (subtest) => {
+      subtest.plan(3);
 
-        let bSawDisconnect = false;
+      // Bring up a fresh B2 so we can test the reverse direction cleanly
+      const B2 = await utils.createPearDrive({
+        name: "peer-conn-B2",
+        bootstrap,
+        onError,
+        indexOpts: { disablePolling: true },
+      });
+      const pdB2 = B2.pd;
+      await pdB2.ready();
 
-        pdB2.once(C.EVENT.PEER_DISCONNECTED, (peerId) => {
-          try {
-            subtest.ok(
-              typeof peerId === "string",
-              "B2 received peerId as string"
-            );
-            subtest.is(peerId, pdA.publicKey, "B2 saw A disconnect");
-            bSawDisconnect = true;
-            subtest.pass("PEER_DISCONNECTED (B2 observed A) fired");
-          } catch (e) {
-            subtest.fail("Bad payload for PEER_DISCONNECTED on B2", e);
-          }
-        });
+      // Reconnect to A’s topic
+      await pdB2.joinNetwork(topic);
+      await utils.wait(1);
 
-        // Now have A leave
-        await pdA.close();
+      let bSawDisconnect = false;
 
-        await utils.wait(5);
-        if (!bSawDisconnect)
-          subtest.fail("PEER_DISCONNECTED not fired on B2 (timed out)");
+      pdB2.once(C.EVENT.PEER_DISCONNECTED, (peerId) => {
+        try {
+          subtest.ok(
+            typeof peerId === "string",
+            "B2 received peerId as string"
+          );
+          subtest.is(peerId, pdA.publicKey, "B2 saw A disconnect");
+          bSawDisconnect = true;
+          subtest.pass("PEER_DISCONNECTED (B2 observed A) fired");
+        } catch (e) {
+          subtest.fail("Bad payload for PEER_DISCONNECTED on B2", e);
+        }
+      });
 
-        // Cleanup B2 (A already closed)
-        await pdB2.close();
-      }
-    );
-  }
-);
+      // Now have A leave
+      await pdA.close();
+
+      await utils.wait(5);
+      if (!bSawDisconnect)
+        subtest.fail("PEER_DISCONNECTED not fired on B2 (timed out)");
+
+      // Cleanup B2 (A already closed)
+      await pdB2.close();
+    }
+  );
+});
 
 ////////////////////////////////////////////////////////////////////////////////
 // Network communication tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("PearDrive: Custom message"), { stealth: true }, async (t) => {
+test("PearDrive: Custom message", { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -586,7 +570,7 @@ test(txt.main("PearDrive: Custom message"), { stealth: true }, async (t) => {
     baseName: "custom-message",
     bootstrap,
     n: 2,
-    onError: (err) => t.fail(txt.fail("onError called"), err),
+    onError: (err) => t.fail("onError called", err),
     indexOpts: {
       disablePolling: true, // Disable polling for this test
       pollInterval: 500,
@@ -682,14 +666,14 @@ test(txt.main("PearDrive: Custom message"), { stealth: true }, async (t) => {
 // File viewing tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test(txt.main("PearDrive: List local files"), { stealth: true }, async (t) => {
+test("PearDrive: List local files", { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
-  const { pd, localDrivePath } = await utils.createPearDrive({
+  const { pd, watchPath } = await utils.createPearDrive({
     name: "list-local-files",
     bootstrap,
-    onError: (err) => t.fail(txt.fail("onError called"), err),
+    onError: (err) => t.fail("onError called", err),
     indexOpts: { disablePolling: true, pollInterval: 500 },
   });
   t.teardown(() => pd.close());
@@ -698,7 +682,7 @@ test(txt.main("PearDrive: List local files"), { stealth: true }, async (t) => {
   // Create some files
   const files = [];
   for (let i = 0; i < 5; i++) {
-    files.push(utils.createRandomFile(localDrivePath, 10));
+    files.push(utils.createRandomFile(watchPath, 10));
   }
   await pd.syncLocalFilesOnce();
 
@@ -717,213 +701,201 @@ test(txt.main("PearDrive: List local files"), { stealth: true }, async (t) => {
   }
 });
 
-test(
-  txt.main("PearDrive: List network files"),
-  { stealth: true },
-  async (t) => {
-    const testnet = await createTestnet();
-    const { bootstrap } = testnet;
+test("PearDrive: List network files", { stealth: true }, async (t) => {
+  const testnet = await createTestnet();
+  const { bootstrap } = testnet;
 
-    const [pearDriveA, pearDriveB] = await utils.createNetwork({
-      baseName: "list-network-files",
-      bootstrap,
-      n: 2,
-      onError: (err) => t.fail(txt.fail("onError called"), err),
-      indexOpts: {
-        disablePolling: true, // Disable polling for this test
-        pollInterval: 500,
-      },
-    });
-    t.teardown(async () => {
-      await pearDriveA.pd.close();
-      await pearDriveB.pd.close();
-    });
+  const [pearDriveA, pearDriveB] = await utils.createNetwork({
+    baseName: "list-network-files",
+    bootstrap,
+    n: 2,
+    onError: (err) => t.fail("onError called", err),
+    indexOpts: {
+      disablePolling: true, // Disable polling for this test
+      pollInterval: 500,
+    },
+  });
+  t.teardown(async () => {
+    await pearDriveA.pd.close();
+    await pearDriveB.pd.close();
+  });
 
-    // Create files on pearDriveA
-    const filesA = [];
-    for (let i = 0; i < 5; i++) {
-      filesA.push(utils.createRandomFile(pearDriveA.pd.watchPath, 10));
-    }
-    await pearDriveA.pd.syncLocalFilesOnce();
-
-    // Create files on pearDriveB
-    const filesB = [];
-    for (let i = 0; i < 3; i++) {
-      filesB.push(utils.createRandomFile(pearDriveB.pd.watchPath, 10));
-    }
-    await pearDriveB.pd.syncLocalFilesOnce();
-
-    await utils.wait(1); // Give replication a moment to propagate
-
-    // Test file indexing on pearDriveB
-    const pearDriveAkey = pearDriveA.pd.publicKey;
-    const networkFilesB = await pearDriveB.pd.listNetworkFiles();
-
-    t.is(
-      networkFilesB.get("local").files.length,
-      filesB.length,
-      "Listed correct number of local network files"
-    );
-    t.is(
-      networkFilesB.get(pearDriveAkey).files.length,
-      filesA.length,
-      "Listed correct number of remote network files"
-    );
-    for (const file of networkFilesB.get("local").files) {
-      t.ok(
-        filesB.some((f) => f.name === file.path),
-        `File ${file.path} is listed in local network files`
-      );
-    }
-    for (const file of networkFilesB.get(pearDriveAkey).files) {
-      t.ok(
-        filesA.some((f) => f.name === file.path),
-        `File ${file.path} is listed in remote network files`
-      );
-    }
-
-    // Test file indexing on pearDriveA
-    const pearDriveBkey = pearDriveB.pd.publicKey;
-    const networkFilesA = await pearDriveA.pd.listNetworkFiles();
-    t.is(
-      networkFilesA.get("local").files.length,
-      filesA.length,
-      "Listed correct number of local network files"
-    );
-    t.is(
-      networkFilesA.get(pearDriveBkey).files.length,
-      filesB.length,
-      "Listed correct number of remote network files"
-    );
-    for (const file of networkFilesA.get("local").files) {
-      t.ok(
-        filesA.some((f) => f.name === file.path),
-        `File ${file.path} is listed in local network files`
-      );
-    }
-    for (const file of networkFilesA.get(pearDriveBkey).files) {
-      t.ok(
-        filesB.some((f) => f.name === file.path),
-        `File ${file.path} is listed in remote network files`
-      );
-    }
+  // Create files on pearDriveA
+  const filesA = [];
+  for (let i = 0; i < 5; i++) {
+    filesA.push(utils.createRandomFile(pearDriveA.pd.watchPath, 10));
   }
-);
+  await pearDriveA.pd.syncLocalFilesOnce();
 
-test(
-  txt.main("PearDrive: Test single file download"),
-  { stealth: true },
-  async (t) => {
-    const testnet = await createTestnet();
-    const { bootstrap } = testnet;
+  // Create files on pearDriveB
+  const filesB = [];
+  for (let i = 0; i < 3; i++) {
+    filesB.push(utils.createRandomFile(pearDriveB.pd.watchPath, 10));
+  }
+  await pearDriveB.pd.syncLocalFilesOnce();
 
-    const [peerA, peerB] = await utils.createNetwork({
-      baseName: "file-download-test",
-      bootstrap,
-      n: 2,
-      onError: (err) => t.fail(txt.fail("onError called"), err),
-      indexOpts: {
-        disablePolling: true, // Disable polling for this test
-        pollInterval: 500,
-      },
-    });
-    t.teardown(async () => {
-      await peerA.pd.close();
-      await peerB.pd.close();
-    });
+  await utils.wait(1); // Give replication a moment to propagate
 
-    // Create a file on pearDriveA
-    const fileA = utils.createRandomFile(peerA.pd.watchPath, 10);
-    await peerA.pd.syncLocalFilesOnce();
+  // Test file indexing on pearDriveB
+  const pearDriveAkey = pearDriveA.pd.publicKey;
+  const networkFilesB = await pearDriveB.pd.listNetworkFiles();
+
+  t.is(
+    networkFilesB.get("local").files.length,
+    filesB.length,
+    "Listed correct number of local network files"
+  );
+  t.is(
+    networkFilesB.get(pearDriveAkey).files.length,
+    filesA.length,
+    "Listed correct number of remote network files"
+  );
+  for (const file of networkFilesB.get("local").files) {
+    t.ok(
+      filesB.some((f) => f.name === file.path),
+      `File ${file.path} is listed in local network files`
+    );
+  }
+  for (const file of networkFilesB.get(pearDriveAkey).files) {
+    t.ok(
+      filesA.some((f) => f.name === file.path),
+      `File ${file.path} is listed in remote network files`
+    );
+  }
+
+  // Test file indexing on pearDriveA
+  const pearDriveBkey = pearDriveB.pd.publicKey;
+  const networkFilesA = await pearDriveA.pd.listNetworkFiles();
+  t.is(
+    networkFilesA.get("local").files.length,
+    filesA.length,
+    "Listed correct number of local network files"
+  );
+  t.is(
+    networkFilesA.get(pearDriveBkey).files.length,
+    filesB.length,
+    "Listed correct number of remote network files"
+  );
+  for (const file of networkFilesA.get("local").files) {
+    t.ok(
+      filesA.some((f) => f.name === file.path),
+      `File ${file.path} is listed in local network files`
+    );
+  }
+  for (const file of networkFilesA.get(pearDriveBkey).files) {
+    t.ok(
+      filesB.some((f) => f.name === file.path),
+      `File ${file.path} is listed in remote network files`
+    );
+  }
+});
+
+test("PearDrive: Test single file download", { stealth: true }, async (t) => {
+  const testnet = await createTestnet();
+  const { bootstrap } = testnet;
+
+  const [peerA, peerB] = await utils.createNetwork({
+    baseName: "file-download-test",
+    bootstrap,
+    n: 2,
+    onError: (err) => t.fail("onError called", err),
+    indexOpts: {
+      disablePolling: true, // Disable polling for this test
+      pollInterval: 500,
+    },
+  });
+  t.teardown(async () => {
+    await peerA.pd.close();
+    await peerB.pd.close();
+  });
+
+  // Create a file on pearDriveA
+  const fileA = utils.createRandomFile(peerA.pd.watchPath, 10);
+  await peerA.pd.syncLocalFilesOnce();
+  await peerB.pd.syncLocalFilesOnce();
+
+  // Get hash of the filefrom peerA
+  const files = await peerA.pd.listLocalFiles();
+  const fileEntry = files.files.find((f) => f.path === fileA.name);
+  const fileHash = fileEntry.hash;
+
+  // Download the file from pearDriveB
+  await peerB.pd.downloadFileFromPeer(peerA.pd.publicKey, fileA.name);
+  await peerB.pd.syncLocalFilesOnce();
+
+  // Ensure the file was downloaded correctly
+  const peerBLocalFiles = await peerB.pd.listLocalFiles();
+  const downloadedFile = peerBLocalFiles.files.find(
+    (f) => f.path === fileA.name
+  );
+  const downloadedFileHash = downloadedFile.hash;
+
+  t.is(downloadedFileHash, fileHash, "Downloaded file hash matches original");
+});
+
+test("PearDrive: Download five files", { stealth: true }, async (t) => {
+  const testnet = await createTestnet();
+  const { bootstrap } = testnet;
+
+  const [peerA, peerB] = await utils.createNetwork({
+    baseName: "file-download-five-test",
+    bootstrap,
+    n: 2,
+    onError: (err) => t.fail("onError called", err),
+    indexOpts: {
+      disablePolling: true, // Disable polling for this test
+      pollInterval: 500,
+    },
+  });
+  t.teardown(async () => {
+    await peerA.pd.close();
+    await peerB.pd.close();
+  });
+
+  // Create 5 files on peerA
+  const filesA = [];
+  for (let i = 0; i < 5; i++) {
+    filesA.push(utils.createRandomFile(peerA.pd.watchPath, 10));
+  }
+  await peerA.pd.syncLocalFilesOnce();
+
+  // Get file hashes from peerA
+  const peerAFiles = await peerA.pd.listLocalFiles();
+  const fileAHashes = peerAFiles.files.map((f) => ({
+    name: f.path,
+    hash: f.hash,
+  }));
+
+  // Download all files from perA to peerB
+  for (const file of filesA) {
+    await peerB.pd.downloadFileFromPeer(peerA.pd.publicKey, file.name);
     await peerB.pd.syncLocalFilesOnce();
-
-    // Get hash of the filefrom peerA
-    const files = await peerA.pd.listLocalFiles();
-    const fileEntry = files.files.find((f) => f.path === fileA.name);
-    const fileHash = fileEntry.hash;
-
-    // Download the file from pearDriveB
-    await peerB.pd.downloadFileFromPeer(peerA.pd.publicKey, fileA.name);
-    await peerB.pd.syncLocalFilesOnce();
-
-    // Ensure the file was downloaded correctly
-    const peerBLocalFiles = await peerB.pd.listLocalFiles();
-    const downloadedFile = peerBLocalFiles.files.find(
-      (f) => f.path === fileA.name
-    );
-    const downloadedFileHash = downloadedFile.hash;
-
-    t.is(downloadedFileHash, fileHash, "Downloaded file hash matches original");
   }
-);
 
-test(
-  txt.main("PearDrive: Download five files"),
-  { stealth: true },
-  async (t) => {
-    const testnet = await createTestnet();
-    const { bootstrap } = testnet;
+  // Ensure all files were downloaded correctly
+  const peerBLocalFiles = await peerB.pd.listLocalFiles();
+  const fileBHashes = peerBLocalFiles.files.map((f) => ({
+    name: f.path,
+    hash: f.hash,
+  }));
 
-    const [peerA, peerB] = await utils.createNetwork({
-      baseName: "file-download-five-test",
-      bootstrap,
-      n: 2,
-      onError: (err) => t.fail(txt.fail("onError called"), err),
-      indexOpts: {
-        disablePolling: true, // Disable polling for this test
-        pollInterval: 500,
-      },
-    });
-    t.teardown(async () => {
-      await peerA.pd.close();
-      await peerB.pd.close();
-    });
-
-    // Create 5 files on peerA
-    const filesA = [];
-    for (let i = 0; i < 5; i++) {
-      filesA.push(utils.createRandomFile(peerA.pd.watchPath, 10));
-    }
-    await peerA.pd.syncLocalFilesOnce();
-
-    // Get file hashes from peerA
-    const peerAFiles = await peerA.pd.listLocalFiles();
-    const fileAHashes = peerAFiles.files.map((f) => ({
-      name: f.path,
-      hash: f.hash,
-    }));
-
-    // Download all files from perA to peerB
-    for (const file of filesA) {
-      await peerB.pd.downloadFileFromPeer(peerA.pd.publicKey, file.name);
-      await peerB.pd.syncLocalFilesOnce();
-    }
-
-    // Ensure all files were downloaded correctly
-    const peerBLocalFiles = await peerB.pd.listLocalFiles();
-    const fileBHashes = peerBLocalFiles.files.map((f) => ({
-      name: f.path,
-      hash: f.hash,
-    }));
-
+  t.is(
+    peerBLocalFiles.files.length,
+    filesA.length,
+    "All files downloaded to peerB"
+  );
+  for (const file of fileAHashes) {
+    const downloadedFile = fileBHashes.find((f) => f.name === file.name);
+    t.ok(downloadedFile, `File ${file.name} was downloaded`);
     t.is(
-      peerBLocalFiles.files.length,
-      filesA.length,
-      "All files downloaded to peerB"
+      downloadedFile.hash,
+      file.hash,
+      `Hash for ${file.name} matches original`
     );
-    for (const file of fileAHashes) {
-      const downloadedFile = fileBHashes.find((f) => f.name === file.name);
-      t.ok(downloadedFile, `File ${file.name} was downloaded`);
-      t.is(
-        downloadedFile.hash,
-        file.hash,
-        `Hash for ${file.name} matches original`
-      );
-    }
   }
-);
+});
 
-test(txt.main("PearDrive: File relaying"), { stealth: true }, async (t) => {
+test("PearDrive: File relaying", { stealth: true }, async (t) => {
   const testnet = await createTestnet();
   const { bootstrap } = testnet;
 
@@ -931,7 +903,7 @@ test(txt.main("PearDrive: File relaying"), { stealth: true }, async (t) => {
     baseName: "file-download-relay-test",
     bootstrap,
     n: 2,
-    onError: (err) => t.fail(txt.fail("onError called"), err),
+    onError: (err) => t.fail(`onError called`, err),
     indexOpts: {
       disablePolling: true, // Disable polling for this test
       pollInterval: 500,

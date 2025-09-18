@@ -372,6 +372,10 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 - Add listenOnce / unlistenOnce function
 - Add unlisten function
 - Remove unused indexKeySend RPC method, among others
+- Improve testing speed
+- All LocalDrive references fixed (LocalDrive -> WatchPath)
+- TODO: Add middleware functions to programmatically confirm / deny actions
+- TODO: Update README
 
 ### 1.5.3
 
