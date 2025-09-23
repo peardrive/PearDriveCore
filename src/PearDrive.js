@@ -74,6 +74,8 @@ export default class PearDrive extends ReadyResource {
   _customMessageHooks = {};
   /** @private {Object} - Holds custom message hooks for one-time exec */
   _onceCustomMessageHooks = {};
+  /** @private {Object} - Holds queued downloads */
+  _queuedDownloads = {};
 
   /**
    * @param {Object} opts
@@ -101,7 +103,12 @@ export default class PearDrive extends ReadyResource {
    *      milliseconds for polling the local file index.
    *    @param {boolean} [opts.indexOpts.relay] - Whether to automaically
    *      download files from the network.
-   *    @param {string} [opts.networkKey] - Optional network key to join
+   *    @param {string} [opts.networkKey] - Optional network key to join a
+   *     specific network on startup. If not provided, a new random key will be
+   *     generated.
+   *    @param {Array} [opts.unfinishedDownloads] - Optional unfinished
+   *     downloads to resume on startup. These include inProgress downloads
+   *     and queuedDownloads.
    */
   constructor({
     corestorePath,
@@ -113,6 +120,7 @@ export default class PearDrive extends ReadyResource {
     },
     indexOpts = {},
     networkKey,
+    unfinishedDownloads = [],
   }) {
     super();
 
@@ -159,6 +167,7 @@ export default class PearDrive extends ReadyResource {
     this._corestorePath = corestorePath;
     this._watchPath = watchPath;
     this._indexName = indexName;
+    this._unfinishedDownloads = unfinishedDownloads;
 
     this._indexManager = new IndexManager({
       store: this._store,
@@ -997,7 +1006,33 @@ export default class PearDrive extends ReadyResource {
       networkKey: this.networkKey,
       relay: this.relay,
       indexOpts: this.indexOpts,
+      queuedDownloads: this.#buildUnfinishedDownloads(),
     };
+  }
+
+  /**
+   * Build unfinished downloads list
+   *
+   * @returns {Array} - List of paths of unfinished downloads
+   */
+  #buildUnfinishedDownloads() {
+    const unfinished = [];
+
+    // Add in-progress downloads
+    for (const [filePath, info] of Object.entries(this._inProgress)) {
+      if (info.type === "download") {
+        unfinished.push(filePath);
+      }
+    }
+
+    // Add queued downloads
+    for (const filePath of Object.keys(this._queuedDownloads)) {
+      if (!unfinished.includes(filePath)) {
+        unfinished.push(filePath);
+      }
+    }
+
+    return unfinished;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -1029,6 +1064,15 @@ export default class PearDrive extends ReadyResource {
     });
     this._indexManager.on(C.IM_EVENT.PEER_FILE_CHANGED, (data) => {
       this.emit(C.EVENT.PEER_FILE_CHANGED, data);
+    });
+    this._indexManager.on(C.IM_EVENT.DOWNLOAD_STARTED, (data) => {
+      this.emit(C.EVENT.DOWNLOAD_STARTED, data);
+    });
+    this._indexManager.on(C.IM_EVENT.UPLOAD_FAILED, (data) => {
+      this.emit(C.EVENT.UPLOAD_FAILED, data);
+    });
+    this._indexManager.on(C.IM_EVENT.DOWNLOAD_COMPLETED, (data) => {
+      this.emit(C.EVENT.DOWNLOAD_COMPLETED, data);
     });
 
     this.#log.info("PearDrive opened successfully!");

@@ -495,6 +495,9 @@ export class IndexManager extends ReadyResource {
       }
       const tmpEntry = { direction, startedAt: Date.now() };
       this._inProgress[pathKey][utils.formatToStr(peerId)] = tmpEntry;
+
+      // Emit event
+      this.emit(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_STARTED, { path, peerId });
     } catch (err) {
       this.#log.error("Error marking transfer", err);
     }
@@ -517,6 +520,7 @@ export class IndexManager extends ReadyResource {
       ${utils.formatToStr(peerId)}`
     );
 
+    // Ensure this transfer exists
     const pathKey = utils.asDrivePath(path);
     if (!this._inProgress[pathKey]) {
       this.#log.warn(
@@ -526,8 +530,15 @@ export class IndexManager extends ReadyResource {
       return;
     }
 
+    // Delete the specific peer transfer entry
     delete this._inProgress[pathKey][utils.formatToStr(peerId)];
 
+    // Emit event, if a download
+    if (direction === "download") {
+      this.emit(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, { path, peerId });
+    }
+
+    // Delete the entire path entry if no more transfers active
     if (Object.keys(this._inProgress[pathKey]).length === 0) {
       delete this._inProgress[pathKey];
       this.#log.debug(`All transfers for ${path} completed, closing drive`);

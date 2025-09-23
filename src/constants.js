@@ -68,6 +68,12 @@ export const EVENT = {
   PEER_FILE_REMOVED: "[PD]: peer_file_removed",
   /** Peer file changed (Wrapper for IM event) */
   PEER_FILE_CHANGED: "[PD]: peer_file_changed",
+  /** New inProgress download added (Wrapper for IM event) */
+  IN_PROGRESS_DOWNLOAD_STARTED: "[PD]: in_progress_download_started",
+  /** An inProgress download has failed (Wrapper for IM event) */
+  IN_PROGRESS_DOWNLOAD_FAILED: "[PD]: in_progress_download_failed",
+  /** inProgress download removed (Wrapper for IM event) */
+  IN_PROGRESS_DOWNLOAD_COMPLETED: "[PD]: in_progress_download_completed",
 };
 
 /**
@@ -121,6 +127,13 @@ export const IM_EVENT = {
   PEER_FILE_REMOVED: "[IM]: peer_file_removed",
   /** When a peer's file has changed */
   PEER_FILE_CHANGED: "[IM]: peer_file_changed",
+
+  /** New inProgress download added */
+  IN_PROGRESS_DOWNLOAD_STARTED: "[IM]: in_progress_download_started",
+  /** An inProgress download has failed */
+  IN_PROGRESS_DOWNLOAD_FAILED: "[IM]: in_progress_download_failed",
+  /** inProgress download removed */
+  IN_PROGRESS_DOWNLOAD_COMPLETED: "[IM]: in_progress_download_completed",
 };
 
 /**

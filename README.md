@@ -47,7 +47,7 @@ async function main() {
     corestorePath,
     watchPath,
     logOpts: { logToConsole: true },
-    indexOpts: { poll: true, pollInterval: 500 },
+    indexOpts: { pollInterval: 500 },
   });
 
   await peardrive.ready();
@@ -64,12 +64,6 @@ async function main() {
     "Share this network key so other peers can join:",
     purse.formatToStr(networkKey)
   );
-
-  // Basic events
-  peardrive.on(EVENT.PEER, (peerId) => console.log("Peer event:", peerId));
-  peardrive.on(EVENT.NETWORK, () => console.log("Network file index changed"));
-  peardrive.on(EVENT.LOCAL, () => console.log("Local file index changed"));
-  peardrive.on(EVENT.ERROR, (err) => console.error("Sister ERROR:", err));
 
   // Optional: seed a test file
   await fs.writeFile(path.join(watchPath, "hello.txt"), "hi from A\n");
