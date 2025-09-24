@@ -40,14 +40,14 @@ export const RPC_EVENT = C.RPC;
  * P2P networking system for node.js applications.
  ******************************************************************************/
 export default class PearDrive extends ReadyResource {
+  /** @private {Logger} Logger */
+  #log;
   /** @private {Hyperswarm} Hyperswarm for all nodes on network */
   _swarm;
   /** @private {Corestore} Corestore for all hypercores */
   _store;
   /** @private {Map<string, RPC>} RPC PearDrive connections */
   _rpcConnections;
-  /** @private {Logger} Logger */
-  #log;
   /** @private {IndexManager} Index manager for watching network/local files */
   _indexManager;
   /** @private {string} Absolute path to corestore */
@@ -74,8 +74,6 @@ export default class PearDrive extends ReadyResource {
   _customMessageHooks = {};
   /** @private {Object} - Holds custom message hooks for one-time exec */
   _onceCustomMessageHooks = {};
-  /** @private {Object} - Holds queued downloads */
-  _queuedDownloads = {};
 
   /**
    * @param {Object} opts
@@ -106,7 +104,7 @@ export default class PearDrive extends ReadyResource {
    *    @param {string} [opts.networkKey] - Optional network key to join a
    *     specific network on startup. If not provided, a new random key will be
    *     generated.
-   *    @param {Array} [opts.unfinishedDownloads] - Optional unfinished
+   *    @param {Array<string>} [opts.unfinishedDownloads] - Optional unfinished
    *     downloads to resume on startup. These include inProgress downloads
    *     and queuedDownloads.
    */
@@ -162,13 +160,14 @@ export default class PearDrive extends ReadyResource {
     this._uploads = new Map();
     this._downloads = new Map();
     this._inProgress = {};
+    this._queuedDownloads = {};
 
     // Save data
     this._corestorePath = corestorePath;
     this._watchPath = watchPath;
     this._indexName = indexName;
-    this._unfinishedDownloads = unfinishedDownloads;
 
+    // Set up IndexManager for PearDrive network file system management
     this._indexManager = new IndexManager({
       store: this._store,
       log: this.#log,
@@ -183,8 +182,10 @@ export default class PearDrive extends ReadyResource {
       sendFileRelease: async (peerId, filePath) => {
         return await this._sendFileRelease(peerId, filePath);
       },
+      unfinishedDownloads,
     });
 
+    // Set up network connection hook
     this._swarm.on("connection", this._onConnection.bind(this));
   }
 
@@ -1025,8 +1026,9 @@ export default class PearDrive extends ReadyResource {
       }
     }
 
-    // Add queued downloads
-    for (const filePath of Object.keys(this._queuedDownloads)) {
+    // Add queued downloads, ensure no timing issues cause duplicates
+    const queuedDownloads = this._indexManager.queuedDownloads.keys();
+    for (const filePath of queuedDownloads) {
       if (!unfinished.includes(filePath)) {
         unfinished.push(filePath);
       }

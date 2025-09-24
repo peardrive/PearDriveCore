@@ -40,6 +40,8 @@ export class IndexManager extends ReadyResource {
   #relayer = null;
   /** whether relay function is currently running */
   #relayRunning = false;
+  /** @private {Array<string>} Queued downloads */
+  #queuedDownloads = [];
 
   /**
    * @param {Object} opts
@@ -59,6 +61,8 @@ export class IndexManager extends ReadyResource {
    *      a peer
    *    @param {Function} opts.sendFileRelease- Function to release a file after
    *      download/upload
+   *    @param {Array<string>} [opts.unfinishedDownloads] - List of filePaths
+   *      for unfinished downloads to process and queue on startup
    */
   constructor({
     store,
@@ -71,6 +75,7 @@ export class IndexManager extends ReadyResource {
     inProgress = {},
     sendFileRequest,
     sendFileRelease,
+    queuedDownloads = [],
   }) {
     super();
 
@@ -98,23 +103,55 @@ export class IndexManager extends ReadyResource {
     this._inProgress = inProgress;
     this._sendFileRequest = sendFileRequest;
     this._sendFileRelease = sendFileRelease;
+    this.#queuedDownloads = new Set(queuedDownloads);
   }
 
   //////////////////////////////////////////////////////////////////////////////
   // Getters
   //////////////////////////////////////////////////////////////////////////////
 
+  /** Get boolean for whether or not relay is enabled */
   get relay() {
     return this._indexOpts.relay;
   }
 
+  /** Get the interval for relay polling */
   get relayInterval() {
     return this._indexOpts.pollInterval;
+  }
+
+  /** Get the array of downloads in queue */
+  get queuedDownloads() {
+    return Array.from(this.#queuedDownloads);
   }
 
   //////////////////////////////////////////////////////////////////////////////
   // Public functions
   //////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Add a file to the download queue.
+   *
+   * @param {string} filePath - The file path to queue for download
+   *
+   * @returns {void}
+   *
+   * @throws {Error} If IndexManager is not opened
+   */
+  queueDownload(filePath) {
+    // This should only be called when the IndexManager is open
+    if (!this.opened) {
+      this.#log.error("Cannot queue download; IndexManager is not opened yet.");
+      throw new Error("IndexManager is not opened yet.");
+    }
+
+    const dPath = utils.asDrivePath(filePath);
+    if (this.#queuedDownloads.has(dPath)) {
+      this.#log.warn(`File already queued for download: ${filePath}`);
+      return;
+    }
+    this.#queuedDownloads.add(dPath);
+  }
 
   /**
    * Start relay mode, which periodically scans the network for files not
