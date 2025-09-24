@@ -49,7 +49,7 @@ export default class PearDrive extends ReadyResource {
   /** @private {Map<string, RPC>} RPC PearDrive connections */
   _rpcConnections;
   /** @private {IndexManager} Index manager for watching network/local files */
-  _indexManager;
+  #im;
   /** @private {string} Absolute path to corestore */
   _corestorePath;
   /** @private {string} Path to PearDrive's local file storage */
@@ -167,14 +167,13 @@ export default class PearDrive extends ReadyResource {
     this._indexName = indexName;
 
     // Set up IndexManager for PearDrive network file system management
-    this._indexManager = new IndexManager({
+    this.#im = new IndexManager({
       store: this._store,
       log: this.#log,
       watchPath: watchPath,
       indexOpts: this._indexOpts,
       uploads: this._uploads,
       downloads: this._downloads,
-      inProgress: this._inProgress,
       sendFileRequest: async (peerId, filePath) => {
         return await this._sendFileRequest(peerId, filePath);
       },
@@ -226,7 +225,7 @@ export default class PearDrive extends ReadyResource {
    * @returns {Object} - In-progress downloads meta-data
    */
   get inProgressDownloads() {
-    return { ...this._inProgress };
+    return { ...this.#im.inProgressDownloads };
   }
 
   /**
@@ -371,15 +370,16 @@ export default class PearDrive extends ReadyResource {
         typeof blobRef.id === "object";
       if (!valid) {
         throw new Error(
-          `Invalid FILE_REQUEST response (expected {type:'hyperblobs', key:string, id:object})`
+          `Invalid FILE_REQUEST response \
+          (expected {type:'hyperblobs', key:string, id:object})`
         );
       }
 
       // Handle download
-      await this._indexManager.handleDownload(peerId, filePath, blobRef);
+      await this.#im.handleDownload(peerId, filePath, blobRef);
 
       // Cleanup
-      await this._indexManager.unmarkTransfer(filePath, "download", peerId);
+      await this.#im.unmarkTransfer(filePath, "download", peerId);
       await this._sendFileRelease(peerId, filePath);
     } catch (err) {
       this.#log.error(`Error downloading file from peer ${peerId}`, err);
@@ -444,7 +444,7 @@ export default class PearDrive extends ReadyResource {
   listPeers() {
     const peers = [];
     for (const [peerId, _rpc] of this._rpcConnections.entries()) {
-      const bee = this._indexManager.remoteIndexes.get(peerId);
+      const bee = this.#im.remoteIndexes.get(peerId);
       const hyperbeeKey = bee ? bee.core.key : null;
       peers.push({ publicKey: peerId, hyperbeeKey });
     }
@@ -470,14 +470,14 @@ export default class PearDrive extends ReadyResource {
   /** Activate automatic polling for the local file index */
   activateLocalFileSyncing() {
     this.#log.info("Activating automatic polling for local files...");
-    this._indexManager.startPolling();
+    this.#im.startPolling();
     this._syncConfig();
   }
 
   /** Deactivate automatic polling for the local file index */
   deactivateLocalFileSyncing() {
     this.#log.info("Deactivating automatic polling for local files...");
-    this._indexManager.stopPolling();
+    this.#im.stopPolling();
     this._syncConfig();
   }
 
@@ -495,7 +495,7 @@ export default class PearDrive extends ReadyResource {
 
     this.#log.info("Syncing local files...");
     try {
-      await this._indexManager.localIndex.pollOnce();
+      await this.#im.localIndex.pollOnce();
     } catch {
       this.#log.warn("Could not sync local files, autopolling may be enabled.");
     }
@@ -503,17 +503,17 @@ export default class PearDrive extends ReadyResource {
 
   /** List files available locally */
   async listLocalFiles() {
-    return await this._indexManager.getLocalIndexInfo();
+    return await this.#im.getLocalIndexInfo();
   }
 
   /** List files currently available over the network */
   async listNetworkFiles() {
-    return await this._indexManager.getNetworkIndexInfo();
+    return await this.#im.getNetworkIndexInfo();
   }
 
   /** List files currently available over the network not downloaded locally */
   async listNonLocalFiles() {
-    return await this._indexManager.getNonlocalNetworkIndexInfo();
+    return await this.#im.getNonlocalNetworkIndexInfo();
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -670,7 +670,7 @@ export default class PearDrive extends ReadyResource {
 
     try {
       // Get key
-      const keyBuf = this._indexManager.localIndex.bee.key;
+      const keyBuf = this.#im.localIndex.bee.key;
       const keyHex = utils.formatToStr(keyBuf);
 
       // Send key back to peer
@@ -737,7 +737,7 @@ export default class PearDrive extends ReadyResource {
       });
       await bee.ready();
 
-      await this._indexManager.addBee(peerId, bee);
+      await this.#im.addBee(peerId, bee);
       this.#log.info(`Registered remote index for ${peerId}`);
     } catch (err) {
       this.#log.error(`Error registering remote index for ${peerId}`, err);
@@ -762,7 +762,7 @@ export default class PearDrive extends ReadyResource {
 
     // Graceful teardown
     this._rpcConnections.delete(peerId);
-    this._indexManager.handlePeerDisconnected(peerId);
+    this.#im.handlePeerDisconnected(peerId);
 
     // Emit peer update event
     this.emit(C.EVENT.PEER_DISCONNECTED, peerId);
@@ -784,8 +784,8 @@ export default class PearDrive extends ReadyResource {
         throw new Error("Invalid file path in FILE_REQUEST");
       }
 
-      this._indexManager.markTransfer(payload, "upload", conn.remotePublicKey);
-      const uploadBlobRef = await this._indexManager.createUploadBlob(payload);
+      this.#im.markTransfer(payload, "upload", conn.remotePublicKey);
+      const uploadBlobRef = await this.#im.createUploadBlob(payload);
       if (!uploadBlobRef) {
         const peer = utils.formatToStr(conn.remotePublicKey);
         throw new Error(
@@ -829,7 +829,7 @@ export default class PearDrive extends ReadyResource {
       }
 
       const peerId = utils.formatToStr(conn.remotePublicKey);
-      await this._indexManager.unmarkTransfer(payload, "upload", peerId);
+      await this.#im.unmarkTransfer(payload, "upload", peerId);
 
       return {
         status: C.MESSAGE_STATUS.SUCCESS,
@@ -1019,14 +1019,16 @@ export default class PearDrive extends ReadyResource {
     const unfinished = [];
 
     // Add in-progress downloads
-    for (const [filePath, info] of Object.entries(this._inProgress)) {
+    for (const [filePath, info] of Object.entries(
+      this.#im.inProgressDownloads
+    )) {
       if (info.type === "download") {
         unfinished.push(filePath);
       }
     }
 
     // Add queued downloads, ensure no timing issues cause duplicates
-    const queuedDownloads = this._indexManager.queuedDownloads.keys();
+    const queuedDownloads = this.#im.queuedDownloads.keys();
     for (const filePath of queuedDownloads) {
       if (!unfinished.includes(filePath)) {
         unfinished.push(filePath);
@@ -1045,34 +1047,34 @@ export default class PearDrive extends ReadyResource {
 
     // Ready resources
     await this._store.ready();
-    await this._indexManager.ready();
+    await this.#im.ready();
 
     // Wire up IM event listeners
-    this._indexManager.on(C.IM_EVENT.LOCAL_FILE_ADDED, (data) => {
+    this.#im.on(C.IM_EVENT.LOCAL_FILE_ADDED, (data) => {
       this.emit(C.EVENT.LOCAL_FILE_ADDED, data);
     });
-    this._indexManager.on(C.IM_EVENT.LOCAL_FILE_REMOVED, (data) => {
+    this.#im.on(C.IM_EVENT.LOCAL_FILE_REMOVED, (data) => {
       this.emit(C.EVENT.LOCAL_FILE_REMOVED, data);
     });
-    this._indexManager.on(C.IM_EVENT.LOCAL_FILE_CHANGED, (data) => {
+    this.#im.on(C.IM_EVENT.LOCAL_FILE_CHANGED, (data) => {
       this.emit(C.EVENT.LOCAL_FILE_CHANGED, data);
     });
-    this._indexManager.on(C.IM_EVENT.PEER_FILE_ADDED, (data) => {
+    this.#im.on(C.IM_EVENT.PEER_FILE_ADDED, (data) => {
       this.emit(C.EVENT.PEER_FILE_ADDED, data);
     });
-    this._indexManager.on(C.IM_EVENT.PEER_FILE_REMOVED, (data) => {
+    this.#im.on(C.IM_EVENT.PEER_FILE_REMOVED, (data) => {
       this.emit(C.EVENT.PEER_FILE_REMOVED, data);
     });
-    this._indexManager.on(C.IM_EVENT.PEER_FILE_CHANGED, (data) => {
+    this.#im.on(C.IM_EVENT.PEER_FILE_CHANGED, (data) => {
       this.emit(C.EVENT.PEER_FILE_CHANGED, data);
     });
-    this._indexManager.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_STARTED, (data) => {
+    this.#im.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_STARTED, (data) => {
       this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_STARTED, data);
     });
-    this._indexManager.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_FAILED, (data) => {
+    this.#im.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_FAILED, (data) => {
       this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_FAILED, data);
     });
-    this._indexManager.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, (data) => {
+    this.#im.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, (data) => {
       this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, data);
     });
 
@@ -1082,7 +1084,7 @@ export default class PearDrive extends ReadyResource {
   async _close() {
     this.#log.info("Closing PearDrive...");
 
-    await this._indexManager.close();
+    await this.#im.close();
     this._swarm.destroy();
     await this._store.close();
 

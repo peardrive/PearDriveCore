@@ -42,6 +42,8 @@ export class IndexManager extends ReadyResource {
   #relayRunning = false;
   /** @private {Array<string>} Queued downloads */
   #queuedDownloads = [];
+  /** In-progress download dictionary */
+  #inProgress = {};
 
   /**
    * @param {Object} opts
@@ -72,7 +74,6 @@ export class IndexManager extends ReadyResource {
     rpcConnections,
     uploads,
     downloads,
-    inProgress = {},
     sendFileRequest,
     sendFileRelease,
     queuedDownloads = [],
@@ -100,7 +101,6 @@ export class IndexManager extends ReadyResource {
     this._rpcConnections = rpcConnections;
     this._uploads = uploads;
     this._downloads = downloads;
-    this._inProgress = inProgress;
     this._sendFileRequest = sendFileRequest;
     this._sendFileRelease = sendFileRelease;
     this.#queuedDownloads = new Set(queuedDownloads);
@@ -125,9 +125,32 @@ export class IndexManager extends ReadyResource {
     return Array.from(this.#queuedDownloads);
   }
 
+  /** Get the in-progress downloads */
+  get inProgressDownloads() {
+    return { ...this.#inProgress };
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Public functions
   //////////////////////////////////////////////////////////////////////////////
+
+  /** Add an in-progress download */
+  addInProgressDownload() {}
+
+  /**
+   * Remove an in-progress download by filePath
+   *
+   * @param {string} filePath - The file path to remove from in-progress
+   */
+  removeInProgressDownload(filePath) {
+    const dPath = utils.asDrivePath(filePath);
+    if (this.#inProgress[dPath]) {
+      delete this.#inProgress[dPath];
+      this.#log.info(`Removed in-progress download for: ${filePath}`);
+    } else {
+      this.#log.warn(`No in-progress download found for: ${filePath}`);
+    }
+  }
 
   /**
    * Add a file to the download queue.
@@ -575,7 +598,7 @@ export class IndexManager extends ReadyResource {
       this.emit(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, { path, peerId });
     }
 
-    // Delete the entire path entry if no more transfers active
+    // Delete the entire path entry if no more transfers acinProgresstive
     if (Object.keys(this._inProgress[pathKey]).length === 0) {
       delete this._inProgress[pathKey];
       this.#log.debug(`All transfers for ${path} completed, closing drive`);
@@ -766,6 +789,7 @@ export class IndexManager extends ReadyResource {
         );
         rs.destroy(error);
         ws.destroy(error);
+        this.#moveInProgressToQueue(filePath);
       }, INACTIVITY_TIMEOUT);
     };
 
@@ -884,7 +908,7 @@ export class IndexManager extends ReadyResource {
   /**
    * Wrapper for relay logic that ensures it runs safely
    *
-   * @private
+   * @privateinProgress
    */
   async #relay() {
     if (this.#relayRunning || !this._indexOpts.relay) {
@@ -1068,6 +1092,34 @@ export class IndexManager extends ReadyResource {
     } catch (err) {
       this.#log.error(`Error handling queued download for ${filePath}`, err);
     }
+  }
+
+  /**
+   * Move in-progress downloads to the queued downloads
+   *
+   * @param {string} filePath
+   */
+  #moveInProgressToQueue(filePath) {
+    this.#log.info(
+      `Moving in-progress download for ${filePath} back to the queue`
+    );
+
+    // Ensure this file is not already queued and is in progress
+    const dPath = utils.asDrivePath(filePath);
+    if (this.#queuedDownloads.has(dPath)) {
+      this.#log.warn(`File already queued for download: ${filePath}`);
+      return;
+    }
+    if (!this.hasActiveDownloads(dPath)) {
+      this.#log.warn(
+        `File not marked as in-progress download, cannot move to queue: \
+        ${filePath}`
+      );
+      return;
+    }
+
+    this.#queuedDownloads.add(dPath);
+    delete this._inProgress[dPath];
   }
 
   //////////////////////////////////////////////////////////////////////////////
