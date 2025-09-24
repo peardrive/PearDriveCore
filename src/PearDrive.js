@@ -160,7 +160,6 @@ export default class PearDrive extends ReadyResource {
     this._uploads = new Map();
     this._downloads = new Map();
     this._inProgress = {};
-    this._queuedDownloads = {};
 
     // Save data
     this._corestorePath = corestorePath;
@@ -1067,14 +1066,14 @@ export default class PearDrive extends ReadyResource {
     this._indexManager.on(C.IM_EVENT.PEER_FILE_CHANGED, (data) => {
       this.emit(C.EVENT.PEER_FILE_CHANGED, data);
     });
-    this._indexManager.on(C.IM_EVENT.DOWNLOAD_STARTED, (data) => {
-      this.emit(C.EVENT.DOWNLOAD_STARTED, data);
+    this._indexManager.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_STARTED, (data) => {
+      this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_STARTED, data);
     });
-    this._indexManager.on(C.IM_EVENT.UPLOAD_FAILED, (data) => {
-      this.emit(C.EVENT.UPLOAD_FAILED, data);
+    this._indexManager.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_FAILED, (data) => {
+      this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_FAILED, data);
     });
-    this._indexManager.on(C.IM_EVENT.DOWNLOAD_COMPLETED, (data) => {
-      this.emit(C.EVENT.DOWNLOAD_COMPLETED, data);
+    this._indexManager.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, (data) => {
+      this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, data);
     });
 
     this.#log.info("PearDrive opened successfully!");

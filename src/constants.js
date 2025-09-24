@@ -39,35 +39,31 @@ export const RPC = {
  * Update event types triggered by changes received by hypercores or filesystem
  */
 export const EVENT = {
-  /** Any and all built-in event updates */
-  SYSTEM: "[PD]: system_update",
-  /** Update from peer connection */
-  PEER: "[PD]: peer_event",
-  /** Update from a file over the network */
-  NETWORK: "[PD]: network_update",
-  /** Update on a file on the local filesystem */
-  LOCAL: "[PD]: local_update",
   /** Download progress info */
   DOWNLOAD_PROGRESS: "[PD]: download_progress",
 
   /** Any error thrown in PearDrive */
   ERROR: "[PD]: error",
+
   /** Peer connected */
   PEER_CONNECTED: "[PD]: peer_connected",
   /** Peer disconnected */
   PEER_DISCONNECTED: "[PD]: peer_disconnected",
+
   /** Local file added (Wrapper for IM event) */
   LOCAL_FILE_ADDED: "[PD]: local_file_added",
   /** Local file removed (Wrapper for IM event) */
   LOCAL_FILE_REMOVED: "[PD]: local_file_removed",
   /** Local file changed (Wrapper for IM event) */
   LOCAL_FILE_CHANGED: "[PD]: local_file_changed",
+
   /** Peer file added (Wrapper for IM event) */
   PEER_FILE_ADDED: "[PD]: peer_file_added",
   /** Peer file removed (Wrapper for IM event) */
   PEER_FILE_REMOVED: "[PD]: peer_file_removed",
   /** Peer file changed (Wrapper for IM event) */
   PEER_FILE_CHANGED: "[PD]: peer_file_changed",
+
   /** New inProgress download added (Wrapper for IM event) */
   IN_PROGRESS_DOWNLOAD_STARTED: "[PD]: in_progress_download_started",
   /** An inProgress download has failed (Wrapper for IM event) */
@@ -84,7 +80,8 @@ export const EVENT = {
 export const LFI_EVENT = {
   /** Any error occurring in the local file index */
   ERROR: "[LFI]: local_file_index_error",
-  /** Emitted when a file is added to the local file index
+  /**
+   * Emitted when a file is added to the local file index
    *
    * Emitted with the following data:
    * - `path`: The (relative) path of the file

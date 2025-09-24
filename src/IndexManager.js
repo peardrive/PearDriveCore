@@ -994,11 +994,17 @@ export class IndexManager extends ReadyResource {
 
       // Handle file addition
       if (updateType === "added") {
+        // Emit file added event
         this.emit(C.IM_EVENT.PEER_FILE_ADDED, {
           filePath,
           peerKey: peerId,
           hash: curVal.hash,
         });
+
+        // Check if this file is queued for download
+        const dPath = utils.asDrivePath(filePath);
+        if (this.#queuedDownloads.has(dPath))
+          this.#handleQueuedDownload(peerId, filePath);
       }
 
       // Handle file change
@@ -1027,6 +1033,41 @@ export class IndexManager extends ReadyResource {
 
     // Advance snapshot head
     this._peerUpdates.set(peerId, curUpdate);
+  }
+
+  /**
+   *
+   * @param {string} peerId
+   * @param {string} filePath
+   */
+  async #handleQueuedDownload(peerId, filePath) {
+    // Ensure this file is still queued
+    const dPath = utils.asDrivePath(filePath);
+    if (this.#queuedDownloads.has(dPath)) {
+      this.#log.info(
+        `File ${filePath} is queued for download; starting download...`
+      );
+    }
+
+    // Remove from queue
+    this.#queuedDownloads.delete(dPath);
+
+    try {
+      // Get Hyperblobs ref from peer
+      const ref = await this._sendFileRequest(peerId, filePath);
+      if (!ref || ref.type !== "hyperblobs" || !ref.key || !ref.id) {
+        this.#log.warn(
+          `Relay: Invalid Hyperblobs ref for ${filePath} from ${peerId}`
+        );
+        return;
+      }
+
+      await this.handleDownload(peerId, filePath, ref);
+      await this.unmarkTransfer(filePath, "download", peerId);
+      await this._sendFileRelease(peerId, filePath);
+    } catch (err) {
+      this.#log.error(`Error handling queued download for ${filePath}`, err);
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////////
