@@ -42,6 +42,9 @@ export const EVENT = {
   /** Download progress info */
   DOWNLOAD_PROGRESS: "[PD]: download_progress",
 
+  /** Save data update */
+  SAVE_DATA_UPDATE: "[PD]: save_data_update",
+
   /** Any error thrown in PearDrive */
   ERROR: "[PD]: error",
 
