@@ -273,6 +273,11 @@ export default class PearDrive extends ReadyResource {
     return this._swarm.keyPair.publicKey;
   }
 
+  /**
+   * Returns JSON object for all data needed to re-instantiate PearDrive
+   *
+   * @returns {Object} - Save data
+   */
   get saveData() {
     return this.#buildSaveData();
   }
@@ -1019,9 +1024,7 @@ export default class PearDrive extends ReadyResource {
     const unfinished = [];
 
     // Add in-progress downloads
-    for (const [filePath, info] of Object.entries(
-      this.#im.inProgressDownloads
-    )) {
+    for (const [filePath, info] of Object.entries(this.inProgressDownloads)) {
       if (info.type === "download") {
         unfinished.push(filePath);
       }

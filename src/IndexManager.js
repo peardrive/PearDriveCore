@@ -484,8 +484,8 @@ export class IndexManager extends ReadyResource {
   hasActiveTransfers(path) {
     const pathKey = utils.asDrivePath(path);
     return (
-      !!this._inProgress[pathKey] &&
-      Object.keys(this._inProgress[pathKey]).length > 0
+      !!this.#inProgress[pathKey] &&
+      Object.keys(this.#inProgress[pathKey]).length > 0
     );
   }
 
@@ -499,8 +499,8 @@ export class IndexManager extends ReadyResource {
   hasActiveUploads(path) {
     const pathKey = utils.asDrivePath(path);
     return (
-      !!this._inProgress[pathKey] &&
-      Object.values(this._inProgress[pathKey]).some(
+      !!this.#inProgress[pathKey] &&
+      Object.values(this.#inProgress[pathKey]).some(
         (entry) => entry.direction === "upload"
       )
     );
@@ -516,8 +516,8 @@ export class IndexManager extends ReadyResource {
   hasActiveDownloads(path) {
     const pathKey = utils.asDrivePath(path);
     return (
-      !!this._inProgress[pathKey] &&
-      Object.values(this._inProgress[pathKey]).some(
+      !!this.#inProgress[pathKey] &&
+      Object.values(this.#inProgress[pathKey]).some(
         (entry) => entry.direction === "download"
       )
     );
@@ -543,9 +543,9 @@ export class IndexManager extends ReadyResource {
       const pathKey = utils.asDrivePath(path);
 
       // Add to in-progress dictionary object, prevent duplicates
-      const tmpEntries = this._inProgress[pathKey];
+      const tmpEntries = this.#inProgress[pathKey];
       if (!tmpEntries) {
-        this._inProgress[pathKey] = {};
+        this.#inProgress[pathKey] = {};
       } else if (tmpEntries[utils.formatToStr(peerId)]) {
         this.#log.warn(
           `Transfer already marked for ${path} (${direction}) with peer 
@@ -554,7 +554,7 @@ export class IndexManager extends ReadyResource {
         return;
       }
       const tmpEntry = { direction, startedAt: Date.now() };
-      this._inProgress[pathKey][utils.formatToStr(peerId)] = tmpEntry;
+      this.#inProgress[pathKey][utils.formatToStr(peerId)] = tmpEntry;
 
       // Emit event
       this.emit(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_STARTED, { path, peerId });
@@ -582,7 +582,7 @@ export class IndexManager extends ReadyResource {
 
     // Ensure this transfer exists
     const pathKey = utils.asDrivePath(path);
-    if (!this._inProgress[pathKey]) {
+    if (!this.#inProgress[pathKey]) {
       this.#log.warn(
         `No in-progress transfers found for ${path} (${direction}) with peer 
         ${utils.formatToStr(peerId)}`
@@ -591,7 +591,7 @@ export class IndexManager extends ReadyResource {
     }
 
     // Delete the specific peer transfer entry
-    delete this._inProgress[pathKey][utils.formatToStr(peerId)];
+    delete this.#inProgress[pathKey][utils.formatToStr(peerId)];
 
     // Emit event, if a download
     if (direction === "download") {
@@ -599,8 +599,8 @@ export class IndexManager extends ReadyResource {
     }
 
     // Delete the entire path entry if no more transfers acinProgresstive
-    if (Object.keys(this._inProgress[pathKey]).length === 0) {
-      delete this._inProgress[pathKey];
+    if (Object.keys(this.#inProgress[pathKey]).length === 0) {
+      delete this.#inProgress[pathKey];
       this.#log.debug(`All transfers for ${path} completed, closing drive`);
       if (direction === "download") {
         await this.closeDownloadBlob(path, true);
@@ -1119,7 +1119,7 @@ export class IndexManager extends ReadyResource {
     }
 
     this.#queuedDownloads.add(dPath);
-    delete this._inProgress[dPath];
+    delete this.#inProgress[dPath];
   }
 
   //////////////////////////////////////////////////////////////////////////////
