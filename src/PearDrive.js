@@ -384,7 +384,6 @@ export default class PearDrive extends ReadyResource {
       await this.#im.handleDownload(peerId, filePath, blobRef);
 
       // Cleanup
-      await this.#im.unmarkTransfer(filePath, "download", peerId);
       await this._sendFileRelease(peerId, filePath);
     } catch (err) {
       this.#log.error(`Error downloading file from peer ${peerId}`, err);

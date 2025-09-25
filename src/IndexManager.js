@@ -449,27 +449,29 @@ export class IndexManager extends ReadyResource {
   async handleDownload(peerId, filePath, downloadRef) {
     this.#log.info(`Handling download for ${filePath} from peer ${peerId}`);
 
-    // Expect new Hyperblobs ref
-    const isValidBlobsRef =
-      downloadRef &&
-      typeof downloadRef === "object" &&
-      downloadRef.type === "hyperblobs";
-    if (!isValidBlobsRef) {
-      this.#log.error(
-        "Expected a Hyperblobs downloadRef { type:'hyperblobs', key, id }"
-      );
-      throw new Error("Invalid download reference (expected Hyperblobs)");
-    }
-
     try {
+      // Expect new Hyperblobs ref
+      const isValidBlobsRef =
+        downloadRef &&
+        typeof downloadRef === "object" &&
+        downloadRef.type === "hyperblobs";
+      if (!isValidBlobsRef) {
+        this.#log.error(
+          "Expected a Hyperblobs downloadRef { type:'hyperblobs', key, id }"
+        );
+        throw new Error("Invalid download reference (expected Hyperblobs)");
+      }
+
       this.markTransfer(filePath, "download", peerId);
       await this._createDownloadBlob(filePath, downloadRef.key);
       await this._executeDownloadBlob(filePath, downloadRef.id);
+      this.unmarkTransfer(filePath, "download", peerId);
     } catch (err) {
       this.#log.error(
         `Download process failed for file: ${filePath} from peer ${peerId}`,
         err
       );
+      this.#handleDownloadFailure(filePath, peerId, err);
       return false;
     }
   }
@@ -789,7 +791,6 @@ export class IndexManager extends ReadyResource {
         );
         rs.destroy(error);
         ws.destroy(error);
-        this.#moveInProgressToQueue(filePath);
       }, INACTIVITY_TIMEOUT);
     };
 
@@ -894,7 +895,6 @@ export class IndexManager extends ReadyResource {
       }
 
       await this.handleDownload(peerId, fileKey, ref);
-      await this.unmarkTransfer(fileKey, "download", peerId);
       await this._sendFileRelease(peerId, fileKey);
     } catch (err) {
       this.#log.error(
@@ -1087,7 +1087,6 @@ export class IndexManager extends ReadyResource {
       }
 
       await this.handleDownload(peerId, filePath, ref);
-      await this.unmarkTransfer(filePath, "download", peerId);
       await this._sendFileRelease(peerId, filePath);
     } catch (err) {
       this.#log.error(`Error handling queued download for ${filePath}`, err);
@@ -1120,6 +1119,23 @@ export class IndexManager extends ReadyResource {
 
     this.#queuedDownloads.add(dPath);
     delete this.#inProgress[dPath];
+  }
+
+  /**
+   * Handle internal data and event emmission after a download failure
+   *
+   * @param {string} filePath
+   * @param {string | Uint8Array | ArrayBuffer} peerId
+   * @param {Error} error
+   */
+  #handleDownloadFailure(filePath, peerId, error) {
+    this.#log.info(`Handling download failure for ${filePath}`);
+    this.#moveInProgressToQueue(filePath);
+    this.emit(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_FAILED, {
+      filePath,
+      peerId,
+      error,
+    });
   }
 
   //////////////////////////////////////////////////////////////////////////////
