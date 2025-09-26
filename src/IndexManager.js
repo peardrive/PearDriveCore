@@ -522,6 +522,12 @@ export class IndexManager extends ReadyResource {
     try {
       const pathKey = utils.asDrivePath(path);
 
+      // Remove from queued downloads if present
+      if (this.#queuedDownloads.has(pathKey)) {
+        this.#queuedDownloads.delete(pathKey);
+        this.#log.debug(`Removed ${path} from queued downloads`);
+      }
+
       // Add to in-progress dictionary object, prevent duplicates
       const tmpEntries = this.#inProgress[pathKey];
       if (!tmpEntries) {
@@ -1130,6 +1136,57 @@ export class IndexManager extends ReadyResource {
       }
     }
     return null;
+  }
+
+  /**
+   * Try to download a queued file from any peer that has it
+   *
+   * @param {string} filePath
+   *
+   * @returns {Promise<boolean>} - Success flag
+   */
+  async #tryDownloadQueuedFileFromNetwork(filePath) {
+    const dPath = utils.asDrivePath(filePath);
+
+    // Noop if download has already started
+    if (this.hasActiveDownloads(dPath)) {
+      this.#log.debug(
+        `Download already active for ${filePath}; skipping scan.`
+      );
+      return false;
+    }
+
+    // Find a peer that has this file
+    const peerId = await this.#findPeerWithFile(filePath);
+
+    // No peers have it, stay queued
+    if (!peerId) {
+      this.#log.debug(
+        `No peers currently advertise ${filePath}; staying queued.`
+      );
+      return false;
+    }
+
+    try {
+      const ref = await this._sendFileRequest(peerId, filePath);
+      if (!ref || ref.type !== "hyperblobs" || !ref.key || !ref.id) {
+        this.#log.warn(
+          `Invalid Hyperblobs ref for ${filePath} from ${peerId}; staying \
+          queued.`
+        );
+        return false;
+      }
+
+      await this.handleDownload(peerId, filePath, ref);
+      await this._sendFileRelease(peerId, filePath);
+      return true;
+    } catch (err) {
+      this.#log.error(
+        `Immediate download failed for ${filePath} from ${peerId}`,
+        err
+      );
+      return false;
+    }
   }
 
   /**
