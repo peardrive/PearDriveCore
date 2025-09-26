@@ -130,6 +130,16 @@ export class IndexManager extends ReadyResource {
     return { ...this.#inProgress };
   }
 
+  /** Save data as JSON object */
+  get saveData() {
+    return {
+      localFileIndexName: this.localIndex.name,
+      watchPath: this.localIndex.watchPath,
+      poll: this.localIndex.poll,
+      pollInterval: this.localIndex.pollInterval,
+    };
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Public functions
   //////////////////////////////////////////////////////////////////////////////
@@ -210,7 +220,7 @@ export class IndexManager extends ReadyResource {
     }
     if (hasInitialData) {
       this.#log.info(`Remote index already has data for peer ${peerId}`);
-      // this._emitEvent(C.EVENT.NETWORK, peerId);
+      this.#emitAllBeeFilesAsAdded(peerId, bee);
     }
 
     // Emit event on append
@@ -223,10 +233,6 @@ export class IndexManager extends ReadyResource {
           `Error updating remote index for peer ${peerId}: ${error}`
         );
       }
-      // this._emitEvent(C.EVENT.NETWORK, {
-      //   type: C.EVENT.NETWORK,
-      //   peerId,
-      // });
     });
   }
 
@@ -239,16 +245,6 @@ export class IndexManager extends ReadyResource {
     this.remoteIndexes.delete(peerId);
     this._peerUpdates.delete(peerId);
     this.#log.info(`Remote index removed for peer ${peerId}`);
-  }
-
-  /** Get save data as JSON */
-  getSaveData() {
-    return {
-      localFileIndexName: this.localIndex.name,
-      watchPath: this.localIndex.watchPath,
-      poll: this.localIndex.poll,
-      pollInterval: this.localIndex.pollInterval,
-    };
   }
 
   /** Get current local file index info */
@@ -275,7 +271,7 @@ export class IndexManager extends ReadyResource {
   }
 
   async getLocalIndexInfo() {
-    return this.localIndex.getIndexInfo();
+    return await this.localIndex.getIndexInfo();
   }
 
   /**
@@ -1134,6 +1130,30 @@ export class IndexManager extends ReadyResource {
       }
     }
     return null;
+  }
+
+  /**
+   * Emit all bee files as files added events
+   *
+   * @param {string} peerId - Hex string of peer's public key
+   * @param {Hyperbee} bee - An already–ready Hyperbee instance
+   */
+  async #emitAllBeeFilesAsAdded(peerId, bee) {
+    try {
+      for await (const { key, value } of bee.createReadStream()) {
+        const filePath = utils.formatToStr(key);
+        const hash = value.hash;
+        if (filePath && hash) {
+          this.emit(C.IM_EVENT.PEER_FILE_ADDED, {
+            filePath,
+            peerKey: peerId,
+            hash,
+          });
+        }
+      }
+    } catch (err) {
+      this.#log.error("Error emitting all bee files as added", err);
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////////
