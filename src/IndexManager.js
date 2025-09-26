@@ -387,7 +387,7 @@ export class IndexManager extends ReadyResource {
     }
 
     const dPath = utils.asDrivePath(filePath);
-    const store = this._createNamespace(filePath, "upload:blobs");
+    const store = this.#createNamespace(filePath, "upload:blobs");
     await store.ready();
 
     // Dedicated core for this single-blob transfer
@@ -463,8 +463,8 @@ export class IndexManager extends ReadyResource {
       }
 
       this.markTransfer(filePath, "download", peerId);
-      await this._createDownloadBlob(filePath, downloadRef.key);
-      await this._executeDownloadBlob(filePath, downloadRef.id);
+      await this.#createDownloadBlob(filePath, downloadRef.key);
+      await this.#executeDownloadBlob(filePath, downloadRef.id);
       this.unmarkTransfer(filePath, "download", peerId);
     } catch (err) {
       this.#log.error(
@@ -714,21 +714,19 @@ export class IndexManager extends ReadyResource {
   //////////////////////////////////////////////////////////////////////////////
 
   /**
-   *  Create and configure download blob, a Hyperblobs instance, for a file from
-   *  a remote peer.
+   * Create and configure download blob, a Hyperblobs instance, for a file from
+   * a remote peer.
    *
    * @param {string} filePath
    * @param {string | Uint8Array | ArrayBuffer} coreKey
    *
    * @returns {Promise<void>}
-   *
-   * @private
    */
-  async _createDownloadBlob(filePath, coreKey) {
+  async #createDownloadBlob(filePath, coreKey) {
     this.#log.info(`Creating download blob for file: ${filePath}`);
 
     const keyBuf = utils.formatToBuffer(coreKey);
-    const store = this._createNamespace(filePath, "download:blobs");
+    const store = this.#createNamespace(filePath, "download:blobs");
     await store.ready();
 
     const core = store.get({ key: keyBuf });
@@ -750,10 +748,8 @@ export class IndexManager extends ReadyResource {
    * @param {Object} id - The ID of the blob to download
    *
    * @returns {Promise<void>}
-   *
-   * @private
    */
-  async _executeDownloadBlob(filePath, id) {
+  async #executeDownloadBlob(filePath, id) {
     this.#log.info(`Executing Hyperblobs download for: ${filePath}`);
 
     const download = this._downloads.get(utils.asDrivePath(filePath));
@@ -857,10 +853,8 @@ export class IndexManager extends ReadyResource {
    * @param {string} pathOrKey - The path or key to create the namespace for
    *
    * @param {string} [tag] - Optional tag for the namespace
-   *
-   * @private
    */
-  _createNamespace(pathOrKey, tag) {
+  #createNamespace(pathOrKey, tag) {
     const key = utils.formatToStr(pathOrKey);
     this.#log.debug(`Creating namespace for drive: ${pathOrKey}`);
 
@@ -878,10 +872,8 @@ export class IndexManager extends ReadyResource {
    * @param {string} fileKey - Key of the file to download
    *
    * @returns {Promise<void>}
-   *
-   * @private
    */
-  async _relayDownload(peerId, fileKey) {
+  async #relayDownload(peerId, fileKey) {
     this.#log.info(`Relay: Downloading file ${fileKey} from peer ${peerId}`);
 
     try {
@@ -905,11 +897,7 @@ export class IndexManager extends ReadyResource {
     }
   }
 
-  /**
-   * Wrapper for relay logic that ensures it runs safely
-   *
-   * @privateinProgress
-   */
+  /** Wrapper for relay logic that ensures it runs safely */
   async #relay() {
     if (this.#relayRunning || !this._indexOpts.relay) {
       this.#log.warn("Relay is already running, skipping this iteration.");
@@ -921,7 +909,6 @@ export class IndexManager extends ReadyResource {
 
     try {
       // Make sure local index is ready
-      // TODO: Polling stuff should be ready if localIndex.opened
       await this.localIndex.pollOnce();
       // Create set of all local files
       const localFiles = new Set();
@@ -946,7 +933,7 @@ export class IndexManager extends ReadyResource {
       // Download the first entry that is missing
       if (missingFiles.size > 0) {
         const [fileKey, peerId] = missingFiles.entries().next().value;
-        await this._relayDownload(peerId, fileKey);
+        await this.#relayDownload(peerId, fileKey);
       }
     } catch (err) {
       this.#log.error("Error during relay operation", err);
