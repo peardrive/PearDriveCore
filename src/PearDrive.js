@@ -881,7 +881,8 @@ export default class PearDrive extends ReadyResource {
           response = await cb(payload);
         } catch (err) {
           this.#log.error(
-            `Error handling one-time MESSAGE of type "${type}" from ${conn.remotePublicKey}`,
+            `Error handling one-time MESSAGE of type "${type}" from \
+            ${conn.remotePublicKey}`,
             err
           );
           this.emit(C.EVENT.ERROR, err);
@@ -917,7 +918,8 @@ export default class PearDrive extends ReadyResource {
         response = await cb(payload);
       } catch (err) {
         this.#log.error(
-          `Error handling MESSAGE of type "${type}" from ${conn.remotePublicKey}`,
+          `Error handling MESSAGE of type "${type}" from \
+          ${conn.remotePublicKey}`,
           err
         );
         this.emit(C.EVENT.ERROR, err);
@@ -1057,6 +1059,10 @@ export default class PearDrive extends ReadyResource {
   // IndexManager event handlers
   //////////////////////////////////////////////////////////////////////////////
 
+  #imEventSaveDataUpdate = () => {
+    this.#emitSaveDataUpdate();
+  };
+
   #imEventLocalFileAdded = (data) => {
     this.emit(C.EVENT.LOCAL_FILE_ADDED, data);
     this.#emitSaveDataUpdate();
@@ -1109,6 +1115,9 @@ export default class PearDrive extends ReadyResource {
     await this.#im.ready();
 
     // Wire up IM event listeners
+    this.#im.on(C.IM_EVENT.SAVE_DATA_UPDATE, () => {
+      this.#imEventSaveDataUpdate();
+    });
     this.#im.on(C.IM_EVENT.LOCAL_FILE_ADDED, (data) => {
       this.#imEventLocalFileAdded(data);
     });

@@ -134,24 +134,6 @@ export class IndexManager extends ReadyResource {
   // Public functions
   //////////////////////////////////////////////////////////////////////////////
 
-  /** Add an in-progress download */
-  addInProgressDownload() {}
-
-  /**
-   * Remove an in-progress download by filePath
-   *
-   * @param {string} filePath - The file path to remove from in-progress
-   */
-  removeInProgressDownload(filePath) {
-    const dPath = utils.asDrivePath(filePath);
-    if (this.#inProgress[dPath]) {
-      delete this.#inProgress[dPath];
-      this.#log.info(`Removed in-progress download for: ${filePath}`);
-    } else {
-      this.#log.warn(`No in-progress download found for: ${filePath}`);
-    }
-  }
-
   /**
    * Add a file to the download queue.
    *
@@ -559,7 +541,9 @@ export class IndexManager extends ReadyResource {
       this.#inProgress[pathKey][utils.formatToStr(peerId)] = tmpEntry;
 
       // Emit event
-      this.emit(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_STARTED, { path, peerId });
+      if (direction === "download") {
+        this.emit(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_STARTED, { path, peerId });
+      }
     } catch (err) {
       this.#log.error("Error marking transfer", err);
     }
@@ -600,7 +584,7 @@ export class IndexManager extends ReadyResource {
       this.emit(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, { path, peerId });
     }
 
-    // Delete the entire path entry if no more transfers acinProgresstive
+    // Delete the entire path entry if no more transfers active
     if (Object.keys(this.#inProgress[pathKey]).length === 0) {
       delete this.#inProgress[pathKey];
       this.#log.debug(`All transfers for ${path} completed, closing drive`);
@@ -645,7 +629,6 @@ export class IndexManager extends ReadyResource {
     }
 
     try {
-      // Optional: free the blob itself if you want to reclaim space
       if (download.id && download.blobs) {
         await download.blobs.clear(download.id).catch((err) => {
           this.#log.debug(`Failed to clear blob data for ${path}`, err);
@@ -774,7 +757,8 @@ export class IndexManager extends ReadyResource {
 
     // Activity timer for managing timeouts
     let inactivityTimer = null;
-    let INACTIVITY_TIMEOUT = 30000; // 30 seconds of inactivity to timeout
+    let INACTIVITY_TIMEOUT = 30000;
+
     /** Reset inactivity timer (on data) */
     const resetInactivityTimer = () => {
       if (inactivityTimer) {
@@ -853,6 +837,8 @@ export class IndexManager extends ReadyResource {
    * @param {string} pathOrKey - The path or key to create the namespace for
    *
    * @param {string} [tag] - Optional tag for the namespace
+   *
+   * @returns {Corestore} - The namespaced corestore
    */
   #createNamespace(pathOrKey, tag) {
     const key = utils.formatToStr(pathOrKey);
@@ -947,7 +933,11 @@ export class IndexManager extends ReadyResource {
     }
   }
 
-  /** Handle peer bee appends */
+  /**
+   * Handle peer bee appends
+   *
+   * @param {string} peerId - The peer ID whose bee was updated
+   */
   async #onPeerUpdate(peerId) {
     this.#log.info(`Peer ${peerId} updated`);
 
@@ -1123,6 +1113,27 @@ export class IndexManager extends ReadyResource {
       peerId,
       error,
     });
+  }
+
+  /**
+   * Search for peer that has a given file in its index.
+   * Returns the first matching peerId or null.
+   *
+   * @param {string} filePath
+   *
+   * @returns {Promise<string|null>}
+   */
+  async #findPeerWithFile(filePath) {
+    const dPath = utils.asDrivePath(filePath);
+    for (const [peerId, bee] of this.remoteIndexes.entries()) {
+      try {
+        const entry = await bee.get(dPath);
+        if (entry && entry.value) return peerId;
+      } catch (err) {
+        this.#log.debug(`Failed checking peer ${peerId} for ${dPath}`, err);
+      }
+    }
+    return null;
   }
 
   //////////////////////////////////////////////////////////////////////////////

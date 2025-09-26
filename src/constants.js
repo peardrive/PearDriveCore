@@ -114,6 +114,9 @@ export const LFI_EVENT = {
  * @protected
  */
 export const IM_EVENT = {
+  /*** Any time something causes save data to update */
+  SAVE_DATA_UPDATE: "[IM]: save_data_update",
+
   /** Mirrors emitted from LFI FILE_ADDED */
   LOCAL_FILE_ADDED: "[IM]: local_file_added",
   /** Mirrors emitted from LFI FILE_REMOVED */
