@@ -895,7 +895,7 @@ test("PearDrive: Download five files", { stealth: true }, async (t) => {
   }
 });
 
-solo(
+test(
   "PearDrive: Test nested file download preserves relative path",
   { stealth: true },
   async (t) => {
@@ -923,7 +923,6 @@ solo(
     fs.mkdirSync(nestedDirA, { recursive: true });
     const fileA = utils.createRandomFile(nestedDirA, 20);
     const relFilePath = path.relative(peerA.pd.watchPath, fileA.path);
-    console.log("File created on peer A:", fileA.path);
 
     // Sync both peers' local indexes
     await peerA.pd.syncLocalFilesOnce();
@@ -932,12 +931,10 @@ solo(
     // Get original hash from peer A
     const filesA = await peerA.pd.listLocalFiles();
     const fileEntryA = filesA.files.find((f) => f.path === relFilePath);
-    console.log("relFilePath", relFilePath);
     t.ok(fileEntryA, "Peer A indexed nested file");
     const originalHash = fileEntryA.hash;
 
     // Download the nested file from peer A to peer B
-    console.log("Downloading file from peer A to peer B...", fileEntryA);
     await peerB.pd.downloadFileFromPeer(peerA.pd.publicKey, relFilePath);
     await peerB.pd.syncLocalFilesOnce();
 
