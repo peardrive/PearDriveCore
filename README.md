@@ -367,9 +367,11 @@ PearDrive works in Bare runtime, so you can follow [this guide](https://docs.pea
 - Add unlisten function
 - Remove unused indexKeySend RPC method, among others
 - Improve testing speed
+- Add 'queuedDownloads' for automatically redownloading files when the first download attempt fails
+- add SAVE_DATA_UPDATE event hook
 - All LocalDrive references fixed (LocalDrive -> WatchPath)
-- TODO: Add middleware functions to programmatically confirm / deny actions
-- TODO: Update README
+- Fix bug causing some files to get stuck with #isBusy status
+- Fix bug causing files downloaded from nested folders to download to the root watchPath folder
 
 ### 1.5.3
 
