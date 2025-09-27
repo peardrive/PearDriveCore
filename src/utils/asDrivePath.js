@@ -10,7 +10,7 @@
  * @protected
  */
 
-/** Convery string to a drive path for a hyperdrive entry */
+/** Convert string to a drive path for a hyperdrive entry */
 export function asDrivePath(str) {
   return str.startsWith("/") ? str : `/${str}`;
 }

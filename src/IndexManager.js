@@ -744,6 +744,18 @@ export class IndexManager extends ReadyResource {
       throw new Error(`No download blob found for file: ${filePath}`);
     }
 
+    // Ensure parent folder exists
+    try {
+      const absPath = utils.createAbsPath(filePath, this.watchPath);
+      utils.createParentFolder(absPath);
+    } catch (err) {
+      this.#log.error(
+        `Failed to create parent folder for file: ${filePath}`,
+        err
+      );
+      throw err;
+    }
+
     // Create read/write streams
     const rs = blobs.createReadStream(id, {
       wait: true,

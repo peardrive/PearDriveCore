@@ -18,7 +18,7 @@ import Corestore from "corestore";
 import RPC from "protomux-rpc";
 import c from "compact-encoding";
 import Hyperbee from "hyperbee";
-import Logger, { LOG_LEVELS } from "@hopets/logger";
+import Logger from "@hopets/logger";
 import ReadyResource from "ready-resource";
 
 import * as C from "./constants.js";
