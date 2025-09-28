@@ -48,6 +48,7 @@ npm install @peardrive/core
 
 - Remove activate/deactivateLocalFileSyncing (deprecated)
 - Make syncLocalFilesOnce private (it's only for testing)
+- Simplify listing local, nonlocal and network files by removing the 2 values, key and files, and only returning the files as an array.
 
 ### 1.6.0
 

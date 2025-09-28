@@ -688,14 +688,10 @@ test("PearDrive: List local files", { stealth: true }, async (t) => {
 
   // List local files
   const localFiles = await pd.listLocalFiles();
-  t.is(
-    localFiles.files.length,
-    files.length,
-    "Listed correct number of local files"
-  );
+  t.is(localFiles.length, files.length, "Listed correct number of local files");
   for (const file of files) {
     t.ok(
-      localFiles.files.some((f) => f.path === file.name),
+      localFiles.some((f) => f.path === file.name),
       `File ${file.name} is listed`
     );
   }
@@ -741,22 +737,22 @@ test("PearDrive: List network files", { stealth: true }, async (t) => {
   const networkFilesB = await pearDriveB.pd.listNetworkFiles();
 
   t.is(
-    networkFilesB.get("local").files.length,
+    networkFilesB.get("local").length,
     filesB.length,
     "Listed correct number of local network files"
   );
   t.is(
-    networkFilesB.get(pearDriveAkey).files.length,
+    networkFilesB.get(pearDriveAkey).length,
     filesA.length,
     "Listed correct number of remote network files"
   );
-  for (const file of networkFilesB.get("local").files) {
+  for (const file of networkFilesB.get("local")) {
     t.ok(
       filesB.some((f) => f.name === file.path),
       `File ${file.path} is listed in local network files`
     );
   }
-  for (const file of networkFilesB.get(pearDriveAkey).files) {
+  for (const file of networkFilesB.get(pearDriveAkey)) {
     t.ok(
       filesA.some((f) => f.name === file.path),
       `File ${file.path} is listed in remote network files`
@@ -767,22 +763,22 @@ test("PearDrive: List network files", { stealth: true }, async (t) => {
   const pearDriveBkey = pearDriveB.pd.publicKey;
   const networkFilesA = await pearDriveA.pd.listNetworkFiles();
   t.is(
-    networkFilesA.get("local").files.length,
+    networkFilesA.get("local").length,
     filesA.length,
     "Listed correct number of local network files"
   );
   t.is(
-    networkFilesA.get(pearDriveBkey).files.length,
+    networkFilesA.get(pearDriveBkey).length,
     filesB.length,
     "Listed correct number of remote network files"
   );
-  for (const file of networkFilesA.get("local").files) {
+  for (const file of networkFilesA.get("local")) {
     t.ok(
       filesA.some((f) => f.name === file.path),
       `File ${file.path} is listed in local network files`
     );
   }
-  for (const file of networkFilesA.get(pearDriveBkey).files) {
+  for (const file of networkFilesA.get(pearDriveBkey)) {
     t.ok(
       filesB.some((f) => f.name === file.path),
       `File ${file.path} is listed in remote network files`
@@ -816,7 +812,7 @@ test("PearDrive: Test single file download", { stealth: true }, async (t) => {
 
   // Get hash of the filefrom peerA
   const files = await peerA.pd.listLocalFiles();
-  const fileEntry = files.files.find((f) => f.path === fileA.name);
+  const fileEntry = files.find((f) => f.path === fileA.name);
   const fileHash = fileEntry.hash;
 
   // Download the file from pearDriveB
@@ -825,9 +821,7 @@ test("PearDrive: Test single file download", { stealth: true }, async (t) => {
 
   // Ensure the file was downloaded correctly
   const peerBLocalFiles = await peerB.pd.listLocalFiles();
-  const downloadedFile = peerBLocalFiles.files.find(
-    (f) => f.path === fileA.name
-  );
+  const downloadedFile = peerBLocalFiles.find((f) => f.path === fileA.name);
   const downloadedFileHash = downloadedFile.hash;
 
   t.is(downloadedFileHash, fileHash, "Downloaded file hash matches original");
@@ -861,7 +855,7 @@ test("PearDrive: Download five files", { stealth: true }, async (t) => {
 
   // Get file hashes from peerA
   const peerAFiles = await peerA.pd.listLocalFiles();
-  const fileAHashes = peerAFiles.files.map((f) => ({
+  const fileAHashes = peerAFiles.map((f) => ({
     name: f.path,
     hash: f.hash,
   }));
@@ -874,16 +868,12 @@ test("PearDrive: Download five files", { stealth: true }, async (t) => {
 
   // Ensure all files were downloaded correctly
   const peerBLocalFiles = await peerB.pd.listLocalFiles();
-  const fileBHashes = peerBLocalFiles.files.map((f) => ({
+  const fileBHashes = peerBLocalFiles.map((f) => ({
     name: f.path,
     hash: f.hash,
   }));
 
-  t.is(
-    peerBLocalFiles.files.length,
-    filesA.length,
-    "All files downloaded to peerB"
-  );
+  t.is(peerBLocalFiles.length, filesA.length, "All files downloaded to peerB");
   for (const file of fileAHashes) {
     const downloadedFile = fileBHashes.find((f) => f.name === file.name);
     t.ok(downloadedFile, `File ${file.name} was downloaded`);
@@ -930,7 +920,7 @@ test(
 
     // Get original hash from peer A
     const filesA = await peerA.pd.listLocalFiles();
-    const fileEntryA = filesA.files.find((f) => f.path === relFilePath);
+    const fileEntryA = filesA.find((f) => f.path === relFilePath);
     t.ok(fileEntryA, "Peer A indexed nested file");
     const originalHash = fileEntryA.hash;
 
@@ -940,7 +930,7 @@ test(
 
     // Ensure downloaded file exists in the correct nested path on peer B
     const filesB = await peerB.pd.listLocalFiles();
-    const downloaded = filesB.files.find((f) => f.path === relFilePath);
+    const downloaded = filesB.find((f) => f.path === relFilePath);
     const nestedDirB = path.join(peerB.pd.watchPath, relNestedPath);
     const absNestedFileB = path.join(nestedDirB, fileA.name);
     t.ok(downloaded, "Peer B indexed the downloaded nested file");
@@ -989,7 +979,7 @@ test("PearDrive: File relaying", { stealth: true }, async (t) => {
     const success = await utils.waitFor(
       async () => {
         let isTrue = false;
-        const localFiles = (await peerB.pd.listLocalFiles()).files;
+        const localFiles = await peerB.pd.listLocalFiles();
 
         if (localFiles.length < 2) return false;
         isTrue = localFiles.some((f) => f.path === fileA1.name);
@@ -1006,7 +996,7 @@ test("PearDrive: File relaying", { stealth: true }, async (t) => {
 
   await t.test("File update syncing with relay", async (subtest) => {
     // Update fileA and ensure it syncs
-    const oldFileAhash = (await peerA.pd.listLocalFiles()).files.find(
+    const oldFileAhash = (await peerA.pd.listLocalFiles()).find(
       (f) => f.path === fileA1.name
     ).hash;
     const fileA1v2 = { ...fileA1, content: "modified content 1" };
@@ -1015,14 +1005,14 @@ test("PearDrive: File relaying", { stealth: true }, async (t) => {
       fileA1v2.content
     );
     await peerA.pd._syncLocalFilesOnce();
-    const newFileAhash = (await peerA.pd.listLocalFiles()).files.find(
+    const newFileAhash = (await peerA.pd.listLocalFiles()).find(
       (f) => f.path === fileA1v2.name
     ).hash;
     await peerB.pd._syncLocalFilesOnce();
     const fileSynced = await utils.waitFor(
       async () => {
         const localFiles = await peerB.pd.listLocalFiles();
-        return localFiles.files.some(
+        return localFiles.some(
           (f) => f.path === fileA1.name && f.hash === newFileAhash
         );
       },

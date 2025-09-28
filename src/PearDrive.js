@@ -201,20 +201,12 @@ export default class PearDrive extends ReadyResource {
     return this._watchPath;
   }
 
-  /**
-   * Read-only public key for RPC connections to the network
-   *
-   * @returns {string} - Public key as hex string
-   */
+  /** Read-only public key for RPC connections to the network */
   get publicKey() {
     return utils.formatToStr(this._publicKey);
   }
 
-  /**
-   * Read-only stringified network key
-   *
-   * @returns {string} - Network key as hex string
-   */
+  /** Read-only stringified network key */
   get networkKey() {
     return utils.formatToStr(this._networkKey);
   }
@@ -228,20 +220,12 @@ export default class PearDrive extends ReadyResource {
     return { ...this.#im.inProgressDownloads };
   }
 
-  /**
-   * Read-only 'seed' - Stringified basis for this peer's keypair
-   *
-   * @returns {string} - Seed as hex string
-   */
+  /** Read-only 'seed' - Stringified basis for this peer's keypair */
   get seed() {
     return utils.formatToStr(this._swarmOpts.seed);
   }
 
-  /**
-   * Read-only Corestore path (path to all the internal networking storage)
-   *
-   * @returns {string} - Corestore path
-   */
+  /** Read-only Corestore path (path to all the internal networking storage) */
   get corestorePath() {
     return this._corestorePath;
   }
@@ -255,9 +239,7 @@ export default class PearDrive extends ReadyResource {
     return { ...this._logOpts };
   }
 
-  /**
-   * Read-only index options
-   */
+  /** Read-only index options */
   get indexOpts() {
     return { ...this._indexOpts };
   }
@@ -286,25 +268,43 @@ export default class PearDrive extends ReadyResource {
   // Public functions
   //////////////////////////////////////////////////////////////////////////////
 
-  /** Listen for a custom message and handle it */
+  /**
+   * Listen for a custom message and handle it
+   *
+   * @param {string} name - Name of the custom message
+   * @param {Function} cb - Callback function to handle the message
+   */
   listen(name, cb) {
     this.#log.info(`Listening for custom message: ${name}`);
     this._customMessageHooks[name] = cb;
   }
 
-  /** Remove a listener for a custom message */
+  /**
+   * Remove a listener for a custom message
+   *
+   * @param {string} name - Name of the custom message
+   */
   unlisten(name) {
     this.#log.info(`Removing listener for custom message: ${name}`);
     delete this._customMessageHooks[name];
   }
 
-  /** Listen for a one-time custom message and handle it */
+  /**
+   * Listen for a one-time custom message and handle it
+   *
+   * @param {string} name - Name of the custom message
+   * @param {Function} cb - Callback function to handle the message
+   */
   listenOnce(name, cb) {
     this.#log.info(`Listening once for custom message: ${name}`);
     this._onceCustomMessageHooks[name] = cb;
   }
 
-  /** Remove a one-time 'once' listener for a custom message */
+  /**
+   * Remove a one-time 'once' listener for a custom message
+   *
+   * @param {string} name - Name of the custom message
+   */
   unlistenOnce(name) {
     this.#log.info(`Removing one-time listener for custom message: ${name}`);
     delete this._onceCustomMessageHooks[name];
@@ -473,17 +473,32 @@ export default class PearDrive extends ReadyResource {
 
   /** List files available locally */
   async listLocalFiles() {
-    return await this.#im.getLocalIndexInfo();
+    const rawLocalFiles = await this.#im.getLocalIndexInfo();
+    const localFiles = rawLocalFiles.files;
+    return localFiles;
   }
 
   /** List files currently available over the network */
   async listNetworkFiles() {
-    return await this.#im.getNetworkIndexInfo();
+    const rawNetworkFiles = await this.#im.getNetworkIndexInfo();
+
+    const networkFiles = new Map();
+    for (const [key, value] of rawNetworkFiles.entries()) {
+      networkFiles.set(key, value.files);
+    }
+
+    return networkFiles;
   }
 
   /** List files currently available over the network not downloaded locally */
   async listNonLocalFiles() {
-    return await this.#im.getNonlocalNetworkIndexInfo();
+    const rawFiles = await this.#im.getNonlocalNetworkIndexInfo();
+
+    const nonlocalFiles = new Map();
+    for (const [key, value] of rawFiles.entries()) {
+      nonlocalFiles.set(key, value.files);
+    }
+    return nonlocalFiles;
   }
 
   //////////////////////////////////////////////////////////////////////////////
