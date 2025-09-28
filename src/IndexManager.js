@@ -40,6 +40,10 @@ export class IndexManager extends ReadyResource {
   #relayer = null;
   /** whether relay function is currently running */
   #relayRunning = false;
+  /** @private {Array<string>} Queued downloads */
+  #queuedDownloads = [];
+  /** In-progress download dictionary */
+  #inProgress = {};
 
   /**
    * @param {Object} opts
@@ -59,6 +63,8 @@ export class IndexManager extends ReadyResource {
    *      a peer
    *    @param {Function} opts.sendFileRelease- Function to release a file after
    *      download/upload
+   *    @param {Array<string>} [opts.unfinishedDownloads] - List of filePaths
+   *      for unfinished downloads to process and queue on startup
    */
   constructor({
     store,
@@ -68,9 +74,9 @@ export class IndexManager extends ReadyResource {
     rpcConnections,
     uploads,
     downloads,
-    inProgress = {},
     sendFileRequest,
     sendFileRelease,
+    queuedDownloads = [],
   }) {
     super();
 
@@ -95,26 +101,72 @@ export class IndexManager extends ReadyResource {
     this._rpcConnections = rpcConnections;
     this._uploads = uploads;
     this._downloads = downloads;
-    this._inProgress = inProgress;
     this._sendFileRequest = sendFileRequest;
     this._sendFileRelease = sendFileRelease;
+    this.#queuedDownloads = new Set(queuedDownloads);
   }
 
   //////////////////////////////////////////////////////////////////////////////
   // Getters
   //////////////////////////////////////////////////////////////////////////////
 
+  /** Get boolean for whether or not relay is enabled */
   get relay() {
     return this._indexOpts.relay;
   }
 
+  /** Get the interval for relay polling */
   get relayInterval() {
     return this._indexOpts.pollInterval;
+  }
+
+  /** Get the array of downloads in queue */
+  get queuedDownloads() {
+    return Array.from(this.#queuedDownloads);
+  }
+
+  /** Get the in-progress downloads */
+  get inProgressDownloads() {
+    return { ...this.#inProgress };
+  }
+
+  /** Save data as JSON object */
+  get saveData() {
+    return {
+      localFileIndexName: this.localIndex.name,
+      watchPath: this.localIndex.watchPath,
+      poll: this.localIndex.poll,
+      pollInterval: this.localIndex.pollInterval,
+    };
   }
 
   //////////////////////////////////////////////////////////////////////////////
   // Public functions
   //////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Add a file to the download queue.
+   *
+   * @param {string} filePath - The file path to queue for download
+   *
+   * @returns {void}
+   *
+   * @throws {Error} If IndexManager is not opened
+   */
+  queueDownload(filePath) {
+    // This should only be called when the IndexManager is open
+    if (!this.opened) {
+      this.#log.error("Cannot queue download; IndexManager is not opened yet.");
+      throw new Error("IndexManager is not opened yet.");
+    }
+
+    const dPath = utils.asDrivePath(filePath);
+    if (this.#queuedDownloads.has(dPath)) {
+      this.#log.warn(`File already queued for download: ${filePath}`);
+      return;
+    }
+    this.#queuedDownloads.add(dPath);
+  }
 
   /**
    * Start relay mode, which periodically scans the network for files not
@@ -168,7 +220,7 @@ export class IndexManager extends ReadyResource {
     }
     if (hasInitialData) {
       this.#log.info(`Remote index already has data for peer ${peerId}`);
-      // this._emitEvent(C.EVENT.NETWORK, peerId);
+      this.#emitAllBeeFilesAsAdded(peerId, bee);
     }
 
     // Emit event on append
@@ -181,10 +233,6 @@ export class IndexManager extends ReadyResource {
           `Error updating remote index for peer ${peerId}: ${error}`
         );
       }
-      // this._emitEvent(C.EVENT.NETWORK, {
-      //   type: C.EVENT.NETWORK,
-      //   peerId,
-      // });
     });
   }
 
@@ -197,16 +245,6 @@ export class IndexManager extends ReadyResource {
     this.remoteIndexes.delete(peerId);
     this._peerUpdates.delete(peerId);
     this.#log.info(`Remote index removed for peer ${peerId}`);
-  }
-
-  /** Get save data as JSON */
-  getSaveData() {
-    return {
-      localFileIndexName: this.localIndex.name,
-      watchPath: this.localIndex.watchPath,
-      poll: this.localIndex.poll,
-      pollInterval: this.localIndex.pollInterval,
-    };
   }
 
   /** Get current local file index info */
@@ -233,7 +271,7 @@ export class IndexManager extends ReadyResource {
   }
 
   async getLocalIndexInfo() {
-    return this.localIndex.getIndexInfo();
+    return await this.localIndex.getIndexInfo();
   }
 
   /**
@@ -327,7 +365,7 @@ export class IndexManager extends ReadyResource {
     }
 
     const dPath = utils.asDrivePath(filePath);
-    const store = this._createNamespace(filePath, "upload:blobs");
+    const store = this.#createNamespace(filePath, "upload:blobs");
     await store.ready();
 
     // Dedicated core for this single-blob transfer
@@ -389,27 +427,29 @@ export class IndexManager extends ReadyResource {
   async handleDownload(peerId, filePath, downloadRef) {
     this.#log.info(`Handling download for ${filePath} from peer ${peerId}`);
 
-    // Expect new Hyperblobs ref
-    const isValidBlobsRef =
-      downloadRef &&
-      typeof downloadRef === "object" &&
-      downloadRef.type === "hyperblobs";
-    if (!isValidBlobsRef) {
-      this.#log.error(
-        "Expected a Hyperblobs downloadRef { type:'hyperblobs', key, id }"
-      );
-      throw new Error("Invalid download reference (expected Hyperblobs)");
-    }
-
     try {
+      // Expect new Hyperblobs ref
+      const isValidBlobsRef =
+        downloadRef &&
+        typeof downloadRef === "object" &&
+        downloadRef.type === "hyperblobs";
+      if (!isValidBlobsRef) {
+        this.#log.error(
+          "Expected a Hyperblobs downloadRef { type:'hyperblobs', key, id }"
+        );
+        throw new Error("Invalid download reference (expected Hyperblobs)");
+      }
+
       this.markTransfer(filePath, "download", peerId);
-      await this._createDownloadBlob(filePath, downloadRef.key);
-      await this._executeDownloadBlob(filePath, downloadRef.id);
+      await this.#createDownloadBlob(filePath, downloadRef.key);
+      await this.#executeDownloadBlob(filePath, downloadRef.id);
+      this.unmarkTransfer(filePath, "download", peerId);
     } catch (err) {
       this.#log.error(
         `Download process failed for file: ${filePath} from peer ${peerId}`,
         err
       );
+      this.#handleDownloadFailure(filePath, peerId, err);
       return false;
     }
   }
@@ -424,8 +464,8 @@ export class IndexManager extends ReadyResource {
   hasActiveTransfers(path) {
     const pathKey = utils.asDrivePath(path);
     return (
-      !!this._inProgress[pathKey] &&
-      Object.keys(this._inProgress[pathKey]).length > 0
+      !!this.#inProgress[pathKey] &&
+      Object.keys(this.#inProgress[pathKey]).length > 0
     );
   }
 
@@ -439,8 +479,8 @@ export class IndexManager extends ReadyResource {
   hasActiveUploads(path) {
     const pathKey = utils.asDrivePath(path);
     return (
-      !!this._inProgress[pathKey] &&
-      Object.values(this._inProgress[pathKey]).some(
+      !!this.#inProgress[pathKey] &&
+      Object.values(this.#inProgress[pathKey]).some(
         (entry) => entry.direction === "upload"
       )
     );
@@ -456,8 +496,8 @@ export class IndexManager extends ReadyResource {
   hasActiveDownloads(path) {
     const pathKey = utils.asDrivePath(path);
     return (
-      !!this._inProgress[pathKey] &&
-      Object.values(this._inProgress[pathKey]).some(
+      !!this.#inProgress[pathKey] &&
+      Object.values(this.#inProgress[pathKey]).some(
         (entry) => entry.direction === "download"
       )
     );
@@ -482,10 +522,16 @@ export class IndexManager extends ReadyResource {
     try {
       const pathKey = utils.asDrivePath(path);
 
+      // Remove from queued downloads if present
+      if (this.#queuedDownloads.has(pathKey)) {
+        this.#queuedDownloads.delete(pathKey);
+        this.#log.debug(`Removed ${path} from queued downloads`);
+      }
+
       // Add to in-progress dictionary object, prevent duplicates
-      const tmpEntries = this._inProgress[pathKey];
+      const tmpEntries = this.#inProgress[pathKey];
       if (!tmpEntries) {
-        this._inProgress[pathKey] = {};
+        this.#inProgress[pathKey] = {};
       } else if (tmpEntries[utils.formatToStr(peerId)]) {
         this.#log.warn(
           `Transfer already marked for ${path} (${direction}) with peer 
@@ -494,7 +540,12 @@ export class IndexManager extends ReadyResource {
         return;
       }
       const tmpEntry = { direction, startedAt: Date.now() };
-      this._inProgress[pathKey][utils.formatToStr(peerId)] = tmpEntry;
+      this.#inProgress[pathKey][utils.formatToStr(peerId)] = tmpEntry;
+
+      // Emit event
+      if (direction === "download") {
+        this.emit(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_STARTED, { path, peerId });
+      }
     } catch (err) {
       this.#log.error("Error marking transfer", err);
     }
@@ -517,8 +568,9 @@ export class IndexManager extends ReadyResource {
       ${utils.formatToStr(peerId)}`
     );
 
+    // Ensure this transfer exists
     const pathKey = utils.asDrivePath(path);
-    if (!this._inProgress[pathKey]) {
+    if (!this.#inProgress[pathKey]) {
       this.#log.warn(
         `No in-progress transfers found for ${path} (${direction}) with peer 
         ${utils.formatToStr(peerId)}`
@@ -526,10 +578,17 @@ export class IndexManager extends ReadyResource {
       return;
     }
 
-    delete this._inProgress[pathKey][utils.formatToStr(peerId)];
+    // Delete the specific peer transfer entry
+    delete this.#inProgress[pathKey][utils.formatToStr(peerId)];
 
-    if (Object.keys(this._inProgress[pathKey]).length === 0) {
-      delete this._inProgress[pathKey];
+    // Emit event, if a download
+    if (direction === "download") {
+      this.emit(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, { path, peerId });
+    }
+
+    // Delete the entire path entry if no more transfers active
+    if (Object.keys(this.#inProgress[pathKey]).length === 0) {
+      delete this.#inProgress[pathKey];
       this.#log.debug(`All transfers for ${path} completed, closing drive`);
       if (direction === "download") {
         await this.closeDownloadBlob(path, true);
@@ -572,7 +631,6 @@ export class IndexManager extends ReadyResource {
     }
 
     try {
-      // Optional: free the blob itself if you want to reclaim space
       if (download.id && download.blobs) {
         await download.blobs.clear(download.id).catch((err) => {
           this.#log.debug(`Failed to clear blob data for ${path}`, err);
@@ -641,21 +699,19 @@ export class IndexManager extends ReadyResource {
   //////////////////////////////////////////////////////////////////////////////
 
   /**
-   *  Create and configure download blob, a Hyperblobs instance, for a file from
-   *  a remote peer.
+   * Create and configure download blob, a Hyperblobs instance, for a file from
+   * a remote peer.
    *
    * @param {string} filePath
    * @param {string | Uint8Array | ArrayBuffer} coreKey
    *
    * @returns {Promise<void>}
-   *
-   * @private
    */
-  async _createDownloadBlob(filePath, coreKey) {
+  async #createDownloadBlob(filePath, coreKey) {
     this.#log.info(`Creating download blob for file: ${filePath}`);
 
     const keyBuf = utils.formatToBuffer(coreKey);
-    const store = this._createNamespace(filePath, "download:blobs");
+    const store = this.#createNamespace(filePath, "download:blobs");
     await store.ready();
 
     const core = store.get({ key: keyBuf });
@@ -677,10 +733,8 @@ export class IndexManager extends ReadyResource {
    * @param {Object} id - The ID of the blob to download
    *
    * @returns {Promise<void>}
-   *
-   * @private
    */
-  async _executeDownloadBlob(filePath, id) {
+  async #executeDownloadBlob(filePath, id) {
     this.#log.info(`Executing Hyperblobs download for: ${filePath}`);
 
     const download = this._downloads.get(utils.asDrivePath(filePath));
@@ -688,6 +742,18 @@ export class IndexManager extends ReadyResource {
     if (!download) {
       this.#log.error(`No download blob found for file: ${filePath}`);
       throw new Error(`No download blob found for file: ${filePath}`);
+    }
+
+    // Ensure parent folder exists
+    try {
+      const absPath = utils.createAbsPath(filePath, this.watchPath);
+      utils.createParentFolder(absPath);
+    } catch (err) {
+      this.#log.error(
+        `Failed to create parent folder for file: ${filePath}`,
+        err
+      );
+      throw err;
     }
 
     // Create read/write streams
@@ -705,7 +771,8 @@ export class IndexManager extends ReadyResource {
 
     // Activity timer for managing timeouts
     let inactivityTimer = null;
-    let INACTIVITY_TIMEOUT = 30000; // 30 seconds of inactivity to timeout
+    let INACTIVITY_TIMEOUT = 30000;
+
     /** Reset inactivity timer (on data) */
     const resetInactivityTimer = () => {
       if (inactivityTimer) {
@@ -785,9 +852,9 @@ export class IndexManager extends ReadyResource {
    *
    * @param {string} [tag] - Optional tag for the namespace
    *
-   * @private
+   * @returns {Corestore} - The namespaced corestore
    */
-  _createNamespace(pathOrKey, tag) {
+  #createNamespace(pathOrKey, tag) {
     const key = utils.formatToStr(pathOrKey);
     this.#log.debug(`Creating namespace for drive: ${pathOrKey}`);
 
@@ -805,10 +872,8 @@ export class IndexManager extends ReadyResource {
    * @param {string} fileKey - Key of the file to download
    *
    * @returns {Promise<void>}
-   *
-   * @private
    */
-  async _relayDownload(peerId, fileKey) {
+  async #relayDownload(peerId, fileKey) {
     this.#log.info(`Relay: Downloading file ${fileKey} from peer ${peerId}`);
 
     try {
@@ -822,7 +887,6 @@ export class IndexManager extends ReadyResource {
       }
 
       await this.handleDownload(peerId, fileKey, ref);
-      await this.unmarkTransfer(fileKey, "download", peerId);
       await this._sendFileRelease(peerId, fileKey);
     } catch (err) {
       this.#log.error(
@@ -833,11 +897,7 @@ export class IndexManager extends ReadyResource {
     }
   }
 
-  /**
-   * Wrapper for relay logic that ensures it runs safely
-   *
-   * @private
-   */
+  /** Wrapper for relay logic that ensures it runs safely */
   async #relay() {
     if (this.#relayRunning || !this._indexOpts.relay) {
       this.#log.warn("Relay is already running, skipping this iteration.");
@@ -849,7 +909,6 @@ export class IndexManager extends ReadyResource {
 
     try {
       // Make sure local index is ready
-      // TODO: Polling stuff should be ready if localIndex.opened
       await this.localIndex.pollOnce();
       // Create set of all local files
       const localFiles = new Set();
@@ -874,7 +933,7 @@ export class IndexManager extends ReadyResource {
       // Download the first entry that is missing
       if (missingFiles.size > 0) {
         const [fileKey, peerId] = missingFiles.entries().next().value;
-        await this._relayDownload(peerId, fileKey);
+        await this.#relayDownload(peerId, fileKey);
       }
     } catch (err) {
       this.#log.error("Error during relay operation", err);
@@ -888,7 +947,11 @@ export class IndexManager extends ReadyResource {
     }
   }
 
-  /** Handle peer bee appends */
+  /**
+   * Handle peer bee appends
+   *
+   * @param {string} peerId - The peer ID whose bee was updated
+   */
   async #onPeerUpdate(peerId) {
     this.#log.info(`Peer ${peerId} updated`);
 
@@ -946,11 +1009,17 @@ export class IndexManager extends ReadyResource {
 
       // Handle file addition
       if (updateType === "added") {
+        // Emit file added event
         this.emit(C.IM_EVENT.PEER_FILE_ADDED, {
           filePath,
           peerKey: peerId,
           hash: curVal.hash,
         });
+
+        // Check if this file is queued for download
+        const dPath = utils.asDrivePath(filePath);
+        if (this.#queuedDownloads.has(dPath))
+          this.#handleQueuedDownload(peerId, filePath);
       }
 
       // Handle file change
@@ -979,6 +1048,181 @@ export class IndexManager extends ReadyResource {
 
     // Advance snapshot head
     this._peerUpdates.set(peerId, curUpdate);
+  }
+
+  /**
+   *
+   * @param {string} peerId
+   * @param {string} filePath
+   */
+  async #handleQueuedDownload(peerId, filePath) {
+    // Ensure this file is still queued
+    const dPath = utils.asDrivePath(filePath);
+    if (this.#queuedDownloads.has(dPath)) {
+      this.#log.info(
+        `File ${filePath} is queued for download; starting download...`
+      );
+    }
+
+    // Remove from queue
+    this.#queuedDownloads.delete(dPath);
+
+    try {
+      // Get Hyperblobs ref from peer
+      const ref = await this._sendFileRequest(peerId, filePath);
+      if (!ref || ref.type !== "hyperblobs" || !ref.key || !ref.id) {
+        this.#log.warn(
+          `Relay: Invalid Hyperblobs ref for ${filePath} from ${peerId}`
+        );
+        return;
+      }
+
+      await this.handleDownload(peerId, filePath, ref);
+      await this._sendFileRelease(peerId, filePath);
+    } catch (err) {
+      this.#log.error(`Error handling queued download for ${filePath}`, err);
+    }
+  }
+
+  /**
+   * Move in-progress downloads to the queued downloads
+   *
+   * @param {string} filePath
+   */
+  #moveInProgressToQueue(filePath) {
+    this.#log.info(
+      `Moving in-progress download for ${filePath} back to the queue`
+    );
+
+    // Ensure this file is not already queued and is in progress
+    const dPath = utils.asDrivePath(filePath);
+    if (this.#queuedDownloads.has(dPath)) {
+      this.#log.warn(`File already queued for download: ${filePath}`);
+      return;
+    }
+    if (!this.hasActiveDownloads(dPath)) {
+      this.#log.warn(
+        `File not marked as in-progress download, cannot move to queue: \
+        ${filePath}`
+      );
+      return;
+    }
+
+    this.#queuedDownloads.add(dPath);
+    delete this.#inProgress[dPath];
+  }
+
+  /**
+   * Handle internal data and event emmission after a download failure
+   *
+   * @param {string} filePath
+   * @param {string | Uint8Array | ArrayBuffer} peerId
+   * @param {Error} error
+   */
+  #handleDownloadFailure(filePath, peerId, error) {
+    this.#log.info(`Handling download failure for ${filePath}`);
+    this.#moveInProgressToQueue(filePath);
+    this.emit(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_FAILED, {
+      filePath,
+      peerId,
+      error,
+    });
+  }
+
+  /**
+   * Search for peer that has a given file in its index.
+   * Returns the first matching peerId or null.
+   *
+   * @param {string} filePath
+   *
+   * @returns {Promise<string|null>}
+   */
+  async #findPeerWithFile(filePath) {
+    const dPath = utils.asDrivePath(filePath);
+    for (const [peerId, bee] of this.remoteIndexes.entries()) {
+      try {
+        const entry = await bee.get(dPath);
+        if (entry && entry.value) return peerId;
+      } catch (err) {
+        this.#log.debug(`Failed checking peer ${peerId} for ${dPath}`, err);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Try to download a queued file from any peer that has it
+   *
+   * @param {string} filePath
+   *
+   * @returns {Promise<boolean>} - Success flag
+   */
+  async #tryDownloadQueuedFileFromNetwork(filePath) {
+    const dPath = utils.asDrivePath(filePath);
+
+    // Noop if download has already started
+    if (this.hasActiveDownloads(dPath)) {
+      this.#log.debug(
+        `Download already active for ${filePath}; skipping scan.`
+      );
+      return false;
+    }
+
+    // Find a peer that has this file
+    const peerId = await this.#findPeerWithFile(filePath);
+
+    // No peers have it, stay queued
+    if (!peerId) {
+      this.#log.debug(
+        `No peers currently advertise ${filePath}; staying queued.`
+      );
+      return false;
+    }
+
+    try {
+      const ref = await this._sendFileRequest(peerId, filePath);
+      if (!ref || ref.type !== "hyperblobs" || !ref.key || !ref.id) {
+        this.#log.warn(
+          `Invalid Hyperblobs ref for ${filePath} from ${peerId}; staying \
+          queued.`
+        );
+        return false;
+      }
+
+      await this.handleDownload(peerId, filePath, ref);
+      await this._sendFileRelease(peerId, filePath);
+      return true;
+    } catch (err) {
+      this.#log.error(
+        `Immediate download failed for ${filePath} from ${peerId}`,
+        err
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Emit all bee files as files added events
+   *
+   * @param {string} peerId - Hex string of peer's public key
+   * @param {Hyperbee} bee - An already–ready Hyperbee instance
+   */
+  async #emitAllBeeFilesAsAdded(peerId, bee) {
+    try {
+      for await (const { key, value } of bee.createReadStream()) {
+        const filePath = utils.formatToStr(key);
+        const hash = value.hash;
+        if (filePath && hash) {
+          this.emit(C.IM_EVENT.PEER_FILE_ADDED, {
+            filePath,
+            peerKey: peerId,
+            hash,
+          });
+        }
+      }
+    } catch (err) {
+      this.#log.error("Error emitting all bee files as added", err);
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////////

@@ -29,11 +29,9 @@ export const RPC = {
   NETWORK_NICKNAME_REQUEST: "network_nickname_request",
   MESSAGE: "custom_message",
 
-  LOCAL_INDEX_KEY_SEND: "local_index_key_send",
   LOCAL_INDEX_KEY_REQUEST: "local_index_key_request",
 
   FILE_REQUEST: "file_request",
-  FILE_SEND: "file_send",
   FILE_RELEASE: "file_release",
 };
 
@@ -41,35 +39,40 @@ export const RPC = {
  * Update event types triggered by changes received by hypercores or filesystem
  */
 export const EVENT = {
-  /** Any and all built-in event updates */
-  SYSTEM: "[PD]: system_update",
-  /** Update from peer connection */
-  PEER: "[PD]: peer_event",
-  /** Update from a file over the network */
-  NETWORK: "[PD]: network_update",
-  /** Update on a file on the local filesystem */
-  LOCAL: "[PD]: local_update",
   /** Download progress info */
   DOWNLOAD_PROGRESS: "[PD]: download_progress",
 
+  /** Save data update */
+  SAVE_DATA_UPDATE: "[PD]: save_data_update",
+
   /** Any error thrown in PearDrive */
   ERROR: "[PD]: error",
+
   /** Peer connected */
   PEER_CONNECTED: "[PD]: peer_connected",
   /** Peer disconnected */
   PEER_DISCONNECTED: "[PD]: peer_disconnected",
+
   /** Local file added (Wrapper for IM event) */
   LOCAL_FILE_ADDED: "[PD]: local_file_added",
   /** Local file removed (Wrapper for IM event) */
   LOCAL_FILE_REMOVED: "[PD]: local_file_removed",
   /** Local file changed (Wrapper for IM event) */
   LOCAL_FILE_CHANGED: "[PD]: local_file_changed",
+
   /** Peer file added (Wrapper for IM event) */
   PEER_FILE_ADDED: "[PD]: peer_file_added",
   /** Peer file removed (Wrapper for IM event) */
   PEER_FILE_REMOVED: "[PD]: peer_file_removed",
   /** Peer file changed (Wrapper for IM event) */
   PEER_FILE_CHANGED: "[PD]: peer_file_changed",
+
+  /** New inProgress download added (Wrapper for IM event) */
+  IN_PROGRESS_DOWNLOAD_STARTED: "[PD]: in_progress_download_started",
+  /** An inProgress download has failed (Wrapper for IM event) */
+  IN_PROGRESS_DOWNLOAD_FAILED: "[PD]: in_progress_download_failed",
+  /** inProgress download removed (Wrapper for IM event) */
+  IN_PROGRESS_DOWNLOAD_COMPLETED: "[PD]: in_progress_download_completed",
 };
 
 /**
@@ -80,7 +83,8 @@ export const EVENT = {
 export const LFI_EVENT = {
   /** Any error occurring in the local file index */
   ERROR: "[LFI]: local_file_index_error",
-  /** Emitted when a file is added to the local file index
+  /**
+   * Emitted when a file is added to the local file index
    *
    * Emitted with the following data:
    * - `path`: The (relative) path of the file
@@ -110,6 +114,9 @@ export const LFI_EVENT = {
  * @protected
  */
 export const IM_EVENT = {
+  /*** Any time something causes save data to update */
+  SAVE_DATA_UPDATE: "[IM]: save_data_update",
+
   /** Mirrors emitted from LFI FILE_ADDED */
   LOCAL_FILE_ADDED: "[IM]: local_file_added",
   /** Mirrors emitted from LFI FILE_REMOVED */
@@ -123,6 +130,13 @@ export const IM_EVENT = {
   PEER_FILE_REMOVED: "[IM]: peer_file_removed",
   /** When a peer's file has changed */
   PEER_FILE_CHANGED: "[IM]: peer_file_changed",
+
+  /** New inProgress download added */
+  IN_PROGRESS_DOWNLOAD_STARTED: "[IM]: in_progress_download_started",
+  /** An inProgress download has failed */
+  IN_PROGRESS_DOWNLOAD_FAILED: "[IM]: in_progress_download_failed",
+  /** inProgress download removed */
+  IN_PROGRESS_DOWNLOAD_COMPLETED: "[IM]: in_progress_download_completed",
 };
 
 /**

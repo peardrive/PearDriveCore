@@ -1,31 +1,22 @@
 import test from "brittle";
-import Corestore from "corestore";
-import fs from "fs";
-import path from "path";
-import Logger from "@hopets/logger";
 
-import LocalFileIndex from "../src/LocalFileIndex.js";
-import * as utils from "./lib/utils.js";
-import * as Ctest from "./lib/constants.js";
-const { txt } = utils;
+import * as utils from "./lib/utils/index.js";
 
 ////////////////////////////////////////////////////////////////////////////////
 // Test cases for LocalFileIndex
 ////////////////////////////////////////////////////////////////////////////////
 
 test(
-  txt.main("LocalFileIndex: buildIndex creates entries in Hyperbee"),
+  "LocalFileIndex: buildIndex creates entries in Hyperbee",
   { stealth: true },
   async (t) => {
     utils.clearTestData();
     utils.createTestFolders();
 
     // Set up indexer
-    const { indexer, localDrivePath } = await utils.makeLocalFileIndex(
-      "test-index"
-    );
+    const { indexer, watchPath } = await utils.makeLocalFileIndex("test-index");
     for (let i = 0; i < 3; i++) {
-      utils.createRandomFile(localDrivePath, 10);
+      utils.createRandomFile(watchPath, 10);
     }
 
     await indexer.ready();
@@ -45,19 +36,17 @@ test(
 );
 
 test(
-  txt.main("LocalFileIndex: polling detects new file"),
+  "LocalFileIndex: polling detects new file",
   { stealth: true },
   async (t) => {
     utils.clearTestData();
     utils.createTestFolders();
 
-    const { indexer, localDrivePath } = await utils.makeLocalFileIndex(
-      "poll-test"
-    );
+    const { indexer, watchPath } = await utils.makeLocalFileIndex("poll-test");
 
     // Add initial 5 files
     for (let i = 0; i < 5; i++) {
-      utils.createRandomFile(localDrivePath, 10);
+      utils.createRandomFile(watchPath, 10);
     }
 
     await indexer.ready();
@@ -74,7 +63,7 @@ test(
     indexer.startPolling(100);
 
     // Add a new file after polling starts
-    utils.createRandomFile(localDrivePath, 10);
+    utils.createRandomFile(watchPath, 10);
 
     // Wait enough time for polling to pick up new file
     await utils.wait(1);
