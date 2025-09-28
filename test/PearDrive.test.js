@@ -594,7 +594,7 @@ test("PearDrive: Custom message", { stealth: true }, async (t) => {
       return "test";
     });
 
-    const peerId = peerA.pd.listPeersStringified()[0].publicKey;
+    const peerId = peerA.pd.listPeers()[0].publicKey;
     const response = await peerA.pd.sendMessage(peerId, CUSTOM_MESSAGE, {
       data: "test",
     });
@@ -618,7 +618,7 @@ test("PearDrive: Custom message", { stealth: true }, async (t) => {
   await t.test("Unlisten custom message", async (subtest) => {
     peerB.pd.unlisten(CUSTOM_MESSAGE);
 
-    const peerId = peerA.pd.listPeersStringified()[0].publicKey;
+    const peerId = peerA.pd.listPeers()[0].publicKey;
     const response = await peerA.pd.sendMessage(peerId, CUSTOM_MESSAGE, {
       data: "test",
     });
@@ -640,7 +640,7 @@ test("PearDrive: Custom message", { stealth: true }, async (t) => {
       customOnceRequestReceived += 1;
     });
 
-    const peerId = peerA.pd.listPeersStringified()[0].publicKey;
+    const peerId = peerA.pd.listPeers()[0].publicKey;
     const response = await peerA.pd.sendMessage(peerId, CUSTOM_ONCE_MESSAGE, {
       data: "test",
     });

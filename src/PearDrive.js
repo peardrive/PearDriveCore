@@ -440,30 +440,13 @@ export default class PearDrive extends ReadyResource {
 
   /**
    * List all connected peers with their public key and remote index key. This
-   * funtion returns the raw buffer keys, if you want the stringified keys,
-   * use listPeersStringified() instead.
-   *
-   * @returns {Array<{publicKey: ArrayBuffer, hyperbeeKey: ArrayBuffer|null}>}
-   */
-  listPeers() {
-    const peers = [];
-    for (const [peerId, _rpc] of this._rpcConnections.entries()) {
-      const bee = this.#im.remoteIndexes.get(peerId);
-      const hyperbeeKey = bee ? bee.core.key : null;
-      peers.push({ publicKey: peerId, hyperbeeKey });
-    }
-    return peers;
-  }
-
-  /**
-   * List all connected peers with their public key and remote index key. This
    * function returns the stringified keys, if you want the raw buffer keys,
    * use listPeers() instead.
    *
    * @returns {Array<{publicKey: string, hyperbeeKey: string|null}>}
    */
-  listPeersStringified() {
-    return this.listPeers().map((peer) => ({
+  listPeers() {
+    return this.#listPeers().map((peer) => ({
       publicKey: utils.formatToStr(peer.publicKey),
       hyperbeeKey: peer.hyperbeeKey
         ? utils.formatToStr(peer.hyperbeeKey)
@@ -504,6 +487,23 @@ export default class PearDrive extends ReadyResource {
   //////////////////////////////////////////////////////////////////////////////
   // Private functions
   //////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * List all connected peers with their public key and remote index key. This
+   * funtion returns the raw buffer keys, if you want the stringified keys,
+   * use listPeersStringified() instead.
+   *
+   * @returns {Array<{publicKey: ArrayBuffer, hyperbeeKey: ArrayBuffer|null}>}
+   */
+  #listPeers() {
+    const peers = [];
+    for (const [peerId, _rpc] of this._rpcConnections.entries()) {
+      const bee = this.#im.remoteIndexes.get(peerId);
+      const hyperbeeKey = bee ? bee.core.key : null;
+      peers.push({ publicKey: peerId, hyperbeeKey });
+    }
+    return peers;
+  }
 
   /**
    * Poll the local file index once (only use for testing purposes, when
