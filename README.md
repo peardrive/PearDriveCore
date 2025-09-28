@@ -44,6 +44,11 @@ npm install @peardrive/core
 
 ## 🚧 Changelog
 
+### 1.7.0
+
+- Remove activate/deactivateLocalFileSyncing (deprecated)
+- Make syncLocalFilesOnce private (it's only for testing)
+
 ### 1.6.0
 
 - Update dependencies

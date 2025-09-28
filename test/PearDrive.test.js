@@ -212,7 +212,7 @@ test("PearDrive: Local file events", { stealth: true }, async (t) => {
 
       // Create a file
       file = utils.createRandomFile(watchPath);
-      await pd1.syncLocalFilesOnce();
+      await pd1._syncLocalFilesOnce();
 
       // 5 second max wait timeout, fails if event not fired
       await utils.wait(5);
@@ -235,7 +235,7 @@ test("PearDrive: Local file events", { stealth: true }, async (t) => {
       // Modify the file
       const modifiedContent = "modified content";
       fs.writeFileSync(file.path, modifiedContent);
-      await pd1.syncLocalFilesOnce();
+      await pd1._syncLocalFilesOnce();
 
       // 5 second max wait timeout, fails if event not fired
       await utils.wait(5);
@@ -257,7 +257,7 @@ test("PearDrive: Local file events", { stealth: true }, async (t) => {
 
       // Remove the file
       fs.unlinkSync(file.path);
-      await pd1.syncLocalFilesOnce();
+      await pd1._syncLocalFilesOnce();
 
       // 5 second max wait timeout, fails if event not fired
       await utils.wait(5);
@@ -322,7 +322,7 @@ test("PearDrive: Peer file events", { stealth: true }, async (t) => {
 
     // Create a file on peer B and sync its local index
     file = utils.createRandomFile(peerB.pd.watchPath);
-    await peerB.pd.syncLocalFilesOnce();
+    await peerB.pd._syncLocalFilesOnce();
 
     // give replication/diff a moment to propagate
     await utils.wait(5);
@@ -361,7 +361,7 @@ test("PearDrive: Peer file events", { stealth: true }, async (t) => {
 
     // Modify the file on peer B and sync
     fs.writeFileSync(file.path, "modified content " + Date.now());
-    await peerB.pd.syncLocalFilesOnce();
+    await peerB.pd._syncLocalFilesOnce();
 
     await utils.wait(5);
 
@@ -400,7 +400,7 @@ test("PearDrive: Peer file events", { stealth: true }, async (t) => {
 
     // Delete the file on peer B and sync
     fs.unlinkSync(file.path);
-    await peerB.pd.syncLocalFilesOnce();
+    await peerB.pd._syncLocalFilesOnce();
 
     await utils.wait(5);
 
@@ -684,7 +684,7 @@ test("PearDrive: List local files", { stealth: true }, async (t) => {
   for (let i = 0; i < 5; i++) {
     files.push(utils.createRandomFile(watchPath, 10));
   }
-  await pd.syncLocalFilesOnce();
+  await pd._syncLocalFilesOnce();
 
   // List local files
   const localFiles = await pd.listLocalFiles();
@@ -725,14 +725,14 @@ test("PearDrive: List network files", { stealth: true }, async (t) => {
   for (let i = 0; i < 5; i++) {
     filesA.push(utils.createRandomFile(pearDriveA.pd.watchPath, 10));
   }
-  await pearDriveA.pd.syncLocalFilesOnce();
+  await pearDriveA.pd._syncLocalFilesOnce();
 
   // Create files on pearDriveB
   const filesB = [];
   for (let i = 0; i < 3; i++) {
     filesB.push(utils.createRandomFile(pearDriveB.pd.watchPath, 10));
   }
-  await pearDriveB.pd.syncLocalFilesOnce();
+  await pearDriveB.pd._syncLocalFilesOnce();
 
   await utils.wait(1); // Give replication a moment to propagate
 
@@ -811,8 +811,8 @@ test("PearDrive: Test single file download", { stealth: true }, async (t) => {
 
   // Create a file on pearDriveA
   const fileA = utils.createRandomFile(peerA.pd.watchPath, 10);
-  await peerA.pd.syncLocalFilesOnce();
-  await peerB.pd.syncLocalFilesOnce();
+  await peerA.pd._syncLocalFilesOnce();
+  await peerB.pd._syncLocalFilesOnce();
 
   // Get hash of the filefrom peerA
   const files = await peerA.pd.listLocalFiles();
@@ -821,7 +821,7 @@ test("PearDrive: Test single file download", { stealth: true }, async (t) => {
 
   // Download the file from pearDriveB
   await peerB.pd.downloadFileFromPeer(peerA.pd.publicKey, fileA.name);
-  await peerB.pd.syncLocalFilesOnce();
+  await peerB.pd._syncLocalFilesOnce();
 
   // Ensure the file was downloaded correctly
   const peerBLocalFiles = await peerB.pd.listLocalFiles();
@@ -857,7 +857,7 @@ test("PearDrive: Download five files", { stealth: true }, async (t) => {
   for (let i = 0; i < 5; i++) {
     filesA.push(utils.createRandomFile(peerA.pd.watchPath, 10));
   }
-  await peerA.pd.syncLocalFilesOnce();
+  await peerA.pd._syncLocalFilesOnce();
 
   // Get file hashes from peerA
   const peerAFiles = await peerA.pd.listLocalFiles();
@@ -869,7 +869,7 @@ test("PearDrive: Download five files", { stealth: true }, async (t) => {
   // Download all files from perA to peerB
   for (const file of filesA) {
     await peerB.pd.downloadFileFromPeer(peerA.pd.publicKey, file.name);
-    await peerB.pd.syncLocalFilesOnce();
+    await peerB.pd._syncLocalFilesOnce();
   }
 
   // Ensure all files were downloaded correctly
@@ -925,8 +925,8 @@ test(
     const relFilePath = path.relative(peerA.pd.watchPath, fileA.path);
 
     // Sync both peers' local indexes
-    await peerA.pd.syncLocalFilesOnce();
-    await peerB.pd.syncLocalFilesOnce();
+    await peerA.pd._syncLocalFilesOnce();
+    await peerB.pd._syncLocalFilesOnce();
 
     // Get original hash from peer A
     const filesA = await peerA.pd.listLocalFiles();
@@ -936,7 +936,7 @@ test(
 
     // Download the nested file from peer A to peer B
     await peerB.pd.downloadFileFromPeer(peerA.pd.publicKey, relFilePath);
-    await peerB.pd.syncLocalFilesOnce();
+    await peerB.pd._syncLocalFilesOnce();
 
     // Ensure downloaded file exists in the correct nested path on peer B
     const filesB = await peerB.pd.listLocalFiles();
@@ -1014,11 +1014,11 @@ test("PearDrive: File relaying", { stealth: true }, async (t) => {
       path.join(peerA.pd.watchPath, fileA1.name),
       fileA1v2.content
     );
-    await peerA.pd.syncLocalFilesOnce();
+    await peerA.pd._syncLocalFilesOnce();
     const newFileAhash = (await peerA.pd.listLocalFiles()).files.find(
       (f) => f.path === fileA1v2.name
     ).hash;
-    await peerB.pd.syncLocalFilesOnce();
+    await peerB.pd._syncLocalFilesOnce();
     const fileSynced = await utils.waitFor(
       async () => {
         const localFiles = await peerB.pd.listLocalFiles();

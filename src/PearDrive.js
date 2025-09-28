@@ -471,40 +471,6 @@ export default class PearDrive extends ReadyResource {
     }));
   }
 
-  /** Activate automatic polling for the local file index */
-  activateLocalFileSyncing() {
-    this.#log.info("Activating automatic polling for local files...");
-    this.#im.startPolling();
-    this._syncConfig();
-  }
-
-  /** Deactivate automatic polling for the local file index */
-  deactivateLocalFileSyncing() {
-    this.#log.info("Deactivating automatic polling for local files...");
-    this.#im.stopPolling();
-    this._syncConfig();
-  }
-
-  /**
-   * Poll the local file index once
-   *
-   * @returns {Promise<void>}
-   */
-  async syncLocalFilesOnce() {
-    if (!this._indexOpts.disablePolling) {
-      this.#log.warn(
-        "Can't manually sync local files, automatic syncing is enabled."
-      );
-    }
-
-    this.#log.info("Syncing local files...");
-    try {
-      await this.#im.localIndex.pollOnce();
-    } catch {
-      this.#log.warn("Could not sync local files, autopolling may be enabled.");
-    }
-  }
-
   /** List files available locally */
   async listLocalFiles() {
     return await this.#im.getLocalIndexInfo();
@@ -523,6 +489,29 @@ export default class PearDrive extends ReadyResource {
   //////////////////////////////////////////////////////////////////////////////
   // Private functions
   //////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Poll the local file index once (only use for testing purposes, when
+   * disablePolling is true).
+   *
+   * @returns {Promise<void>}
+   *
+   * @private
+   */
+  async _syncLocalFilesOnce() {
+    if (!this._indexOpts.disablePolling) {
+      this.#log.warn(
+        "Can't manually sync local files, automatic syncing is enabled."
+      );
+    }
+
+    this.#log.info("Syncing local files...");
+    try {
+      await this.#im.localIndex.pollOnce();
+    } catch {
+      this.#log.warn("Could not sync local files, autopolling may be enabled.");
+    }
+  }
 
   /**
    * Send FILE_REQUEST to peer
