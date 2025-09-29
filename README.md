@@ -44,6 +44,10 @@ npm install @peardrive/core
 
 ## 🚧 Changelog
 
+### 2.0.1
+
+- Emit save data update when activating/deactivating relay mode
+
 ### 2.0.0
 
 - Remove activate/deactivateLocalFileSyncing (deprecated)

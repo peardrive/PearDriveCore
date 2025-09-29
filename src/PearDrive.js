@@ -314,12 +314,14 @@ export default class PearDrive extends ReadyResource {
   activateRelay() {
     this.#log.info("Activating 'relay' mode...");
     this._indexOpts.relay = true;
+    this.#emitSaveDataUpdate();
   }
 
   /** Deactivate 'relay' mode */
   deactivateRelay() {
     this.#log.info("Deactivating 'relay' mode...");
     this._indexOpts.relay = false;
+    this.#emitSaveDataUpdate();
   }
 
   /**
@@ -346,6 +348,7 @@ export default class PearDrive extends ReadyResource {
     });
     await discovery.flushed();
     this.connected = true;
+    this.#emitSaveDataUpdate();
   }
 
   /**
@@ -859,7 +862,7 @@ export default class PearDrive extends ReadyResource {
   }
 
   /**
-   * Handler for messages from sisters
+   * Handler for messages from peers
    *
    * @param {RPC.Connection} conn - RPC connection
    * @param {string} rawPayload - Raw JSON string payload
@@ -948,7 +951,7 @@ export default class PearDrive extends ReadyResource {
   }
 
   /**
-   * Send an RPC message to a connected sister.
+   * Send an RPC message to a connected peer.
    *
    * @param {string} peerId – Hex-encoded public key of the peer
    * @param {string} type – RPC method name (e.g. C.RPC.LOCAL_INDEX_KEY_SEND)
