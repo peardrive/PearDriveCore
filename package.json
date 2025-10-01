@@ -1,6 +1,6 @@
 {
   "name": "@peardrive/core",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "main": "./dist/PearDrive.js",
   "module": "./dist/PearDrive.js",
   "type": "module",
@@ -17,7 +17,7 @@
     "build-code": "npm run clear-dist && npm run make-dist",
     "build-docs": "typedoc",
     "build": "npm run build-code && npm run build-docs",
-    "deploy": "npm run build && npm publish"
+    "deploy": "npm run build && npm publish --access public"
   },
   "imports": {
     "fs": {

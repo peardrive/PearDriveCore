@@ -44,6 +44,10 @@ npm install @peardrive/core
 
 ## 🚧 Changelog
 
+### 2.0.2
+
+- Public release
+
 ### 2.0.1
 
 - Emit save data update when activating/deactivating relay mode
