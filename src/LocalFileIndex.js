@@ -662,16 +662,15 @@ export default class LocalFileIndex extends ReadyResource {
     });
     await this.#bee.ready();
 
+    // Load watchPath current state and metadata cache
     await this.#loadMetadataCache();
+    await this.buildIndex();
 
     // File polling / watching
     if (this._useNativeWatching) {
       await this.#startNativeWatching();
     } else {
       this.#log.info("Native file watching disabled, using polling mode.");
-    }
-    if (this._indexOpts.poll) {
-      this.startPolling();
     }
 
     this.#log.info("LocalFileIndex opened successfully!");

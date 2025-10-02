@@ -44,6 +44,10 @@ npm install @peardrive/core
 
 ## 🚧 Changelog
 
+### 2.0.3
+
+- Fix bug preventing files from being added to the hyperbee when a watchPath is initialized for the first time when already populated with files
+
 ### 2.0.2
 
 - Public release
