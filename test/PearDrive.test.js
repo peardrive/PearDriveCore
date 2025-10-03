@@ -20,9 +20,8 @@ utils.createTestFolders();
 // PearDrive core functionality tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test("PearDrive: Initialization", { stealth: true }, async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
+test("PearDrive: Initialization", async (t) => {
+  const { bootstrap } = await createTestnet();
 
   let pd1, pd2, pd3, pd4, pd5;
   let data, saveData, loadData;
@@ -172,9 +171,8 @@ test("PearDrive: Initialization", { stealth: true }, async (t) => {
 // PearDrive Event Emitter tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test("PearDrive: Local file events", { stealth: true }, async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
+test("PearDrive: Local file events", async (t) => {
+  const { bootstrap } = await createTestnet();
 
   let pd1;
   let pd1data;
@@ -268,9 +266,8 @@ test("PearDrive: Local file events", { stealth: true }, async (t) => {
   });
 });
 
-test("PearDrive: Peer file events", { stealth: true }, async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
+test("PearDrive: Peer file events", async (t) => {
+  const { bootstrap } = await createTestnet();
 
   const [peerA, peerB] = await utils.createNetwork({
     baseName: "peer-file-events",
@@ -408,9 +405,8 @@ test("PearDrive: Peer file events", { stealth: true }, async (t) => {
   });
 });
 
-test("PearDrive: Peer connection events", { stealth: true }, async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
+test("PearDrive: Peer connection events", async (t) => {
+  const { bootstrap } = await createTestnet();
 
   const onError = (err) => t.fail("onError called", err);
 
@@ -559,12 +555,55 @@ test("PearDrive: Peer connection events", { stealth: true }, async (t) => {
 });
 
 ////////////////////////////////////////////////////////////////////////////////
+// Save data update event
+////////////////////////////////////////////////////////////////////////////////
+
+solo("PearDrive: Save data update event", async (t) => {
+  const { bootstrap } = await createTestnet();
+
+  const [peerA, peerB] = await utils.createNetwork({
+    baseName: "custom-message",
+    bootstrap,
+    n: 2,
+    onError: (err) => t.fail("onError called", err),
+    indexOpts: {
+      disablePolling: true, // Disable polling for this test
+      pollInterval: 500,
+    },
+  });
+
+  t.teardown(async () => {
+    await peerA.pd.close();
+    await peerB.pd.close();
+  });
+
+  await t.test(
+    "Save data update event fired on relay activation",
+    async (subtest) => {
+      peerA.pd.once(C.EVENT.SAVE_DATA_UPDATE, (data) => {
+        subtest.is(data.relay, true, "Relay mode active");
+      });
+      await peerA.pd.activateRelay();
+    }
+  );
+
+  await t.test(
+    "Save data update event fired on relay deactivation",
+    async (subtest) => {
+      peerA.pd.once(C.EVENT.SAVE_DATA_UPDATE, (data) => {
+        subtest.is(data.relay, false, "Relay mode inactive");
+      });
+      await peerA.pd.deactivateRelay();
+    }
+  );
+});
+
+////////////////////////////////////////////////////////////////////////////////
 // Network communication tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test("PearDrive: Custom message", { stealth: true }, async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
+test("PearDrive: Custom message", async (t) => {
+  const { bootstrap } = await createTestnet();
 
   const [peerA, peerB] = await utils.createNetwork({
     baseName: "custom-message",
@@ -666,9 +705,8 @@ test("PearDrive: Custom message", { stealth: true }, async (t) => {
 // File viewing tests
 ////////////////////////////////////////////////////////////////////////////////
 
-test("PearDrive: List local files", { stealth: true }, async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
+test("PearDrive: List local files", async (t) => {
+  const { bootstrap } = await createTestnet();
 
   const { pd, watchPath } = await utils.createPearDrive({
     name: "list-local-files",
@@ -697,9 +735,8 @@ test("PearDrive: List local files", { stealth: true }, async (t) => {
   }
 });
 
-test("PearDrive: List network files", { stealth: true }, async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
+test("PearDrive: List network files", async (t) => {
+  const { bootstrap } = await createTestnet();
 
   const [pearDriveA, pearDriveB] = await utils.createNetwork({
     baseName: "list-network-files",
@@ -786,9 +823,8 @@ test("PearDrive: List network files", { stealth: true }, async (t) => {
   }
 });
 
-test("PearDrive: Test single file download", { stealth: true }, async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
+test("PearDrive: Test single file download", async (t) => {
+  const { bootstrap } = await createTestnet();
 
   const [peerA, peerB] = await utils.createNetwork({
     baseName: "file-download-test",
@@ -827,9 +863,8 @@ test("PearDrive: Test single file download", { stealth: true }, async (t) => {
   t.is(downloadedFileHash, fileHash, "Downloaded file hash matches original");
 });
 
-test("PearDrive: Download five files", { stealth: true }, async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
+test("PearDrive: Download five files", async (t) => {
+  const { bootstrap } = await createTestnet();
 
   const [peerA, peerB] = await utils.createNetwork({
     baseName: "file-download-five-test",
@@ -889,8 +924,7 @@ test(
   "PearDrive: Test nested file download preserves relative path",
   { stealth: true },
   async (t) => {
-    const testnet = await createTestnet();
-    const { bootstrap } = testnet;
+    const { bootstrap } = await createTestnet();
 
     const [peerA, peerB] = await utils.createNetwork({
       baseName: "nested-file-download-test",
@@ -951,9 +985,8 @@ test(
   }
 );
 
-test("PearDrive: File relaying", { stealth: true }, async (t) => {
-  const testnet = await createTestnet();
-  const { bootstrap } = testnet;
+test("PearDrive: File relaying", async (t) => {
+  const { bootstrap } = await createTestnet();
 
   const [peerA, peerB] = await utils.createNetwork({
     baseName: "file-download-relay-test",
