@@ -558,7 +558,7 @@ test("PearDrive: Peer connection events", async (t) => {
 // Save data update event
 ////////////////////////////////////////////////////////////////////////////////
 
-solo("PearDrive: Save data update event", async (t) => {
+test("PearDrive: Save data update event", async (t) => {
   const { bootstrap } = await createTestnet();
 
   const [peerA, peerB] = await utils.createNetwork({
