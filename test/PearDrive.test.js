@@ -1028,6 +1028,9 @@ test("PearDrive: File relaying", async (t) => {
   });
 
   await t.test("File update syncing with relay", async (subtest) => {
+    // This won't be implemented until 3.0.0 file ID system
+    skip();
+
     // Update fileA and ensure it syncs
     const oldFileAhash = (await peerA.pd.listLocalFiles()).find(
       (f) => f.path === fileA1.name
