@@ -44,6 +44,12 @@ npm install @peardrive/core
 
 ## 🚧 Changelog
 
+- Update dependencies
+- Remove unused test
+- Update inaccurate docs
+- Add typedoc to gh pages (https://peardrive.github.io/PearDriveCore)
+- Toggling relay mode with activateRelay and deactivateRelay emits SAVE_DATA_UPDATE
+
 ### 2.0.3
 
 - Fix bug preventing files from being added to the hyperbee when a watchPath is initialized for the first time when already populated with files
