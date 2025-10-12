@@ -396,9 +396,9 @@ export default class PearDrive extends ReadyResource {
 
   /**
    * Send a message to a given peer. Whatever the type you set for the message,
-   * it must have a callback hook on the receiving peer using the on() method.
-   * If the peer has a callback set that returns something, this function
-   * will return that value.
+   * it must have a callback hook on the receiving peer using the listen() or
+   * listenOnce() methods. If the peer has a callback set that returns
+   * something, this function will return that value.
    *
    * @param {Uint8Array | ArrayBuffer | string} peerId - Hex-encoded public key
    *  of the peer
@@ -442,9 +442,7 @@ export default class PearDrive extends ReadyResource {
   }
 
   /**
-   * List all connected peers with their public key and remote index key. This
-   * function returns the stringified keys, if you want the raw buffer keys,
-   * use listPeers() instead.
+   * List all connected peers with their public key and remote index key.
    *
    * @returns {Array<{publicKey: string, hyperbeeKey: string|null}>}
    */
@@ -1114,6 +1112,11 @@ export default class PearDrive extends ReadyResource {
   // Lifecycle methods
   //////////////////////////////////////////////////////////////////////////////
 
+  /**
+   * Used for init from ReadyResource superclass
+   *
+   * @protected
+   */
   async _open() {
     this.#log.info("Opening PearDrive...");
 
@@ -1156,6 +1159,11 @@ export default class PearDrive extends ReadyResource {
     this.#log.info("PearDrive opened successfully!");
   }
 
+  /**
+   * Used for teardown from ReadyResource superclass
+   *
+   * @protected
+   */
   async _close() {
     this.#log.info("Closing PearDrive...");
 
