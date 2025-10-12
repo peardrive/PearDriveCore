@@ -28,9 +28,9 @@ npm install @peardrive/core
 
 ## 🔨 Tutorial / Examples
 
-- Tutorials for usage and all the different features can be found [here](https://github.com/HopeTS/PearDriveCore-examples/)
+- [Up-to-date typedoc documentation on the github pages](https://peardrive.github.io/PearDriveCore)
 
-- PearDriveCore uses typedoc to generate documentation, you can run 'npm run build-docs' and view the up-to-date full documentation in /docs
+- [Tutorial repo for usage and all the different features](https://github.com/HopeTS/PearDriveCore-examples/)
 
 ### React Native (for mobile apps)
 
