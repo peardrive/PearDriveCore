@@ -1026,36 +1026,4 @@ test("PearDrive: File relaying", async (t) => {
 
     subtest.ok(success, "Files downloaded successfully with relay");
   });
-
-  await t.test("File update syncing with relay", async (subtest) => {
-    // This won't be implemented until 3.0.0 file ID system
-    skip();
-
-    // Update fileA and ensure it syncs
-    const oldFileAhash = (await peerA.pd.listLocalFiles()).find(
-      (f) => f.path === fileA1.name
-    ).hash;
-    const fileA1v2 = { ...fileA1, content: "modified content 1" };
-    fs.writeFileSync(
-      path.join(peerA.pd.watchPath, fileA1.name),
-      fileA1v2.content
-    );
-    await peerA.pd._syncLocalFilesOnce();
-    const newFileAhash = (await peerA.pd.listLocalFiles()).find(
-      (f) => f.path === fileA1v2.name
-    ).hash;
-    await peerB.pd._syncLocalFilesOnce();
-    const fileSynced = await utils.waitFor(
-      async () => {
-        const localFiles = await peerB.pd.listLocalFiles();
-        return localFiles.some(
-          (f) => f.path === fileA1.name && f.hash === newFileAhash
-        );
-      },
-      15000,
-      100
-    );
-
-    subtest.ok(fileSynced, "File updated and synced successfully with relay");
-  });
 });
