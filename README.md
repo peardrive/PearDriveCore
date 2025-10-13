@@ -9,8 +9,7 @@
 - 🔁 p2p messaging across secret networks
 - 🔁 p2p file sharing
 - 🪵 Extensive logging system with the option to log to a given file
-- ⚙️ Node.js and bare runtime compatible for React Native, Pear runtime and
-  standard Node.js environments
+- ⚙️ Node.js and [Bare runtime](https://bare.pears.com/) compatible for React Native, Pear runtime and standard Node.js environments
 - ⚙️ TypeScript compatible
 
 ---
