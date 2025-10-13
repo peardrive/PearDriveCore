@@ -1243,13 +1243,13 @@ export class IndexManager extends ReadyResource {
     await this.localIndex.ready();
 
     // Wire up LFI event listeners
-    this.localIndex.on(C.LFI_EVENT.FILE_ADDED, function (data) {
+    this.localIndex.on(C.LFI_EVENT.FILE_ADDED, (data) => {
       this.emit(C.IM_EVENT.LOCAL_FILE_ADDED, data);
     });
-    this.localIndex.on(C.LFI_EVENT.FILE_REMOVED, function (data) {
+    this.localIndex.on(C.LFI_EVENT.FILE_REMOVED, (data) => {
       this.emit(C.IM_EVENT.LOCAL_FILE_REMOVED, data);
     });
-    this.localIndex.on(C.LFI_EVENT.FILE_CHANGED, function (data) {
+    this.localIndex.on(C.LFI_EVENT.FILE_CHANGED, (data) => {
       this.emit(C.IM_EVENT.LOCAL_FILE_CHANGED, data);
     });
 
