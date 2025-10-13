@@ -2,6 +2,8 @@
 
 > A simple node.js p2p communication system for messaging and file transfer
 
+[![AGPL v3 License](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)](./LICENSE)
+
 ---
 
 ## ✨ Features
