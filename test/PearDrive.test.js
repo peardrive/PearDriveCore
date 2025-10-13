@@ -405,6 +405,50 @@ test("PearDrive: Peer file events", async (t) => {
   });
 });
 
+test("PearDrive: Download events", async (t) => {
+  const { bootstrap } = await createTestnet();
+
+  const onError = (err) => t.fail("onError called", err);
+
+  const [peerA, peerB] = await utils.createNetwork({
+    baseName: "download-events",
+    bootstrap,
+    n: 2,
+    onError,
+    indexOpts: {
+      disablePolling: true,
+      pollInterval: 500,
+    },
+  });
+
+  t.teardown(async () => {
+    await peerA.pd.close();
+    await peerB.pd.close();
+  });
+
+  await t.test("IN_PROGRESS_DOWNLOAD_COMPLETED event", async (subtest) => {
+    peerA.pd.once(C.EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, (_data) => {
+      subtest.pass("IN_PROGRESS_DOWNLOAD_COMPLETED event fired");
+    });
+
+    const file = utils.createRandomFile(peerB.pd.watchPath, 10);
+    await peerB.pd._syncLocalFilesOnce();
+
+    await peerA.pd.downloadFileFromPeer(peerB.pd.publicKey, file.name);
+  });
+
+  await t.test("PROGRESS_DOWNLOAD event", async (subtest) => {
+    peerA.pd.once(C.EVENT.DOWNLOAD_PROGRESS, (_data) => {
+      subtest.pass("PROGRESS_DOWNLOAD event fired");
+    });
+
+    const file = utils.createRandomFile(peerB.pd.watchPath, 100000);
+    await peerB.pd._syncLocalFilesOnce();
+
+    await peerA.pd.downloadFileFromPeer(peerB.pd.publicKey, file.name);
+  });
+});
+
 test("PearDrive: Peer connection events", async (t) => {
   const { bootstrap } = await createTestnet();
 
