@@ -5,6 +5,7 @@
 - Update inaccurate docs
 - Add typedoc to gh pages (https://peardrive.github.io/PearDriveCore)
 - Toggling relay mode with activateRelay and deactivateRelay emits SAVE_DATA_UPDATE
+- Fix DOWNLOAD_PROGRESS event so it fires when download progress occurs
 
 ### 2.0.3
 

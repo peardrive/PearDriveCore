@@ -811,7 +811,7 @@ export class IndexManager extends ReadyResource {
         // Reset inactivity timer on every data chunk
         resetInactivityTimer();
 
-        // Log Download Progress
+        // Handle download progress tick
         const curPercent = Math.floor((downloadedBytes / totalBytes) * 100);
         if (curPercent >= prevPercent + 1) {
           // Log every 1% by checking against lastLoggedPercent
@@ -821,6 +821,13 @@ export class IndexManager extends ReadyResource {
             `Download progress: ${curPercent}% (${mbDownloaded}MB/${mbTotal}MB)`
           );
           prevPercent = curPercent;
+
+          // Emit progress event
+          this.emit(C.IM_EVENT.DOWNLOAD_PROGRESS, {
+            filePath,
+            mbDownloaded,
+            mbTotal,
+          });
         }
       });
 
