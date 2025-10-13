@@ -137,6 +137,9 @@ export const IM_EVENT = {
   IN_PROGRESS_DOWNLOAD_FAILED: "[IM]: in_progress_download_failed",
   /** inProgress download removed */
   IN_PROGRESS_DOWNLOAD_COMPLETED: "[IM]: in_progress_download_completed",
+
+  /** Progress on a download */
+  DOWNLOAD_PROGRESS: "[IM]: download_progress",
 };
 
 /**

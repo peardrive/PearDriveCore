@@ -811,7 +811,7 @@ export class IndexManager extends ReadyResource {
         // Reset inactivity timer on every data chunk
         resetInactivityTimer();
 
-        // Log Download Progress
+        // Handle download progress tick
         const curPercent = Math.floor((downloadedBytes / totalBytes) * 100);
         if (curPercent >= prevPercent + 1) {
           // Log every 1% by checking against lastLoggedPercent
@@ -821,6 +821,13 @@ export class IndexManager extends ReadyResource {
             `Download progress: ${curPercent}% (${mbDownloaded}MB/${mbTotal}MB)`
           );
           prevPercent = curPercent;
+
+          // Emit progress event
+          this.emit(C.IM_EVENT.DOWNLOAD_PROGRESS, {
+            filePath,
+            mbDownloaded,
+            mbTotal,
+          });
         }
       });
 
@@ -1236,13 +1243,13 @@ export class IndexManager extends ReadyResource {
     await this.localIndex.ready();
 
     // Wire up LFI event listeners
-    this.localIndex.on(C.LFI_EVENT.FILE_ADDED, (data) => {
+    this.localIndex.on(C.LFI_EVENT.FILE_ADDED, function (data) {
       this.emit(C.IM_EVENT.LOCAL_FILE_ADDED, data);
     });
-    this.localIndex.on(C.LFI_EVENT.FILE_REMOVED, (data) => {
+    this.localIndex.on(C.LFI_EVENT.FILE_REMOVED, function (data) {
       this.emit(C.IM_EVENT.LOCAL_FILE_REMOVED, data);
     });
-    this.localIndex.on(C.LFI_EVENT.FILE_CHANGED, (data) => {
+    this.localIndex.on(C.LFI_EVENT.FILE_CHANGED, function (data) {
       this.emit(C.IM_EVENT.LOCAL_FILE_CHANGED, data);
     });
 

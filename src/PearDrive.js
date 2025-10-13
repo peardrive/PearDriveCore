@@ -1061,54 +1061,6 @@ export default class PearDrive extends ReadyResource {
   }
 
   //////////////////////////////////////////////////////////////////////////////
-  // IndexManager event handlers
-  //////////////////////////////////////////////////////////////////////////////
-
-  #imEventSaveDataUpdate = () => {
-    this.#emitSaveDataUpdate();
-  };
-
-  #imEventLocalFileAdded = (data) => {
-    this.emit(C.EVENT.LOCAL_FILE_ADDED, data);
-    this.#emitSaveDataUpdate();
-  };
-
-  #imEventLocalFileRemoved = (data) => {
-    this.emit(C.EVENT.LOCAL_FILE_REMOVED, data);
-  };
-
-  #imEventLocalFileChanged = (data) => {
-    this.emit(C.EVENT.LOCAL_FILE_CHANGED, data);
-  };
-
-  #imEventPeerFileAdded = (data) => {
-    this.emit(C.EVENT.PEER_FILE_ADDED, data);
-  };
-
-  #imEventPeerFileRemoved = (data) => {
-    this.emit(C.EVENT.PEER_FILE_REMOVED, data);
-  };
-
-  #imEventPeerFileChanged = (data) => {
-    this.emit(C.EVENT.PEER_FILE_CHANGED, data);
-  };
-
-  #imEventInProgressDownloadStarted = (data) => {
-    this.#emitSaveDataUpdate();
-    this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_STARTED, data);
-  };
-
-  #imEventInProgressDownloadFailed = (data) => {
-    this.#emitSaveDataUpdate();
-    this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_FAILED, data);
-  };
-
-  #imEventInProgressDownloadCompleted = (data) => {
-    this.#emitSaveDataUpdate();
-    this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, data);
-  };
-
-  //////////////////////////////////////////////////////////////////////////////
   // Lifecycle methods
   //////////////////////////////////////////////////////////////////////////////
 
@@ -1125,35 +1077,42 @@ export default class PearDrive extends ReadyResource {
     await this.#im.ready();
 
     // Wire up IM event listeners
-    this.#im.on(C.IM_EVENT.SAVE_DATA_UPDATE, () => {
-      this.#imEventSaveDataUpdate();
+    this.#im.on(C.IM_EVENT.SAVE_DATA_UPDATE, function () {
+      this.#emitSaveDataUpdate();
     });
-    this.#im.on(C.IM_EVENT.LOCAL_FILE_ADDED, (data) => {
-      this.#imEventLocalFileAdded(data);
+    this.#im.on(C.IM_EVENT.LOCAL_FILE_ADDED, function (data) {
+      this.emit(C.EVENT.LOCAL_FILE_ADDED, data);
+      this.#emitSaveDataUpdate();
     });
-    this.#im.on(C.IM_EVENT.LOCAL_FILE_REMOVED, (data) => {
-      this.#imEventLocalFileRemoved(data);
+    this.#im.on(C.IM_EVENT.LOCAL_FILE_REMOVED, function (data) {
+      this.emit(C.EVENT.LOCAL_FILE_REMOVED, data);
     });
-    this.#im.on(C.IM_EVENT.LOCAL_FILE_CHANGED, (data) => {
-      this.#imEventLocalFileChanged(data);
+    this.#im.on(C.IM_EVENT.LOCAL_FILE_CHANGED, function (data) {
+      this.emit(C.EVENT.LOCAL_FILE_CHANGED, data);
     });
-    this.#im.on(C.IM_EVENT.PEER_FILE_ADDED, (data) => {
-      this.#imEventPeerFileAdded(data);
+    this.#im.on(C.IM_EVENT.PEER_FILE_ADDED, function (data) {
+      this.emit(C.EVENT.PEER_FILE_ADDED, data);
     });
-    this.#im.on(C.IM_EVENT.PEER_FILE_REMOVED, (data) => {
-      this.#imEventPeerFileRemoved(data);
+    this.#im.on(C.IM_EVENT.PEER_FILE_REMOVED, function (data) {
+      this.emit(C.EVENT.PEER_FILE_REMOVED, data);
     });
-    this.#im.on(C.IM_EVENT.PEER_FILE_CHANGED, (data) => {
-      this.#imEventPeerFileChanged(data);
+    this.#im.on(C.IM_EVENT.PEER_FILE_CHANGED, function (data) {
+      this.emit(C.EVENT.PEER_FILE_CHANGED, data);
     });
-    this.#im.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_STARTED, (data) => {
-      this.#imEventInProgressDownloadStarted(data);
+    this.#im.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_STARTED, function (data) {
+      this.#emitSaveDataUpdate();
+      this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_STARTED, data);
     });
-    this.#im.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_FAILED, (data) => {
-      this.#imEventInProgressDownloadFailed(data);
+    this.#im.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_FAILED, function (data) {
+      this.#emitSaveDataUpdate();
+      this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_FAILED, data);
     });
-    this.#im.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, (data) => {
-      this.#imEventInProgressDownloadCompleted(data);
+    this.#im.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, function (data) {
+      this.#emitSaveDataUpdate();
+      this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, data);
+    });
+    this.#im.on(C.IM_EVENT.DOWNLOAD_PROGRESS, function (data) {
+      this.emit(C.EVENT.DOWNLOAD_PROGRESS, data);
     });
 
     this.#log.info("PearDrive opened successfully!");
