@@ -20,7 +20,7 @@ export async function createNetwork({
   n,
   onError = () => {},
   indexOpts = {
-    disablePolling: false,
+    disableWatching: false,
     pollInterval: 500,
   },
 }) {
