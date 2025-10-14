@@ -1,5 +1,7 @@
 # 🚧 PearDrive Core Changelog
 
+- Remove stale polling code
+
 ## 2.0.4
 
 - Update dependencies

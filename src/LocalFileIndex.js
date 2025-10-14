@@ -97,8 +97,6 @@ export default class LocalFileIndex extends ReadyResource {
     this._polling = false;
     /** Debounce delay (in ms) */
     this._debounceDelay = 500;
-    /** Use native file watching */
-    this._useNativeWatching = true;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -349,9 +347,7 @@ export default class LocalFileIndex extends ReadyResource {
       await this.#watchSubdirectories(this.watchPath);
     } catch (error) {
       this.#log.error("Error starting native file watching:", error);
-      this.#log.info("Falling back to polling mode.");
-      this._useNativeWatching = false;
-      return;
+      throw error;
     }
   }
 
@@ -589,9 +585,6 @@ export default class LocalFileIndex extends ReadyResource {
           hash,
         });
       }
-
-      // Backwards compat (remove in v1.6)
-      // this._emitEvent(C.EVENT.LOCAL, null);
     } catch (err) {
       this.#log.error(`Error updating file ${relativePath}:`, err);
     }
@@ -633,10 +626,12 @@ export default class LocalFileIndex extends ReadyResource {
     await this.buildIndex();
 
     // File polling / watching
-    if (this._useNativeWatching) {
+    if (!this._indexOpts.disableWatching) {
       await this.#startNativeWatching();
     } else {
-      this.#log.info("Native file watching disabled, using polling mode.");
+      this.#log.info(
+        "Native file watching disabled, index must be managed manually."
+      );
     }
 
     this.#log.info("LocalFileIndex opened successfully!");

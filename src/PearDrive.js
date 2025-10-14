@@ -94,19 +94,19 @@ export default class PearDrive extends ReadyResource {
    *      log file (if logToFile=true).
    *    @param {string} [opts.logOpts.level=LOG_LEVELS.INFO] - Log level.
    *    @param {Object} [opts.indexOpts] - Options for the index manager.
-   *    @param {boolean} [opts.indexOpts.disablePolling=false] - Whether to poll
-   *      for changes in the local file index automatically. (Only disable
-   *      polling for testing purposes)
+   *    @param {boolean} [opts.indexOpts.disableWatching=false] - Whether to
+   *      disable native filesystem watching, so index has to be managed
+   *      manually. (Only advised for testing purposes).
    *    @param {number} [opts.indexOpts.pollInterval=500] - Interval in
    *      milliseconds for polling the local file index.
    *    @param {boolean} [opts.indexOpts.relay] - Whether to automaically
    *      download files from the network.
    *    @param {string} [opts.networkKey] - Optional network key to join a
-   *     specific network on startup. If not provided, a new random key will be
-   *     generated.
+   *      specific network on startup. If not provided, a new random key will be
+   *      generated.
    *    @param {Array<string>} [opts.unfinishedDownloads] - Optional unfinished
-   *     downloads to resume on startup. These include inProgress downloads
-   *     and queuedDownloads.
+   *      downloads to resume on startup. These include inProgress downloads
+   *      and queuedDownloads.
    */
   constructor({
     corestorePath,
