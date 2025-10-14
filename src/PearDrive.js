@@ -508,14 +508,12 @@ export default class PearDrive extends ReadyResource {
 
   /**
    * Poll the local file index once (only use for testing purposes, when
-   * disablePolling is true).
+   * disableWatching is true).
    *
    * @returns {Promise<void>}
-   *
-   * @private
    */
   async _syncLocalFilesOnce() {
-    if (!this._indexOpts.disablePolling) {
+    if (!this._indexOpts.disableWatching) {
       this.#log.warn(
         "Can't manually sync local files, automatic syncing is enabled."
       );
