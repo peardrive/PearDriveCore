@@ -1,6 +1,8 @@
 # 🚧 PearDrive Core Changelog
 
 - Remove stale polling code
+- disablePolling indexOpt removed
+- disableWatching indexOpt added, disables nativeWatcher
 
 ## 2.0.4
 
