@@ -172,31 +172,7 @@ export default class LocalFileIndex extends ReadyResource {
   /** Poll local files once */
   pollOnce() {
     this.#log.info("Polling local files once...");
-    return this.#pollAndSync(false);
-  }
-
-  /**
-   * Asynchronous poll process, automatically scans for new files in the local
-   * folder
-   */
-  async startPolling() {
-    if (this.#poller || this._running) return;
-    this.#log.info("Starting automatic polling for local files...");
-
-    this._running = true;
-    this._indexOpts.disablePolling = false;
-
-    this.#pollAndSync(true);
-  }
-
-  /** Stop automatic polling for new files in the local folder */
-  stopPolling() {
-    if (!this.#poller) return;
-    this.#log.info("Stopping automatic polling for local files...");
-
-    this._indexOpts.poll = false;
-    clearInterval(this.#poller);
-    this.#poller = null;
+    return this.#pollAndSync();
   }
 
   /**
@@ -254,18 +230,15 @@ export default class LocalFileIndex extends ReadyResource {
   //////////////////////////////////////////////////////////////////////////////
 
   // -- Polling system -------------------------------------------------------//
-  // Scans the local directory for new and deleted files and syncs with hyperbee
+  // Static scan of the file system to build an index of the current state
 
-  /**
-   * Poll for new files and sync with hyperbee
-   *
-   * @param {boolean} [continuous=true] - Whether to continue polling
-   */
-  async #pollAndSync(continuous = false) {
+  /** Poll for new files and sync with hyperbee */
+  async #pollAndSync() {
     if (this._polling) {
       this.#log.warn("Already polling, skipping this iteration.");
       return;
     }
+    this._polling = true;
 
     this.#log.debug("Polling for new files in", this.watchPath, "...");
 
@@ -307,15 +280,6 @@ export default class LocalFileIndex extends ReadyResource {
       }
 
       this.#log.debug("Polling complete.");
-
-      // If this is a continuous poll, ensure that automatic polling is enabled
-      // and if so, set the next poll timeout
-      if (continuous && this._indexOpts.poll) {
-        this.#poller = setTimeout(
-          async () => await this.#pollAndSync(true),
-          this._indexOpts.pollInterval
-        );
-      }
     } catch (error) {
       this.#log.error("Error during polling:", error);
     } finally {
@@ -632,7 +596,9 @@ export default class LocalFileIndex extends ReadyResource {
       this.#log.error(`Error updating file ${relativePath}:`, err);
     }
   }
-  /** Generate the hash of a file
+
+  /**
+   * Generate the hash of a file
    *
    * @param {string} filePath - Absolute path to the file
    */
@@ -679,8 +645,7 @@ export default class LocalFileIndex extends ReadyResource {
   async _close() {
     this.#log.info("Closing LocalFileIndex...");
 
-    // Stop any ongoing polling or watching
-    this.stopPolling();
+    // Stop watching
     this.#stopNativeWatching();
 
     // Clear debounce timers
