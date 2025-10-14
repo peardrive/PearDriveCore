@@ -13,8 +13,8 @@ import * as CTEST from "../constants.js";
  *    @param {Uint8Array[]} opts.bootstrap - DHT bootstrap nodes
  *    @param {Function} [opts.onError] - Optional error handler callback
  *    @param {Object} [opts.indexOpts] - Optional index options
- *    @param {boolean} [opts.indexOpts.disablePolling] - Option to disable
- *      automatic polling
+ *    @param {boolean} [opts.indexOpts.disableWatching] - Option to disable
+ *      nativeWatcher
  *
  * @returns {Promise<Object>} - { pd, watchPath, corestorePath, logPath }
  */
@@ -23,7 +23,7 @@ export async function createPearDrive({
   bootstrap,
   onError = () => {},
   indexOpts = {
-    disablePolling: false,
+    disableWatching: false,
     pollInterval: 500,
   },
 }) {
