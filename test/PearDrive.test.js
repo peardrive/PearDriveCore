@@ -33,6 +33,9 @@ test("PearDrive: Initialization", async (t) => {
           name: "init-test",
           bootstrap,
           onError: (err) => t.fail("onError called", err),
+          indexOpts: {
+            disableWatching: true,
+          },
         });
 
       pd1 = pd;
@@ -111,6 +114,9 @@ test("PearDrive: Initialization", async (t) => {
         bootstrap,
         n: 2,
         onError: (err) => subtest.fail("onError called", err),
+        indexOpts: {
+          disableWatching: true,
+        },
       });
 
       pd1 = pd1.pd;
@@ -136,6 +142,9 @@ test("PearDrive: Initialization", async (t) => {
         bootstrap,
         n: 5,
         onError: (err) => t.fail("onError called", err),
+        indexOpts: {
+          disableWatching: true,
+        },
       });
 
       pd1 = pd1.pd;
@@ -184,9 +193,6 @@ test("PearDrive: Local file events", async (t) => {
       name: "local-file-events",
       bootstrap,
       onError: (err) => t.fail("onError called", err),
-      indexOpts: {
-        disablePolling: true,
-      },
     }
   );
   pd1 = pd;
@@ -210,7 +216,6 @@ test("PearDrive: Local file events", async (t) => {
 
       // Create a file
       file = utils.createRandomFile(watchPath);
-      await pd1._syncLocalFilesOnce();
 
       // 5 second max wait timeout, fails if event not fired
       await utils.wait(5);
@@ -233,7 +238,6 @@ test("PearDrive: Local file events", async (t) => {
       // Modify the file
       const modifiedContent = "modified content";
       fs.writeFileSync(file.path, modifiedContent);
-      await pd1._syncLocalFilesOnce();
 
       // 5 second max wait timeout, fails if event not fired
       await utils.wait(5);
@@ -255,7 +259,6 @@ test("PearDrive: Local file events", async (t) => {
 
       // Remove the file
       fs.unlinkSync(file.path);
-      await pd1._syncLocalFilesOnce();
 
       // 5 second max wait timeout, fails if event not fired
       await utils.wait(5);
@@ -275,8 +278,7 @@ test("PearDrive: Peer file events", async (t) => {
     n: 2,
     onError: (err) => t.fail("onError called", err),
     indexOpts: {
-      // keep polling off so we control sync points deterministically
-      disablePolling: true,
+      disableWatching: true,
     },
   });
 
@@ -321,7 +323,7 @@ test("PearDrive: Peer file events", async (t) => {
     file = utils.createRandomFile(peerB.pd.watchPath);
     await peerB.pd._syncLocalFilesOnce();
 
-    // give replication/diff a moment to propagate
+    // 5 second timeout before fail
     await utils.wait(5);
     if (!hookFired) subtest.fail("PEER_FILE_ADDED event not fired, timed out");
   });
@@ -360,8 +362,8 @@ test("PearDrive: Peer file events", async (t) => {
     fs.writeFileSync(file.path, "modified content " + Date.now());
     await peerB.pd._syncLocalFilesOnce();
 
+    // 5 second timeout before fail
     await utils.wait(5);
-
     if (!hookFired) subtest.fail("PEER_FILE_CHANGED event not fired");
     else if (firstHash && secondHash) {
       subtest.not(firstHash, secondHash, "content hash actually changed");
@@ -399,8 +401,8 @@ test("PearDrive: Peer file events", async (t) => {
     fs.unlinkSync(file.path);
     await peerB.pd._syncLocalFilesOnce();
 
+    // 5 second timeout before fail
     await utils.wait(5);
-
     if (!hookFired) subtest.fail("PEER_FILE_REMOVED event not fired");
   });
 });
@@ -416,8 +418,7 @@ test("PearDrive: Download events", async (t) => {
     n: 2,
     onError,
     indexOpts: {
-      disablePolling: true,
-      pollInterval: 500,
+      disableWatching: true,
     },
   });
 
@@ -459,7 +460,7 @@ test("PearDrive: Peer connection events", async (t) => {
     name: "peer-conn-A",
     bootstrap,
     onError,
-    indexOpts: { disablePolling: true },
+    indexOpts: { disableWatching: true },
   });
   const pdA = A.pd;
   await pdA.ready();
@@ -473,7 +474,7 @@ test("PearDrive: Peer connection events", async (t) => {
     name: "peer-conn-B",
     bootstrap,
     onError,
-    indexOpts: { disablePolling: true },
+    indexOpts: { disableWatching: true },
   });
   const pdB = B.pd;
   await pdB.ready();
@@ -519,6 +520,7 @@ test("PearDrive: Peer connection events", async (t) => {
     // Now connect B to A’s network (triggers both connect events)
     await pdB.joinNetwork(topic);
 
+    // 5 second timeout before fail
     await utils.wait(5);
     if (!aSawB) subtest.fail("PEER_CONNECTED not fired on A (timed out)");
     if (!bSawA) subtest.fail("PEER_CONNECTED not fired on B (timed out)");
@@ -560,8 +562,14 @@ test("PearDrive: Peer connection events", async (t) => {
         name: "peer-conn-B2",
         bootstrap,
         onError,
-        indexOpts: { disablePolling: true },
+        indexOpts: { disableWatching: true },
       });
+      subtest.teardown(async () => {
+        try {
+          await B2.pd.close();
+        } catch {}
+      });
+
       const pdB2 = B2.pd;
       await pdB2.ready();
 
@@ -588,12 +596,10 @@ test("PearDrive: Peer connection events", async (t) => {
       // Now have A leave
       await pdA.close();
 
+      // 5 second timeout before fail
       await utils.wait(5);
       if (!bSawDisconnect)
         subtest.fail("PEER_DISCONNECTED not fired on B2 (timed out)");
-
-      // Cleanup B2 (A already closed)
-      await pdB2.close();
     }
   );
 });
@@ -611,8 +617,7 @@ test("PearDrive: Save data update event", async (t) => {
     n: 2,
     onError: (err) => t.fail("onError called", err),
     indexOpts: {
-      disablePolling: true, // Disable polling for this test
-      pollInterval: 500,
+      disableWatching: true,
     },
   });
 
@@ -655,8 +660,7 @@ test("PearDrive: Custom message", async (t) => {
     n: 2,
     onError: (err) => t.fail("onError called", err),
     indexOpts: {
-      disablePolling: true, // Disable polling for this test
-      pollInterval: 500,
+      disableWatching: true,
     },
   });
 
@@ -756,7 +760,7 @@ test("PearDrive: List local files", async (t) => {
     name: "list-local-files",
     bootstrap,
     onError: (err) => t.fail("onError called", err),
-    indexOpts: { disablePolling: true, pollInterval: 500 },
+    indexOpts: { disableWatching: true },
   });
   t.teardown(() => pd.close());
   await pd.ready();
@@ -788,8 +792,7 @@ test("PearDrive: List network files", async (t) => {
     n: 2,
     onError: (err) => t.fail("onError called", err),
     indexOpts: {
-      disablePolling: true, // Disable polling for this test
-      pollInterval: 500,
+      disableWatching: true,
     },
   });
   t.teardown(async () => {
@@ -876,8 +879,7 @@ test("PearDrive: Test single file download", async (t) => {
     n: 2,
     onError: (err) => t.fail("onError called", err),
     indexOpts: {
-      disablePolling: true, // Disable polling for this test
-      pollInterval: 500,
+      disableWatching: true,
     },
   });
   t.teardown(async () => {
@@ -916,8 +918,7 @@ test("PearDrive: Download five files", async (t) => {
     n: 2,
     onError: (err) => t.fail("onError called", err),
     indexOpts: {
-      disablePolling: true, // Disable polling for this test
-      pollInterval: 500,
+      disableWatching: true,
     },
   });
   t.teardown(async () => {
@@ -976,8 +977,7 @@ test(
       n: 2,
       onError: (err) => t.fail("onError called", err),
       indexOpts: {
-        disablePolling: true,
-        pollInterval: 500,
+        disableWatching: true,
       },
     });
     t.teardown(async () => {
@@ -1038,9 +1038,8 @@ test("PearDrive: File relaying", async (t) => {
     n: 2,
     onError: (err) => t.fail(`onError called`, err),
     indexOpts: {
-      disablePolling: true, // Disable polling for this test
-      pollInterval: 500,
-      relay: true, // Enable relay mode
+      disablePolling: true,
+      relay: true,
     },
   });
   t.teardown(async () => {

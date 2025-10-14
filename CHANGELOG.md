@@ -3,6 +3,7 @@
 - Remove stale polling code
 - disablePolling indexOpt removed
 - disableWatching indexOpt added, disables nativeWatcher
+- Improve testing performance
 
 ## 2.0.4
 
