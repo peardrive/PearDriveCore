@@ -66,8 +66,6 @@ export default class PearDrive extends ReadyResource {
   _downloads;
   /** @protected {Map} Map of upload blobs and corestore subspaces */
   _uploads;
-  /** @private {Object} In-progress downloads meta-data */
-  _inProgress;
   /** @private {ArrayBuffer | Uint8Array} - Hyperswarm topic buffer */
   _networkKey;
   /** @private {Object} - Holds custom message hooks */
@@ -138,12 +136,12 @@ export default class PearDrive extends ReadyResource {
     };
     this._logOpts = logOpts;
     const {
-      disablePolling = false,
+      disableWatching = false,
       pollInterval = 500,
       relay = false,
     } = indexOpts;
     this._indexOpts = {
-      disablePolling,
+      disableWatching,
       pollInterval,
       relay,
     };
@@ -392,6 +390,31 @@ export default class PearDrive extends ReadyResource {
       this.#log.error(`Error downloading file from peer ${peerId}`, err);
       throw err;
     }
+  }
+
+  /**
+   * Download a file from the first available peer that has it.
+   *
+   * @param {string} filePath - Path of the file on the remote peer
+   *
+   * @returns {Promise<void>}
+   * @throws {Error} If download fails
+   */
+  async downloadFile(filePath) {
+    this.#log.info(`Downloading file "${filePath}" from network...`);
+
+    // Find peer that has the file
+    const peerId = await this.#im.findPeerWithFile(filePath);
+    console.log("Peer ID with file", peerId);
+    if (!peerId) {
+      this.#log.warn(`No peer found with file "${filePath}"`);
+      return;
+    }
+
+    console.log("Found peer with file:", utils.formatToStr(peerId));
+
+    // Peer has a file, download from that peer
+    await this.downloadFileFromPeer(peerId, filePath);
   }
 
   /**

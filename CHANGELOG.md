@@ -4,6 +4,7 @@
 - disablePolling indexOpt removed
 - disableWatching indexOpt added, disables nativeWatcher
 - Improve testing performance
+- disablePolling -> disableWatching in PearDrive constructor
 
 ## 2.0.4
 
