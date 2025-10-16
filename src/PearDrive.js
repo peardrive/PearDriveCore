@@ -151,6 +151,14 @@ export default class PearDrive extends ReadyResource {
     this.#log.info("Initializing PearDrive...");
     this.#log.debug("DEBUG mode enabled");
 
+    // Ensure corestorePath and watchPath exist
+    const watchPathExists = utils.ensurePathExists(this._watchPath);
+    const corestorePathExists = utils.ensurePathExists(this._corestorePath);
+    if (!watchPathExists)
+      this.#log.info(`Created watchPath at ${this._watchPath}`);
+    if (!corestorePathExists)
+      this.#log.info(`Created corestorePath at ${this._corestorePath}`);
+
     // Set up corestore and swarm
     this._swarm = new Hyperswarm(this._swarmOpts);
     this._store = new Corestore(corestorePath);

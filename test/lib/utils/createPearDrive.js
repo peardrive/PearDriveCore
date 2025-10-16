@@ -31,8 +31,6 @@ export async function createPearDrive({
   const watchPath = path.join(CTEST.WATCHPATH_DIR, name);
   const corestorePath = path.join(CTEST.CORESTORE_DIR, name);
   const logPath = path.join(CTEST.LOG_DIR, `${name}.log`);
-  fs.mkdirSync(watchPath, { recursive: true });
-  fs.mkdirSync(corestorePath, { recursive: true });
 
   // instantiate PearDrive
   const pd = new PearDrive({
