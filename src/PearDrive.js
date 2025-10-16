@@ -109,7 +109,6 @@ export default class PearDrive extends ReadyResource {
   constructor({
     corestorePath,
     watchPath,
-    indexName = "local-file-index",
     swarmOpts = {},
     logOpts = {
       logToConsole: true,
