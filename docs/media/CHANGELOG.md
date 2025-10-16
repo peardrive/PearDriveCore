@@ -47,6 +47,7 @@
 - All LocalDrive references fixed (LocalDrive -> WatchPath)
 - Fix bug causing some files to get stuck with #isBusy status
 - Fix bug causing files downloaded from nested folders to download to the root watchPath folder
+- Core will create the watchPath and corestorePath if they don't already exist
 
 ## 1.5.3
 

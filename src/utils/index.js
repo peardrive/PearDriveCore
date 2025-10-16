@@ -19,6 +19,7 @@ export { bufferToStr } from "./bufferToStr.js";
 export { createAbsPath } from "./createAbsPath.js";
 export { createParentFolder } from "./createParentFolder.js";
 export { decodeBeeValue } from "./decodeBeeValue.js";
+export { ensurePathExists } from "./ensurePathExists.js";
 export { formatToBuffer } from "./formatToBuffer.js";
 export { formatToStr } from "./formatToStr.js";
 export { generateSeed } from "./generateSeed.js";
