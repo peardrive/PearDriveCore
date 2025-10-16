@@ -6,6 +6,7 @@
 - Improve testing performance
 - disablePolling -> disableWatching in PearDrive constructor
 - Add downloadFile function to download file from the network if it is available without specifying a peer ID
+- remove the indexName option
 
 ## 2.0.4
 
