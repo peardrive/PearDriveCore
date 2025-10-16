@@ -125,7 +125,6 @@ export default class PearDrive extends ReadyResource {
       : utils.generateSeed();
     this._corestorePath = corestorePath;
     this._watchPath = utils.normalizePath(watchPath);
-    this._indexName = indexName;
     const normalizedSeed = swarmOpts.seed
       ? utils.formatToBuffer(swarmOpts.seed)
       : utils.generateSeed();
@@ -169,7 +168,6 @@ export default class PearDrive extends ReadyResource {
     // Save data
     this._corestorePath = corestorePath;
     this._watchPath = watchPath;
-    this._indexName = indexName;
 
     // Set up IndexManager for PearDrive network file system management
     this.#im = new IndexManager({
@@ -1034,7 +1032,6 @@ export default class PearDrive extends ReadyResource {
     return {
       corestorePath: this.corestorePath,
       watchPath: this.watchPath,
-      indexName: this._indexName,
       swarmOpts: {
         seed: this.seed,
       },
@@ -1102,41 +1099,41 @@ export default class PearDrive extends ReadyResource {
     await this.#im.ready();
 
     // Wire up IM event listeners
-    this.#im.on(C.IM_EVENT.SAVE_DATA_UPDATE, () => {
+    this.#im.on(C.EVENT.SAVE_DATA_UPDATE, () => {
       this.#emitSaveDataUpdate();
     });
-    this.#im.on(C.IM_EVENT.LOCAL_FILE_ADDED, (data) => {
+    this.#im.on(C.EVENT.LOCAL_FILE_ADDED, (data) => {
       this.emit(C.EVENT.LOCAL_FILE_ADDED, data);
       this.#emitSaveDataUpdate();
     });
-    this.#im.on(C.IM_EVENT.LOCAL_FILE_REMOVED, (data) => {
+    this.#im.on(C.EVENT.LOCAL_FILE_REMOVED, (data) => {
       this.emit(C.EVENT.LOCAL_FILE_REMOVED, data);
     });
-    this.#im.on(C.IM_EVENT.LOCAL_FILE_CHANGED, (data) => {
+    this.#im.on(C.EVENT.LOCAL_FILE_CHANGED, (data) => {
       this.emit(C.EVENT.LOCAL_FILE_CHANGED, data);
     });
-    this.#im.on(C.IM_EVENT.PEER_FILE_ADDED, (data) => {
+    this.#im.on(C.EVENT.PEER_FILE_ADDED, (data) => {
       this.emit(C.EVENT.PEER_FILE_ADDED, data);
     });
-    this.#im.on(C.IM_EVENT.PEER_FILE_REMOVED, (data) => {
+    this.#im.on(C.EVENT.PEER_FILE_REMOVED, (data) => {
       this.emit(C.EVENT.PEER_FILE_REMOVED, data);
     });
-    this.#im.on(C.IM_EVENT.PEER_FILE_CHANGED, (data) => {
+    this.#im.on(C.EVENT.PEER_FILE_CHANGED, (data) => {
       this.emit(C.EVENT.PEER_FILE_CHANGED, data);
     });
-    this.#im.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_STARTED, (data) => {
+    this.#im.on(C.EVENT.IN_PROGRESS_DOWNLOAD_STARTED, (data) => {
       this.#emitSaveDataUpdate();
       this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_STARTED, data);
     });
-    this.#im.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_FAILED, (data) => {
+    this.#im.on(C.EVENT.IN_PROGRESS_DOWNLOAD_FAILED, (data) => {
       this.#emitSaveDataUpdate();
       this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_FAILED, data);
     });
-    this.#im.on(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, (data) => {
+    this.#im.on(C.EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, (data) => {
       this.#emitSaveDataUpdate();
       this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, data);
     });
-    this.#im.on(C.IM_EVENT.DOWNLOAD_PROGRESS, (data) => {
+    this.#im.on(C.EVENT.DOWNLOAD_PROGRESS, (data) => {
       this.emit(C.EVENT.DOWNLOAD_PROGRESS, data);
     });
 

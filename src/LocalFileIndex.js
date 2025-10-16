@@ -23,7 +23,7 @@ import ReadyResource from "ready-resource";
 
 import * as utils from "./utils/index.js";
 import * as C from "./constants.js";
-const { LFI_EVENT } = C;
+const { EVENT } = C;
 
 /**
  * Handles watching and indexing local files.
@@ -465,7 +465,7 @@ export default class LocalFileIndex extends ReadyResource {
           this.#log.info("File deleted:", relativePath);
           await this.#bee.del(relativePath);
           this.#metadataCache.delete(relativePath);
-          this.emit(LFI_EVENT.FILE_REMOVED, relativePath);
+          this.emit(EVENT.LOCAL_FILE_REMOVED, relativePath);
           // this._emitEvent(C.EVENT.LOCAL, null);
         }
       } else if (isDirectory) {
@@ -556,7 +556,7 @@ export default class LocalFileIndex extends ReadyResource {
       if (cachedMeta) {
         if (changed) {
           this.#log.debug("File changed:", relativePath);
-          this.emit(LFI_EVENT.FILE_CHANGED, {
+          this.emit(EVENT.LOCAL_FILE_CHANGED, {
             path: relativePath,
             prevHash,
             hash,
@@ -567,7 +567,7 @@ export default class LocalFileIndex extends ReadyResource {
       // Unindexed file added
       else {
         this.#log.debug("New file added:", relativePath);
-        this.emit(LFI_EVENT.FILE_ADDED, {
+        this.emit(EVENT.LOCAL_FILE_ADDED, {
           path: relativePath,
           hash,
         });
