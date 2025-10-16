@@ -703,14 +703,15 @@ export class IndexManager extends ReadyResource {
    * @returns {Promise<string|null>}
    */
   async findPeerWithFile(filePath) {
-    const dPath = utils.asDrivePath(filePath);
-    for await (const [peerId, bee] of this.remoteIndexes.entries()) {
-      try {
-        const entry = await bee.get(dPath);
-        if (entry && entry.value) return peerId;
-      } catch (err) {
-        this.#log.debug(`Failed checking peer ${peerId} for ${dPath}`, err);
+    try {
+      const nonLocalFiles = this.getNonlocalNetworkIndexInfo();
+      for (const [peerId, { files }] of (await nonLocalFiles).entries()) {
+        if (files.find((f) => f.path === filePath)) {
+          return peerId;
+        }
       }
+    } catch (error) {
+      this.#log.error(`Error searching for file ${filePath} in network`, error);
     }
     return null;
   }

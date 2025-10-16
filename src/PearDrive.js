@@ -405,13 +405,10 @@ export default class PearDrive extends ReadyResource {
 
     // Find peer that has the file
     const peerId = await this.#im.findPeerWithFile(filePath);
-    console.log("Peer ID with file", peerId);
     if (!peerId) {
       this.#log.warn(`No peer found with file "${filePath}"`);
       return;
     }
-
-    console.log("Found peer with file:", utils.formatToStr(peerId));
 
     // Peer has a file, download from that peer
     await this.downloadFileFromPeer(peerId, filePath);
