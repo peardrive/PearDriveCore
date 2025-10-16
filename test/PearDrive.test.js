@@ -870,11 +870,11 @@ test("PearDrive: List network files", async (t) => {
   }
 });
 
-test("PearDrive: Test single file download", async (t) => {
+test("PearDrive: Test single file download (from peer)", async (t) => {
   const { bootstrap } = await createTestnet();
 
   const [peerA, peerB] = await utils.createNetwork({
-    baseName: "file-download-test",
+    baseName: "download-file-from-peer-test",
     bootstrap,
     n: 2,
     onError: (err) => t.fail("onError called", err),
@@ -889,27 +889,73 @@ test("PearDrive: Test single file download", async (t) => {
 
   // Create a file on pearDriveA
   const fileA = utils.createRandomFile(peerA.pd.watchPath, 10);
+
+  // When file update propagates, download from peerA to peerB
+  peerB.pd.on(C.EVENT.PEER_FILE_ADDED, async (_data) => {
+    // Download
+    await peerB.pd.downloadFileFromPeer(peerA.pd.publicKey, fileA.name);
+    await peerB.pd._syncLocalFilesOnce();
+
+    // Get hash of the file from peerA
+    const files = await peerA.pd.listLocalFiles();
+    const fileEntry = files.find((f) => f.path === fileA.name);
+    const fileHash = fileEntry.hash;
+
+    // Ensure the file was downloaded correctly
+    const peerBLocalFiles = await peerB.pd.listLocalFiles();
+    const downloadedFile = peerBLocalFiles.find((f) => f.path === fileA.name);
+    const downloadedFileHash = downloadedFile.hash;
+
+    t.is(downloadedFileHash, fileHash, "Downloaded file hash matches original");
+  });
+
   await peerA.pd._syncLocalFilesOnce();
-  await peerB.pd._syncLocalFilesOnce();
-
-  // Get hash of the filefrom peerA
-  const files = await peerA.pd.listLocalFiles();
-  const fileEntry = files.find((f) => f.path === fileA.name);
-  const fileHash = fileEntry.hash;
-
-  // Download the file from pearDriveB
-  await peerB.pd.downloadFileFromPeer(peerA.pd.publicKey, fileA.name);
-  await peerB.pd._syncLocalFilesOnce();
-
-  // Ensure the file was downloaded correctly
-  const peerBLocalFiles = await peerB.pd.listLocalFiles();
-  const downloadedFile = peerBLocalFiles.find((f) => f.path === fileA.name);
-  const downloadedFileHash = downloadedFile.hash;
-
-  t.is(downloadedFileHash, fileHash, "Downloaded file hash matches original");
 });
 
-test("PearDrive: Download five files", async (t) => {
+test("PearDrive: Test single file download (from network)", async (t) => {
+  const { bootstrap } = await createTestnet();
+  t.plan(1);
+
+  const [peerA, peerB] = await utils.createNetwork({
+    baseName: "download-file-from-network-test",
+    bootstrap,
+    n: 2,
+    onError: (err) => t.fail("onError called", err),
+    indexOpts: {
+      disableWatching: true,
+    },
+  });
+  t.teardown(async () => {
+    await peerA.pd.close();
+    await peerB.pd.close();
+  });
+
+  // Create a file on pearDriveA
+  const fileA = utils.createRandomFile(peerA.pd.watchPath, 10);
+
+  // When file update propagates, download from network to peerB
+  peerB.pd.on(C.EVENT.PEER_FILE_ADDED, async (_data) => {
+    //Download
+    await peerB.pd.downloadFile(fileA.name);
+    await peerB.pd._syncLocalFilesOnce();
+
+    // Get hash of the file from peerA
+    const files = await peerA.pd.listLocalFiles();
+    const fileEntry = files.find((f) => f.path === fileA.name);
+    const fileHash = fileEntry.hash;
+
+    // Ensure the file was downloaded correctly
+    const peerBLocalFiles = await peerB.pd.listLocalFiles();
+    const downloadedFile = peerBLocalFiles.find((f) => f.path === fileA.name);
+    const downloadedFileHash = downloadedFile.hash;
+
+    t.is(downloadedFileHash, fileHash, "Downloaded file hash matches original");
+  });
+
+  await peerA.pd._syncLocalFilesOnce();
+});
+
+test("PearDrive: Download five files (from peer)", async (t) => {
   const { bootstrap } = await createTestnet();
 
   const [peerA, peerB] = await utils.createNetwork({

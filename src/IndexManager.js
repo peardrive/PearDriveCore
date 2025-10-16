@@ -694,6 +694,28 @@ export class IndexManager extends ReadyResource {
     }
   }
 
+  /**
+   * Search for peer that has a given file in its index.
+   * Returns the first matching peerId or null.
+   *
+   * @param {string} filePath
+   *
+   * @returns {Promise<string|null>}
+   */
+  async findPeerWithFile(filePath) {
+    try {
+      const nonLocalFiles = this.getNonlocalNetworkIndexInfo();
+      for (const [peerId, { files }] of (await nonLocalFiles).entries()) {
+        if (files.find((f) => f.path === filePath)) {
+          return peerId;
+        }
+      }
+    } catch (error) {
+      this.#log.error(`Error searching for file ${filePath} in network`, error);
+    }
+    return null;
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Private functions
   //////////////////////////////////////////////////////////////////////////////
@@ -1137,27 +1159,6 @@ export class IndexManager extends ReadyResource {
   }
 
   /**
-   * Search for peer that has a given file in its index.
-   * Returns the first matching peerId or null.
-   *
-   * @param {string} filePath
-   *
-   * @returns {Promise<string|null>}
-   */
-  async #findPeerWithFile(filePath) {
-    const dPath = utils.asDrivePath(filePath);
-    for (const [peerId, bee] of this.remoteIndexes.entries()) {
-      try {
-        const entry = await bee.get(dPath);
-        if (entry && entry.value) return peerId;
-      } catch (err) {
-        this.#log.debug(`Failed checking peer ${peerId} for ${dPath}`, err);
-      }
-    }
-    return null;
-  }
-
-  /**
    * Try to download a queued file from any peer that has it
    *
    * @param {string} filePath
@@ -1176,7 +1177,7 @@ export class IndexManager extends ReadyResource {
     }
 
     // Find a peer that has this file
-    const peerId = await this.#findPeerWithFile(filePath);
+    const peerId = await this.findPeerWithFile(filePath);
 
     // No peers have it, stay queued
     if (!peerId) {
