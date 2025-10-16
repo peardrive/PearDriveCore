@@ -54,8 +54,6 @@ export default class PearDrive extends ReadyResource {
   _corestorePath;
   /** @private {string} Path to PearDrive's local file storage */
   _watchPath;
-  /** @private {string} Name of the local indexer */
-  _indexName;
   /** @private Stored indexer options */
   _indexOpts;
   /** @private Stored hyperswarm options */
@@ -77,7 +75,6 @@ export default class PearDrive extends ReadyResource {
    * @param {Object} opts
    *    @param {string}  opts.corestorePath - Filesystem path for corestore data
    *    @param {string}  opts.watchPath - Path to watch for local files
-   *    @param {string}  [opts.indexName] - Name of the local file index core
    *    @param {Object}  [opts.swarmOpts]   - Options passed to Hyperswarm
    *    @param {Array<string|Buffer|Uint8Array>} [opts.swarmOpts.bootstrap] -
    *      DHT bootstrap list for peer discovery.
@@ -126,7 +123,6 @@ export default class PearDrive extends ReadyResource {
       : utils.generateSeed();
     this._corestorePath = corestorePath;
     this._watchPath = utils.normalizePath(watchPath);
-    this._indexName = indexName;
     const normalizedSeed = swarmOpts.seed
       ? utils.formatToBuffer(swarmOpts.seed)
       : utils.generateSeed();
@@ -170,7 +166,6 @@ export default class PearDrive extends ReadyResource {
     // Save data
     this._corestorePath = corestorePath;
     this._watchPath = watchPath;
-    this._indexName = indexName;
 
     // Set up IndexManager for PearDrive network file system management
     this.#im = new IndexManager({
@@ -1035,7 +1030,6 @@ export default class PearDrive extends ReadyResource {
     return {
       corestorePath: this.corestorePath,
       watchPath: this.watchPath,
-      indexName: this._indexName,
       swarmOpts: {
         seed: this.seed,
       },

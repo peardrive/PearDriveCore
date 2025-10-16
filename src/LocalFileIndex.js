@@ -58,18 +58,8 @@ export default class LocalFileIndex extends ReadyResource {
    *      and corestore subspaces
    *    @param {Map<string, HyperDrive} opts.uploads - Map of upload drives and
    *      corestore subspaces
-   *    @param {string} [opts.name] - Optional core name (defaults to
-   *      'local-file-index)
    */
-  constructor({
-    log,
-    store,
-    watchPath,
-    indexOpts,
-    uploads,
-    downloads,
-    name = "local-file-index",
-  }) {
+  constructor({ log, store, watchPath, indexOpts, uploads, downloads }) {
     super();
 
     // Logger setup
@@ -80,11 +70,9 @@ export default class LocalFileIndex extends ReadyResource {
     this._store = store.namespace("peardrive:localfileindex");
     /** Absolute path to folder being watched */
     this.watchPath = watchPath;
-    /** Local file index core name */
-    this.name = name || "local-file-indexer";
     /** Local file index core */
     this.indexCore = this._store.get({
-      name: this.name,
+      name: "localfileindex",
       valueEncoding: "json",
     });
     /** Index options */
@@ -116,7 +104,6 @@ export default class LocalFileIndex extends ReadyResource {
   getSaveData() {
     return {
       watchPath: this.watchPath,
-      localFileIndexName: this.name,
       logOpts: {},
     };
   }

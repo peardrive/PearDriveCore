@@ -133,7 +133,6 @@ export class IndexManager extends ReadyResource {
   /** Save data as JSON object */
   get saveData() {
     return {
-      localFileIndexName: this.localIndex.name,
       watchPath: this.localIndex.watchPath,
       poll: this.localIndex.poll,
       pollInterval: this.localIndex.pollInterval,
