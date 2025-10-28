@@ -427,9 +427,9 @@ test("PearDrive: Download events", async (t) => {
     await peerB.pd.close();
   });
 
-  await t.test("IN_PROGRESS_DOWNLOAD_COMPLETED event", async (subtest) => {
-    peerA.pd.once(C.EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, (_data) => {
-      subtest.pass("IN_PROGRESS_DOWNLOAD_COMPLETED event fired");
+  await t.test("DOWNLOAD_COMPLETED event", async (subtest) => {
+    peerA.pd.once(C.EVENT.DOWNLOAD_COMPLETED, (_data) => {
+      subtest.pass("DOWNLOAD_COMPLETED event fired");
     });
 
     const file = utils.createRandomFile(peerB.pd.watchPath, 10);

@@ -554,7 +554,7 @@ export class IndexManager extends ReadyResource {
 
       // Emit event
       if (direction === "download") {
-        this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_STARTED, { path, peerId });
+        this.emit(C.EVENT.DOWNLOAD_STARTED, { path, peerId });
       }
     } catch (err) {
       this.#log.error("Error marking transfer", err);
@@ -593,7 +593,7 @@ export class IndexManager extends ReadyResource {
 
     // Emit event, if a download
     if (direction === "download") {
-      this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, { path, peerId });
+      this.emit(C.EVENT.DOWNLOAD_COMPLETED, { path, peerId });
     }
 
     // Delete the entire path entry if no more transfers active
@@ -1161,7 +1161,7 @@ export class IndexManager extends ReadyResource {
   #handleDownloadFailure(filePath, peerId, error) {
     this.#log.info(`Handling download failure for ${filePath}`);
     this.#moveInProgressToQueue(filePath);
-    this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_FAILED, {
+    this.emit(C.EVENT.DOWNLOAD_FAILED, {
       filePath,
       peerId,
       error,

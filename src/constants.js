@@ -67,12 +67,12 @@ export const EVENT = {
   /** Peer file changed  */
   PEER_FILE_CHANGED: "[PD]: peer_file_changed",
 
-  /** New inProgress download added  */
-  IN_PROGRESS_DOWNLOAD_STARTED: "[PD]: in_progress_download_started",
-  /** An inProgress download has failed  */
-  IN_PROGRESS_DOWNLOAD_FAILED: "[PD]: in_progress_download_failed",
-  /** inProgress download removed  */
-  IN_PROGRESS_DOWNLOAD_COMPLETED: "[PD]: in_progress_download_completed",
+  /** New download started  */
+  DOWNLOAD_STARTED: "[PD]: in_progress_download_started",
+  /** Download failed */
+  DOWNLOAD_FAILED: "[PD]: in_progress_download_failed",
+  /** Download completed  */
+  DOWNLOAD_COMPLETED: "[PD]: in_progress_download_completed",
 };
 
 /**
