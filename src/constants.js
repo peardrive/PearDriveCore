@@ -53,93 +53,26 @@ export const EVENT = {
   /** Peer disconnected */
   PEER_DISCONNECTED: "[PD]: peer_disconnected",
 
-  /** Local file added (Wrapper for IM event) */
+  /** Local file added  */
   LOCAL_FILE_ADDED: "[PD]: local_file_added",
-  /** Local file removed (Wrapper for IM event) */
+  /** Local file removed  */
   LOCAL_FILE_REMOVED: "[PD]: local_file_removed",
-  /** Local file changed (Wrapper for IM event) */
+  /** Local file changed  */
   LOCAL_FILE_CHANGED: "[PD]: local_file_changed",
 
-  /** Peer file added (Wrapper for IM event) */
+  /** Peer file added  */
   PEER_FILE_ADDED: "[PD]: peer_file_added",
-  /** Peer file removed (Wrapper for IM event) */
+  /** Peer file removed  */
   PEER_FILE_REMOVED: "[PD]: peer_file_removed",
-  /** Peer file changed (Wrapper for IM event) */
+  /** Peer file changed  */
   PEER_FILE_CHANGED: "[PD]: peer_file_changed",
 
-  /** New inProgress download added (Wrapper for IM event) */
+  /** New inProgress download added  */
   IN_PROGRESS_DOWNLOAD_STARTED: "[PD]: in_progress_download_started",
-  /** An inProgress download has failed (Wrapper for IM event) */
+  /** An inProgress download has failed  */
   IN_PROGRESS_DOWNLOAD_FAILED: "[PD]: in_progress_download_failed",
-  /** inProgress download removed (Wrapper for IM event) */
+  /** inProgress download removed  */
   IN_PROGRESS_DOWNLOAD_COMPLETED: "[PD]: in_progress_download_completed",
-};
-
-/**
- * Events emitted from LocalFileIndex
- *
- * @protected
- */
-export const LFI_EVENT = {
-  /** Any error occurring in the local file index */
-  ERROR: "[LFI]: local_file_index_error",
-  /**
-   * Emitted when a file is added to the local file index
-   *
-   * Emitted with the following data:
-   * - `path`: The (relative) path of the file
-   * - `hash`: The hash of the file
-   */
-  FILE_ADDED: "[LFI]: local_file_index_file_added",
-  /**
-   * Emitted when a file is removed from the local file index
-   *
-   * Emits the path string
-   */
-  FILE_REMOVED: "[LFI]: local_file_index_file_removed",
-  /**
-   * Emitted when a file's contents have changed
-   *
-   * Emitted with the following data:
-   * - `path`: The (relative) path of the file
-   * - `prevHash`: The previous hash of the file
-   * - `hash`: The new hash of the file
-   */
-  FILE_CHANGED: "[LFI]: local_file_index_file_changed",
-};
-
-/**
- * Events emitted from IndexManager
- *
- * @protected
- */
-export const IM_EVENT = {
-  /*** Any time something causes save data to update */
-  SAVE_DATA_UPDATE: "[IM]: save_data_update",
-
-  /** Mirrors emitted from LFI FILE_ADDED */
-  LOCAL_FILE_ADDED: "[IM]: local_file_added",
-  /** Mirrors emitted from LFI FILE_REMOVED */
-  LOCAL_FILE_REMOVED: "[IM]: local_file_removed",
-  /** Mirrors emitted from LFI FILE_CHANGED */
-  LOCAL_FILE_CHANGED: "[IM]: local_file_changed",
-
-  /** When a peer has added a file */
-  PEER_FILE_ADDED: "[IM]: peer_file_added",
-  /** When a peer has removed a file */
-  PEER_FILE_REMOVED: "[IM]: peer_file_removed",
-  /** When a peer's file has changed */
-  PEER_FILE_CHANGED: "[IM]: peer_file_changed",
-
-  /** New inProgress download added */
-  IN_PROGRESS_DOWNLOAD_STARTED: "[IM]: in_progress_download_started",
-  /** An inProgress download has failed */
-  IN_PROGRESS_DOWNLOAD_FAILED: "[IM]: in_progress_download_failed",
-  /** inProgress download removed */
-  IN_PROGRESS_DOWNLOAD_COMPLETED: "[IM]: in_progress_download_completed",
-
-  /** Progress on a download */
-  DOWNLOAD_PROGRESS: "[IM]: download_progress",
 };
 
 /**

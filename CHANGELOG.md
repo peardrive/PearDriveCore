@@ -1,5 +1,7 @@
 # 🚧 PearDrive Core Changelog
 
+- Improve performance by optimizing event forwarding
+
 ## 2.1.0
 
 - Remove stale polling code

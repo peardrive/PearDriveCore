@@ -44,6 +44,8 @@ export class IndexManager extends ReadyResource {
   #queuedDownloads = [];
   /** In-progress download dictionary */
   #inProgress = {};
+  /** @private {Array} - Holds disposers for forwarded event listeners */
+  #forwardDisposers = [];
 
   /**
    * @param {Object} opts
@@ -104,6 +106,15 @@ export class IndexManager extends ReadyResource {
     this._sendFileRequest = sendFileRequest;
     this._sendFileRelease = sendFileRelease;
     this.#queuedDownloads = new Set(queuedDownloads);
+
+    // Set up event forwarding
+    this.#forwardDisposers.push(
+      utils.forwardEvent(this.localIndex, this, [
+        C.EVENT.LOCAL_FILE_ADDED,
+        C.EVENT.LOCAL_FILE_CHANGED,
+        C.EVENT.LOCAL_FILE_REMOVED,
+      ])
+    );
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -543,7 +554,7 @@ export class IndexManager extends ReadyResource {
 
       // Emit event
       if (direction === "download") {
-        this.emit(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_STARTED, { path, peerId });
+        this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_STARTED, { path, peerId });
       }
     } catch (err) {
       this.#log.error("Error marking transfer", err);
@@ -582,7 +593,7 @@ export class IndexManager extends ReadyResource {
 
     // Emit event, if a download
     if (direction === "download") {
-      this.emit(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, { path, peerId });
+      this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, { path, peerId });
     }
 
     // Delete the entire path entry if no more transfers active
@@ -844,7 +855,7 @@ export class IndexManager extends ReadyResource {
           prevPercent = curPercent;
 
           // Emit progress event
-          this.emit(C.IM_EVENT.DOWNLOAD_PROGRESS, {
+          this.emit(C.EVENT.DOWNLOAD_PROGRESS, {
             filePath,
             mbDownloaded,
             mbTotal,
@@ -1038,7 +1049,7 @@ export class IndexManager extends ReadyResource {
       // Handle file addition
       if (updateType === "added") {
         // Emit file added event
-        this.emit(C.IM_EVENT.PEER_FILE_ADDED, {
+        this.emit(C.EVENT.PEER_FILE_ADDED, {
           filePath,
           peerKey: peerId,
           hash: curVal.hash,
@@ -1057,7 +1068,7 @@ export class IndexManager extends ReadyResource {
         const prevHash = prevVal.hash;
         if (hash === prevHash) return;
 
-        this.emit(C.IM_EVENT.PEER_FILE_CHANGED, {
+        this.emit(C.EVENT.PEER_FILE_CHANGED, {
           filePath,
           peerKey: peerId,
           hash: curVal.hash,
@@ -1067,7 +1078,7 @@ export class IndexManager extends ReadyResource {
 
       // Handle file removal
       if (updateType === "removed") {
-        this.emit(C.IM_EVENT.PEER_FILE_REMOVED, {
+        this.emit(C.EVENT.PEER_FILE_REMOVED, {
           filePath,
           peerKey: peerId,
         });
@@ -1150,7 +1161,7 @@ export class IndexManager extends ReadyResource {
   #handleDownloadFailure(filePath, peerId, error) {
     this.#log.info(`Handling download failure for ${filePath}`);
     this.#moveInProgressToQueue(filePath);
-    this.emit(C.IM_EVENT.IN_PROGRESS_DOWNLOAD_FAILED, {
+    this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_FAILED, {
       filePath,
       peerId,
       error,
@@ -1220,7 +1231,7 @@ export class IndexManager extends ReadyResource {
         const filePath = utils.formatToStr(key);
         const hash = value.hash;
         if (filePath && hash) {
-          this.emit(C.IM_EVENT.PEER_FILE_ADDED, {
+          this.emit(C.EVENT.PEER_FILE_ADDED, {
             filePath,
             peerKey: peerId,
             hash,
@@ -1242,17 +1253,6 @@ export class IndexManager extends ReadyResource {
     // Local index initialization
     await this.localIndex.ready();
 
-    // Wire up LFI event listeners
-    this.localIndex.on(C.LFI_EVENT.FILE_ADDED, (data) => {
-      this.emit(C.IM_EVENT.LOCAL_FILE_ADDED, data);
-    });
-    this.localIndex.on(C.LFI_EVENT.FILE_REMOVED, (data) => {
-      this.emit(C.IM_EVENT.LOCAL_FILE_REMOVED, data);
-    });
-    this.localIndex.on(C.LFI_EVENT.FILE_CHANGED, (data) => {
-      this.emit(C.IM_EVENT.LOCAL_FILE_CHANGED, data);
-    });
-
     // Relay initialization
     if (this.relay) this.startRelay();
 
@@ -1261,6 +1261,12 @@ export class IndexManager extends ReadyResource {
 
   async _close() {
     this.#log.info("Closing IndexManager...");
+
+    // Detach forwarded event listeners
+    for (const dispose of this.#forwardDisposers) {
+      dispose();
+    }
+    this.#forwardDisposers.length = 0;
 
     await this.localIndex.close();
 
