@@ -44,6 +44,8 @@ export class IndexManager extends ReadyResource {
   #queuedDownloads = [];
   /** In-progress download dictionary */
   #inProgress = {};
+  /** @private {Array} - Holds disposers for forwarded event listeners */
+  #forwardDisposers = [];
 
   /**
    * @param {Object} opts
@@ -104,6 +106,15 @@ export class IndexManager extends ReadyResource {
     this._sendFileRequest = sendFileRequest;
     this._sendFileRelease = sendFileRelease;
     this.#queuedDownloads = new Set(queuedDownloads);
+
+    // Set up event forwarding
+    this.#forwardDisposers.push(
+      utils.forwardEvent(this.localIndex, this, [
+        C.EVENT.LOCAL_FILE_ADDED,
+        C.EVENT.LOCAL_FILE_CHANGED,
+        C.EVENT.LOCAL_FILE_REMOVED,
+      ])
+    );
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -1242,17 +1253,6 @@ export class IndexManager extends ReadyResource {
     // Local index initialization
     await this.localIndex.ready();
 
-    // Wire up LFI event listeners
-    this.localIndex.on(C.EVENT.LOCAL_FILE_ADDED, (data) => {
-      this.emit(C.EVENT.LOCAL_FILE_ADDED, data);
-    });
-    this.localIndex.on(C.EVENT.LOCAL_FILE_REMOVED, (data) => {
-      this.emit(C.EVENT.LOCAL_FILE_REMOVED, data);
-    });
-    this.localIndex.on(C.EVENT.LOCAL_FILE_CHANGED, (data) => {
-      this.emit(C.EVENT.LOCAL_FILE_CHANGED, data);
-    });
-
     // Relay initialization
     if (this.relay) this.startRelay();
 
@@ -1261,6 +1261,12 @@ export class IndexManager extends ReadyResource {
 
   async _close() {
     this.#log.info("Closing IndexManager...");
+
+    // Detach forwarded event listeners
+    for (const dispose of this.#forwardDisposers) {
+      dispose();
+    }
+    this.#forwardDisposers.length = 0;
 
     await this.localIndex.close();
 

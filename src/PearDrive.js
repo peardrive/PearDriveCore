@@ -72,6 +72,8 @@ export default class PearDrive extends ReadyResource {
   _customMessageHooks = {};
   /** @private {Object} - Holds custom message hooks for one-time exec */
   _onceCustomMessageHooks = {};
+  /** @private {Array} - Holds disposers for forwarded event listeners */
+  #forwardDisposers = [];
 
   /**
    * @param {Object} opts
@@ -185,6 +187,18 @@ export default class PearDrive extends ReadyResource {
       },
       unfinishedDownloads,
     });
+
+    // Set up event forwarding
+    this.#forwardDisposers.push(
+      utils.forwardEvent(this.#im, this, [
+        C.EVENT.LOCAL_FILE_REMOVED,
+        C.EVENT.LOCAL_FILE_CHANGED,
+        C.EVENT.LOCAL_FILE_ADDED,
+        C.EVENT.PEER_FILE_REMOVED,
+        C.EVENT.PEER_FILE_CHANGED,
+        C.EVENT.PEER_FILE_ADDED,
+      ])
+    );
 
     // Set up network connection hook
     this._swarm.on("connection", this._onConnection.bind(this));
@@ -1103,23 +1117,8 @@ export default class PearDrive extends ReadyResource {
       this.#emitSaveDataUpdate();
     });
     this.#im.on(C.EVENT.LOCAL_FILE_ADDED, (data) => {
-      this.emit(C.EVENT.LOCAL_FILE_ADDED, data);
       this.#emitSaveDataUpdate();
-    });
-    this.#im.on(C.EVENT.LOCAL_FILE_REMOVED, (data) => {
-      this.emit(C.EVENT.LOCAL_FILE_REMOVED, data);
-    });
-    this.#im.on(C.EVENT.LOCAL_FILE_CHANGED, (data) => {
-      this.emit(C.EVENT.LOCAL_FILE_CHANGED, data);
-    });
-    this.#im.on(C.EVENT.PEER_FILE_ADDED, (data) => {
-      this.emit(C.EVENT.PEER_FILE_ADDED, data);
-    });
-    this.#im.on(C.EVENT.PEER_FILE_REMOVED, (data) => {
-      this.emit(C.EVENT.PEER_FILE_REMOVED, data);
-    });
-    this.#im.on(C.EVENT.PEER_FILE_CHANGED, (data) => {
-      this.emit(C.EVENT.PEER_FILE_CHANGED, data);
+      this.emit(C.EVENT.LOCAL_FILE_ADDED, data);
     });
     this.#im.on(C.EVENT.IN_PROGRESS_DOWNLOAD_STARTED, (data) => {
       this.#emitSaveDataUpdate();
@@ -1133,9 +1132,6 @@ export default class PearDrive extends ReadyResource {
       this.#emitSaveDataUpdate();
       this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, data);
     });
-    this.#im.on(C.EVENT.DOWNLOAD_PROGRESS, (data) => {
-      this.emit(C.EVENT.DOWNLOAD_PROGRESS, data);
-    });
 
     this.#log.info("PearDrive opened successfully!");
   }
@@ -1147,6 +1143,12 @@ export default class PearDrive extends ReadyResource {
    */
   async _close() {
     this.#log.info("Closing PearDrive...");
+
+    // Detach forwarded event listeners
+    for (const dispose of this.#forwardDisposers) {
+      dispose();
+    }
+    this.#forwardDisposers.length = 0;
 
     await this.#im.close();
     this._swarm.destroy();
