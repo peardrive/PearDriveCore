@@ -1120,17 +1120,17 @@ export default class PearDrive extends ReadyResource {
       this.#emitSaveDataUpdate();
       this.emit(C.EVENT.LOCAL_FILE_ADDED, data);
     });
-    this.#im.on(C.EVENT.IN_PROGRESS_DOWNLOAD_STARTED, (data) => {
+    this.#im.on(C.EVENT.DOWNLOAD_STARTED, (data) => {
       this.#emitSaveDataUpdate();
-      this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_STARTED, data);
+      this.emit(C.EVENT.DOWNLOAD_STARTED, data);
     });
-    this.#im.on(C.EVENT.IN_PROGRESS_DOWNLOAD_FAILED, (data) => {
+    this.#im.on(C.EVENT.DOWNLOAD_FAILED, (data) => {
       this.#emitSaveDataUpdate();
-      this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_FAILED, data);
+      this.emit(C.EVENT.DOWNLOAD_FAILED, data);
     });
-    this.#im.on(C.EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, (data) => {
+    this.#im.on(C.EVENT.DOWNLOAD_COMPLETED, (data) => {
       this.#emitSaveDataUpdate();
-      this.emit(C.EVENT.IN_PROGRESS_DOWNLOAD_COMPLETED, data);
+      this.emit(C.EVENT.DOWNLOAD_COMPLETED, data);
     });
 
     this.#log.info("PearDrive opened successfully!");

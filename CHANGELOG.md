@@ -1,6 +1,10 @@
 # 🚧 PearDrive Core Changelog
 
 - Improve performance by optimizing event forwarding
+- **Breaking**: Change event names:
+  - IN_PROGRESS_DOWNLOAD_STARTED -> DOWNLOAD_STARTED
+  - IN_PROGRESS_DOWNLOAD_COMPLETED -> DOWNLOAD_COMPLETED
+  - IN_PROGRESS_DOWNLOAD_FAILED -> DOWNLOAD_FAILED
 
 ## 2.1.0
 
