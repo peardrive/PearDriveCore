@@ -5,6 +5,11 @@
   - IN_PROGRESS_DOWNLOAD_STARTED -> DOWNLOAD_STARTED
   - IN_PROGRESS_DOWNLOAD_COMPLETED -> DOWNLOAD_COMPLETED
   - IN_PROGRESS_DOWNLOAD_FAILED -> DOWNLOAD_FAILED
+- **Breaking**: Relay -> archive:
+  - activateRelay() -> activateArchive()
+  - deactivateRelay() -> deactivateArchive()
+  - (In constructor and save data), indexOpts.relay -> indexOpts.archive
+  - (In constructor and save data), relay -> archive
 
 ## 2.1.0
 

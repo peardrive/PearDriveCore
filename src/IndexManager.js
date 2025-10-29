@@ -36,10 +36,10 @@ export class IndexManager extends ReadyResource {
   _store;
   /** @private {Logger} */
   #log;
-  /** Relayer interval function */
-  #relayer = null;
-  /** whether relay function is currently running */
-  #relayRunning = false;
+  /** Archiver interval function */
+  #archiver = null;
+  /** Whether archive function is currently running */
+  #archiveRunning = false;
   /** @private {Array<string>} Queued downloads */
   #queuedDownloads = [];
   /** In-progress download dictionary */
@@ -121,13 +121,13 @@ export class IndexManager extends ReadyResource {
   // Getters
   //////////////////////////////////////////////////////////////////////////////
 
-  /** Get boolean for whether or not relay is enabled */
-  get relay() {
-    return this._indexOpts.relay;
+  /** Get boolean for whether or not archive is enabled */
+  get archive() {
+    return this._indexOpts.archive;
   }
 
-  /** Get the interval for relay polling */
-  get relayInterval() {
+  /** Get the interval for archive polling */
+  get archiveInterval() {
     return this._indexOpts.pollInterval;
   }
 
@@ -179,28 +179,28 @@ export class IndexManager extends ReadyResource {
   }
 
   /**
-   * Start relay mode, which periodically scans the network for files not
+   * Start archive mode, which periodically scans the network for files not
    * present on the local index and automatically downloads them.
    */
-  startRelay() {
-    if (this.#relayer || this.#relayRunning) return;
-    this.#log.info("Starting relay mode...");
+  startArchive() {
+    if (this.#archiver || this.#archiveRunning) return;
+    this.#log.info("Starting archive mode...");
 
-    this.#relay();
+    this.#archive();
   }
 
-  /** Stop relay mode */
-  stopRelay() {
-    this._indexOpts.relay = false;
-    if (!this.#relayer) {
-      this.#log.warn("Relay mode is not currently active.");
+  /** Stop archive mode */
+  stopArchive() {
+    this._indexOpts.archive = false;
+    if (!this.#archiver) {
+      this.#log.warn("Archive mode is not currently active.");
       return;
     }
 
-    this.#log.info("Stopping relay mode...");
-    clearInterval(this.#relayer);
-    this.#relayer = null;
-    this.#log.info("Relay mode stopped.");
+    this.#log.info("Stopping archive mode...");
+    clearInterval(this.#archiver);
+    this.#archiver = null;
+    this.#log.info("Archive mode stopped.");
   }
 
   /**
@@ -903,7 +903,7 @@ export class IndexManager extends ReadyResource {
   }
 
   /**
-   * Execute a download from the relay. Mirrors the PearDrive
+   * Execute a download from the archive. Mirrors the PearDrive
    * 'DownloadFileFromPeer' functionality.
    *
    * @param {string | Uint8Array | ArrayBuffer} peerId - Peer ID to download
@@ -912,15 +912,15 @@ export class IndexManager extends ReadyResource {
    *
    * @returns {Promise<void>}
    */
-  async #relayDownload(peerId, fileKey) {
-    this.#log.info(`Relay: Downloading file ${fileKey} from peer ${peerId}`);
+  async #archiveDownload(peerId, fileKey) {
+    this.#log.info(`Archive: Downloading file ${fileKey} from peer ${peerId}`);
 
     try {
       // Get Hyperblobs ref from peer
       const ref = await this._sendFileRequest(peerId, fileKey);
       if (!ref || ref.type !== "hyperblobs" || !ref.key || !ref.id) {
         this.#log.warn(
-          `Relay: Invalid Hyperblobs ref for ${fileKey} from ${peerId}`
+          `Archive: Invalid Hyperblobs ref for ${fileKey} from ${peerId}`
         );
         return;
       }
@@ -929,22 +929,22 @@ export class IndexManager extends ReadyResource {
       await this._sendFileRelease(peerId, fileKey);
     } catch (err) {
       this.#log.error(
-        `Relay: Error downloading file ${fileKey} from peer ${peerId}`,
+        `Archive: Error downloading file ${fileKey} from peer ${peerId}`,
         err
       );
       throw err;
     }
   }
 
-  /** Wrapper for relay logic that ensures it runs safely */
-  async #relay() {
-    if (this.#relayRunning || !this._indexOpts.relay) {
-      this.#log.warn("Relay is already running, skipping this iteration.");
+  /** Wrapper for archive logic that ensures it runs safely */
+  async #archive() {
+    if (this.#archiveRunning || !this._indexOpts.archive) {
+      this.#log.warn("Archive is already running, skipping this iteration.");
       return;
     }
 
-    this.#log.info("Scanning for new files to relay...");
-    this.#relayRunning = true;
+    this.#log.info("Scanning for new files to archive...");
+    this.#archiveRunning = true;
 
     try {
       // Make sure local index is ready
@@ -972,15 +972,15 @@ export class IndexManager extends ReadyResource {
       // Download the first entry that is missing
       if (missingFiles.size > 0) {
         const [fileKey, peerId] = missingFiles.entries().next().value;
-        await this.#relayDownload(peerId, fileKey);
+        await this.#archiveDownload(peerId, fileKey);
       }
     } catch (err) {
-      this.#log.error("Error during relay operation", err);
+      this.#log.error("Error during archive operation", err);
     } finally {
-      this.#relayRunning = false;
-      // Set the timer for the next relay
-      this.#relayer = setTimeout(
-        () => this.#relay(),
+      this.#archiveRunning = false;
+      // Set the timer for the next archive
+      this.#archiver = setTimeout(
+        () => this.#archive(),
         this._indexOpts.pollInterval * 3
       );
     }
@@ -1111,7 +1111,7 @@ export class IndexManager extends ReadyResource {
       const ref = await this._sendFileRequest(peerId, filePath);
       if (!ref || ref.type !== "hyperblobs" || !ref.key || !ref.id) {
         this.#log.warn(
-          `Relay: Invalid Hyperblobs ref for ${filePath} from ${peerId}`
+          `Archive: Invalid Hyperblobs ref for ${filePath} from ${peerId}`
         );
         return;
       }
@@ -1253,8 +1253,8 @@ export class IndexManager extends ReadyResource {
     // Local index initialization
     await this.localIndex.ready();
 
-    // Relay initialization
-    if (this.relay) this.startRelay();
+    // Archive initialization
+    if (this.archive) this.startArchive();
 
     this.#log.info("IndexManager opened successfully!");
   }

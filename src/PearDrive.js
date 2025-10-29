@@ -99,7 +99,7 @@ export default class PearDrive extends ReadyResource {
    *      manually. (Only advised for testing purposes).
    *    @param {number} [opts.indexOpts.pollInterval=500] - Interval in
    *      milliseconds for polling the local file index.
-   *    @param {boolean} [opts.indexOpts.relay] - Whether to automaically
+   *    @param {boolean} [opts.indexOpts.archive] - Whether to automaically
    *      download files from the network.
    *    @param {string} [opts.networkKey] - Optional network key to join a
    *      specific network on startup. If not provided, a new random key will be
@@ -138,12 +138,12 @@ export default class PearDrive extends ReadyResource {
     const {
       disableWatching = false,
       pollInterval = 500,
-      relay = false,
+      archive = false,
     } = indexOpts;
     this._indexOpts = {
       disableWatching,
       pollInterval,
-      relay,
+      archive,
     };
 
     // Set up logging
@@ -208,9 +208,9 @@ export default class PearDrive extends ReadyResource {
   // Getters
   //////////////////////////////////////////////////////////////////////////////
 
-  /** Whether or not 'relay' mode is enabled */
-  get relay() {
-    return this._indexOpts.relay;
+  /** Whether or not 'archive' mode is enabled */
+  get archive() {
+    return this._indexOpts.archive;
   }
 
   /** Get the absolute path to the local file storage for this PearDrive */
@@ -327,17 +327,17 @@ export default class PearDrive extends ReadyResource {
     delete this._onceCustomMessageHooks[name];
   }
 
-  /** Activate 'relay' mode */
-  activateRelay() {
-    this.#log.info("Activating 'relay' mode...");
-    this._indexOpts.relay = true;
+  /** Activate 'archive' mode */
+  activateArchive() {
+    this.#log.info("Activating 'archive' mode...");
+    this._indexOpts.archive = true;
     this.#emitSaveDataUpdate();
   }
 
-  /** Deactivate 'relay' mode */
-  deactivateRelay() {
-    this.#log.info("Deactivating 'relay' mode...");
-    this._indexOpts.relay = false;
+  /** Deactivate 'archive' mode */
+  deactivateArchive() {
+    this.#log.info("Deactivating 'archive' mode...");
+    this._indexOpts.archive = false;
     this.#emitSaveDataUpdate();
   }
 
@@ -1051,7 +1051,7 @@ export default class PearDrive extends ReadyResource {
       },
       logOpts: this.logOpts,
       networkKey: this.networkKey,
-      relay: this.relay,
+      archive: this.archive,
       indexOpts: this.indexOpts,
       queuedDownloads: this.#buildUnfinishedDownloads(),
     };
