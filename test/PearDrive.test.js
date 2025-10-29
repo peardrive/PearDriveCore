@@ -627,22 +627,22 @@ test("PearDrive: Save data update event", async (t) => {
   });
 
   await t.test(
-    "Save data update event fired on relay activation",
+    "Save data update event fired on archive activation",
     async (subtest) => {
       peerA.pd.once(C.EVENT.SAVE_DATA_UPDATE, (data) => {
-        subtest.is(data.relay, true, "Relay mode active");
+        subtest.is(data.archive, true, "Archive mode active");
       });
-      await peerA.pd.activateRelay();
+      await peerA.pd.activateArchive();
     }
   );
 
   await t.test(
-    "Save data update event fired on relay deactivation",
+    "Save data update event fired on archive deactivation",
     async (subtest) => {
       peerA.pd.once(C.EVENT.SAVE_DATA_UPDATE, (data) => {
-        subtest.is(data.relay, false, "Relay mode inactive");
+        subtest.is(data.archive, false, "Archive mode inactive");
       });
-      await peerA.pd.deactivateRelay();
+      await peerA.pd.deactivateArchive();
     }
   );
 });
@@ -1075,17 +1075,17 @@ test(
   }
 );
 
-test("PearDrive: File relaying", async (t) => {
+test("PearDrive: File archiving", async (t) => {
   const { bootstrap } = await createTestnet();
 
   const [peerA, peerB] = await utils.createNetwork({
-    baseName: "file-download-relay-test",
+    baseName: "file-download-archive-test",
     bootstrap,
     n: 2,
     onError: (err) => t.fail(`onError called`, err),
     indexOpts: {
       disablePolling: true,
-      relay: true,
+      archive: true,
     },
   });
   t.teardown(async () => {
@@ -1097,7 +1097,7 @@ test("PearDrive: File relaying", async (t) => {
   const fileA1 = utils.createRandomFile(peerA.pd.watchPath, 10);
   const fileA2 = utils.createRandomFile(peerA.pd.watchPath, 10);
 
-  await t.test("New file downloading with relay", async (subtest) => {
+  await t.test("New file downloading with archive", async (subtest) => {
     const success = await utils.waitFor(
       async () => {
         let isTrue = false;
@@ -1113,6 +1113,6 @@ test("PearDrive: File relaying", async (t) => {
       100
     );
 
-    subtest.ok(success, "Files downloaded successfully with relay");
+    subtest.ok(success, "Files downloaded successfully with archive");
   });
 });
