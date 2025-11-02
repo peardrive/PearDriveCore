@@ -42,10 +42,10 @@ export const RPC_EVENT = C.RPC;
 export default class PearDrive extends ReadyResource {
   /** @private {Logger} Logger */
   #log;
+  /** @private {Corestore} Corestore for all hypercores */
+  #store;
   /** @private {Hyperswarm} Hyperswarm for all nodes on network */
   _swarm;
-  /** @private {Corestore} Corestore for all hypercores */
-  _store;
   /** @private {Map<string, RPC>} RPC PearDrive connections */
   _rpcConnections;
   /** @private {IndexManager} Index manager for watching network/local files */
@@ -161,7 +161,7 @@ export default class PearDrive extends ReadyResource {
 
     // Set up corestore and swarm
     this._swarm = new Hyperswarm(this._swarmOpts);
-    this._store = new Corestore(corestorePath);
+    this.#store = new Corestore(corestorePath);
     this._rpcConnections = new Map();
     this._uploads = new Map();
     this._downloads = new Map();
@@ -173,7 +173,7 @@ export default class PearDrive extends ReadyResource {
 
     // Set up IndexManager for PearDrive network file system management
     this.#im = new IndexManager({
-      store: this._store,
+      store: this.#store.namespace("peardrive:indexmanager"),
       log: this.#log,
       watchPath: watchPath,
       indexOpts: this._indexOpts,
@@ -743,7 +743,7 @@ export default class PearDrive extends ReadyResource {
    * @private
    */
   async _onConnection(conn) {
-    this._store.replicate(conn);
+    this.#store.replicate(conn);
 
     // Create RPC instance for this connection
     const rpc = this._createRPC(conn);
@@ -776,7 +776,7 @@ export default class PearDrive extends ReadyResource {
     // Register the hyperbee and add to index manager
     try {
       const keyBuf = utils.formatToBuffer(peerKeyHex);
-      const core = this._store.get({ key: keyBuf });
+      const core = this.#store.get({ key: keyBuf });
       const bee = new Hyperbee(core, {
         keyEncoding: "utf-8",
         valueEncoding: "json",
@@ -1109,7 +1109,7 @@ export default class PearDrive extends ReadyResource {
     this.#log.info("Opening PearDrive...");
 
     // Ready resources
-    await this._store.ready();
+    await this.#store.ready();
     await this.#im.ready();
 
     // Wire up IM event listeners
@@ -1152,7 +1152,7 @@ export default class PearDrive extends ReadyResource {
 
     await this.#im.close();
     this._swarm.destroy();
-    await this._store.close();
+    await this.#store.close();
 
     this.#log.info("PearDrive closed successfully!");
   }

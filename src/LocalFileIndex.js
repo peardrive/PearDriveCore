@@ -33,6 +33,8 @@ const { EVENT } = C;
 export default class LocalFileIndex extends ReadyResource {
   /** Logger instance */
   #log;
+  /** Corestore namespace instance */
+  #store;
   /** Automatic polling interval function */
   #poller = null;
   /** File system watcher instance */
@@ -67,11 +69,11 @@ export default class LocalFileIndex extends ReadyResource {
     this.#log.info("Initializing LocalFileIndex...");
 
     /** Corestore instance */
-    this._store = store.namespace("peardrive:localfileindex");
+    this.#store = store;
     /** Absolute path to folder being watched */
     this.watchPath = watchPath;
     /** Local file index core */
-    this.indexCore = this._store.get({
+    this.indexCore = this.#store.get({
       name: "localfileindex",
       valueEncoding: "json",
     });

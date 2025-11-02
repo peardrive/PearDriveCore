@@ -33,7 +33,7 @@ import LocalFileIndex from "./LocalFileIndex.js";
  ******************************************************************************/
 export class IndexManager extends ReadyResource {
   /** @private {Corestore} */
-  _store;
+  #store;
   /** @private {Logger} */
   #log;
   /** Archiver interval function */
@@ -82,11 +82,11 @@ export class IndexManager extends ReadyResource {
   }) {
     super();
 
-    this._store = store.namespace("peardrive:indexmanager");
+    this.#store = store;
     this._indexOpts = indexOpts;
     this.#log = log;
     this.localIndex = new LocalFileIndex({
-      store,
+      store: this.#store.namespace("peardrive:localfileindex"),
       log,
       watchPath,
       indexOpts,
@@ -899,7 +899,7 @@ export class IndexManager extends ReadyResource {
 
     const tagStr = `${tag}:` || "";
     const storePath = `${tagStr}${key}`;
-    return this._store.namespace(storePath);
+    return this.#store.namespace(storePath);
   }
 
   /**
