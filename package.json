@@ -79,6 +79,7 @@
   },
   "dependencies": {
     "@hopets/logger": "^1.1.1",
+    "autobase": "^7.21.1",
     "b4a": "^1.6.7",
     "bare-crypto": "^1.10.1",
     "bare-fs": "^4.1.4",
