@@ -19,6 +19,7 @@ import Hyperbee from "hyperbee";
 import Hyperblobs from "hyperblobs";
 import fs from "fs";
 import ReadyResource from "ready-resource";
+import forward from "@hopets/forward";
 
 import * as C from "./constants.js";
 import * as utils from "./utils/index.js";
@@ -109,7 +110,7 @@ export class IndexManager extends ReadyResource {
 
     // Set up event forwarding
     this.#forwardDisposers.push(
-      utils.forwardEvent(this.localIndex, this, [
+      forward(this.localIndex, this, [
         C.EVENT.LOCAL_FILE_ADDED,
         C.EVENT.LOCAL_FILE_CHANGED,
         C.EVENT.LOCAL_FILE_REMOVED,

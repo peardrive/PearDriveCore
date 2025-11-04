@@ -78,6 +78,7 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
+    "@hopets/forward": "^1.0.1",
     "@hopets/logger": "^1.1.1",
     "autobase": "^7.21.1",
     "b4a": "^1.6.7",

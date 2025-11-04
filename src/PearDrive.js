@@ -20,6 +20,7 @@ import c from "compact-encoding";
 import Hyperbee from "hyperbee";
 import Logger from "@hopets/logger";
 import ReadyResource from "ready-resource";
+import forward from "@hopets/forward";
 
 import * as C from "./constants.js";
 import * as utils from "./utils/index.js";
@@ -190,7 +191,7 @@ export default class PearDrive extends ReadyResource {
 
     // Set up event forwarding
     this.#forwardDisposers.push(
-      utils.forwardEvent(this.#im, this, [
+      forward(this.#im, this, [
         C.EVENT.LOCAL_FILE_REMOVED,
         C.EVENT.LOCAL_FILE_CHANGED,
         C.EVENT.LOCAL_FILE_ADDED,

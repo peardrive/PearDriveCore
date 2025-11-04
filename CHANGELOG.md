@@ -1,5 +1,7 @@
 # 🚧 PearDrive Core Changelog
 
+- Replace event forwarding
+
 ## 3.0.0
 
 - Improve performance by optimizing event forwarding
