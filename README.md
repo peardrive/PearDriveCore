@@ -44,3 +44,9 @@ npm install @peardrive/core
 ---
 
 ## [🚧 Changelog](./CHANGELOG.md)
+
+---
+
+## Acknowledgements
+
+A special thanks to Hope.ts for the enormous dedication of time and foundational work on the design and scope of this project.
