@@ -80,7 +80,7 @@
   "dependencies": {
     "@hopets/forward": "^1.0.1",
     "@hopets/logger": "^1.1.1",
-    "autobase": "^7.21.1",
+    "autobase": "^7.22.0",
     "b4a": "^1.6.7",
     "bare-crypto": "^1.10.1",
     "bare-fs": "^4.1.4",

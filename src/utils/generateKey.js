@@ -5,16 +5,16 @@
  */
 
 /**
- * @remarks Generates a random seed for hyperswarm keypair or topic.
+ * @remarks Generates a random key for hypercores.
  */
 
 import crypto from "hypercore-crypto";
 
 /**
- * Generate a seed for hyperswarm keypair or topic
+ * Generate a key for hypercores
  *
  * @returns {Uint8Array | ArrayBuffer} seed
  */
-export function generateSeed() {
+export function generateKey() {
   return crypto.randomBytes(32);
 }

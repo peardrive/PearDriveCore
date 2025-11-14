@@ -55,8 +55,6 @@ export default class PearDrive extends ReadyResource {
   _corestorePath;
   /** @private {string} Path to PearDrive's local file storage */
   _watchPath;
-  /** @private {string} Name of the local indexer */
-  _indexName;
   /** @private Stored indexer options */
   _indexOpts;
   /** @private Stored hyperswarm options */
@@ -102,6 +100,9 @@ export default class PearDrive extends ReadyResource {
    *      milliseconds for polling the local file index.
    *    @param {boolean} [opts.indexOpts.archive] - Whether to automaically
    *      download files from the network.
+   *    @param {Object} [opts.baseOpts] - Options for the PDBase instance.
+   *    @param {Uint8Array|Buffer|string} [opts.baseOpts.writer] - Autobase
+   *      writer key
    *    @param {string} [opts.networkKey] - Optional network key to join a
    *      specific network on startup. If not provided, a new random key will be
    *      generated.
@@ -118,6 +119,7 @@ export default class PearDrive extends ReadyResource {
     },
     indexOpts = {},
     networkKey,
+    baseOpts = {},
     unfinishedDownloads = [],
   }) {
     super();
@@ -125,12 +127,12 @@ export default class PearDrive extends ReadyResource {
     // Set save data
     this._networkKey = networkKey
       ? utils.formatToBuffer(networkKey)
-      : utils.generateSeed();
+      : utils.generateKey();
     this._corestorePath = corestorePath;
     this._watchPath = utils.normalizePath(watchPath);
     const normalizedSeed = swarmOpts.seed
       ? utils.formatToBuffer(swarmOpts.seed)
-      : utils.generateSeed();
+      : utils.generateKey();
     this._swarmOpts = {
       ...swarmOpts,
       seed: normalizedSeed,
@@ -208,6 +210,16 @@ export default class PearDrive extends ReadyResource {
   //////////////////////////////////////////////////////////////////////////////
   // Getters
   //////////////////////////////////////////////////////////////////////////////
+
+  /** Nickname for this peer */
+  get nickname() {
+    return "TODO";
+  }
+
+  /** Nickname for the network */
+  get networkName() {
+    return "TODO";
+  }
 
   /** Whether or not 'archive' mode is enabled */
   get archive() {
@@ -340,6 +352,24 @@ export default class PearDrive extends ReadyResource {
     this.#log.info("Deactivating 'archive' mode...");
     this._indexOpts.archive = false;
     this.#emitSaveDataUpdate();
+  }
+
+  /**
+   * Set the nickname for this peer
+   *
+   * @param {string} nickname - New nickname
+   */
+  setNickname(nickname) {
+    // TODO: Implement nickname setting
+  }
+
+  /**
+   * Set the name for the network
+   *
+   * @param {string} networkName - New network name
+   */
+  setNetworkName(networkName) {
+    // TODO: Implement network name setting
   }
 
   /**

@@ -17,18 +17,54 @@
  */
 
 import ReadyResource from "ready-resource";
+import Autobase from "autobase";
+import c from "compact-encoding";
 
 export class PDBase extends ReadyResource {
   /** @private {Logger} Logger */
   #log;
   /** @private {Corestore} Corestore namespace */
   #store;
+  /** @private {Autobase} Autobase instance */
+  #base;
 
+  /**
+   * @param {Object} opts Options
+   * @param {Logger} opts.log Logger instance
+   * @param {Corestore} opts.store Corestore namespace
+   */
   constructor({ log, store }) {
     super();
 
     this.#log = log;
     this.#store = store;
+
+    // There won't be a writer key if this is the first time initializing, so
+    // generate one if the arg is missing.
+    this.#base = new Autobase(this.#store, null, {
+      valueEncoding: c.json,
+      open: () => {},
+      apply: () => {},
+    });
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Getters
+  //////////////////////////////////////////////////////////////////////////////
+
+  /** Get this peer's nickname */
+  get nickname() {
+    return "TODO";
+  }
+
+  /** Get the network's name */
+  get networkName() {
+    return "TODO";
+  }
+
+  /** Get the raw Autobase view */
+  get view() {
+    return this.#base.view;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -36,6 +72,8 @@ export class PDBase extends ReadyResource {
   //////////////////////////////////////////////////////////////////////////////
 
   setNickname() {}
+
+  setNetworkName() {}
 
   //////////////////////////////////////////////////////////////////////////////
   // Lifecycle methods
