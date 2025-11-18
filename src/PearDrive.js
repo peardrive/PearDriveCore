@@ -24,6 +24,7 @@ import forward from "@hopets/forward";
 import * as C from "./constants.js";
 import * as utils from "./utils/index.js";
 import { IndexManager } from "./IndexManager.js";
+import { PDBase } from "./PDBase.js";
 
 /** The utils toolbox PearDrive Core uses */
 export const lib = utils;
@@ -44,12 +45,16 @@ export default class PearDrive extends ReadyResource {
   #log;
   /** @private {Corestore} Corestore for all hypercores */
   #store;
+  /** @private {IndexManager} Index manager for watching network/local files */
+  #im;
+  /** @private {PDBase} PDBase for interfacing with shared network info */
+  #base;
+  /** @private {Array} - Holds disposers for forwarded event listeners */
+  #forwardDisposers = [];
   /** @private {Hyperswarm} Hyperswarm for all nodes on network */
   _swarm;
   /** @private {Map<string, RPC>} RPC PearDrive connections */
   _rpcConnections;
-  /** @private {IndexManager} Index manager for watching network/local files */
-  #im;
   /** @private {string} Absolute path to corestore */
   _corestorePath;
   /** @private {string} Path to PearDrive's local file storage */
@@ -70,8 +75,6 @@ export default class PearDrive extends ReadyResource {
   _customMessageHooks = {};
   /** @private {Object} - Holds custom message hooks for one-time exec */
   _onceCustomMessageHooks = {};
-  /** @private {Array} - Holds disposers for forwarded event listeners */
-  #forwardDisposers = [];
 
   /**
    * @param {Object} opts
@@ -108,6 +111,9 @@ export default class PearDrive extends ReadyResource {
    *    @param {Array<string>} [opts.unfinishedDownloads] - Optional unfinished
    *      downloads to resume on startup. These include inProgress downloads
    *      and queuedDownloads.
+   *    @param {Object} [opts.base] - Options for the PDBase instance.
+   *    @param {boolean} [opts.base.indexer] - Whether or not PDBase should
+   *      connect as an indexer.
    */
   constructor({
     corestorePath,
@@ -189,6 +195,9 @@ export default class PearDrive extends ReadyResource {
       },
       unfinishedDownloads,
     });
+
+    // Set up PearDriveBase
+    this.#base = new PDBase();
 
     // Set up event forwarding
     this.#forwardDisposers.push(
@@ -1126,6 +1135,13 @@ export default class PearDrive extends ReadyResource {
     this.emit(C.EVENT.SAVE_DATA_UPDATE, this.saveData);
   }
 
+  /**
+   * Handle opening PDBase instance
+   */
+  #initPDBase() {
+    // TODO
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Lifecycle methods
   //////////////////////////////////////////////////////////////////////////////
@@ -1141,6 +1157,7 @@ export default class PearDrive extends ReadyResource {
     // Ready resources
     await this.#store.ready();
     await this.#im.ready();
+    await this.#base.ready();
 
     // Wire up IM event listeners
     this.#im.on(C.EVENT.SAVE_DATA_UPDATE, () => {
@@ -1180,6 +1197,7 @@ export default class PearDrive extends ReadyResource {
     }
     this.#forwardDisposers.length = 0;
 
+    await this.#base.close();
     await this.#im.close();
     this._swarm.destroy();
     await this.#store.close();
