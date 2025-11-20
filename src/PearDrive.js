@@ -38,7 +38,7 @@ export const RPC_EVENT = C.RPC;
 /*******************************************************************************
  * PearDrive Core
  * ---
- * P2P networking system for node.js applications.
+ * P2P file sharing system for node.js applications.
  ******************************************************************************/
 export default class PearDrive extends ReadyResource {
   /** @private {Logger} Logger */
@@ -112,6 +112,7 @@ export default class PearDrive extends ReadyResource {
    *      downloads to resume on startup. These include inProgress downloads
    *      and queuedDownloads.
    *    @param {Object} [opts.base] - Options for the PDBase instance.
+   *    @param {string} [opts.base.bootstrap] - Autobase bootstrap key.
    *    @param {boolean} [opts.base.indexer] - Whether or not PDBase should
    *      connect as an indexer.
    */
@@ -197,7 +198,10 @@ export default class PearDrive extends ReadyResource {
     });
 
     // Set up PearDriveBase
-    this.#base = new PDBase();
+    this.#base = new PDBase({
+      store: this.#store.namespace("peardrive:pdbase"),
+      log: this.#log,
+    });
 
     // Set up event forwarding
     this.#forwardDisposers.push(
@@ -219,38 +223,41 @@ export default class PearDrive extends ReadyResource {
   // Getters
   //////////////////////////////////////////////////////////////////////////////
 
-  /** Nickname for this peer */
+  /** @readonly Nickname for this peer */
   get nickname() {
     return "TODO";
   }
 
-  /** Nickname for the network */
+  /** @readonly Nickname for the network */
   get networkName() {
     return "TODO";
   }
 
-  /** Whether or not 'archive' mode is enabled */
+  /** @readonly Whether or not 'archive' mode is enabled */
   get archive() {
     return this._indexOpts.archive;
   }
 
-  /** Get the absolute path to the local file storage for this PearDrive */
+  /**
+   * @readonly Get the absolute path to the local file storage for this
+   * PearDrive
+   */
   get watchPath() {
     return this._watchPath;
   }
 
-  /** Read-only public key for RPC connections to the network */
+  /** @readonly Read-only public key for RPC connections to the network */
   get publicKey() {
     return utils.formatToStr(this._publicKey);
   }
 
-  /** Read-only stringified network key */
+  /** @readonly Read-only stringified network key */
   get networkKey() {
     return utils.formatToStr(this._networkKey);
   }
 
   /**
-   * Read-only inProgressDownloads dictionary
+   * @readonly Read-only inProgressDownloads dictionary
    *
    * @returns {Object} - In-progress downloads meta-data
    */
@@ -258,18 +265,18 @@ export default class PearDrive extends ReadyResource {
     return { ...this.#im.inProgressDownloads };
   }
 
-  /** Read-only 'seed' - Stringified basis for this peer's keypair */
+  /** @readonly 'seed' - Stringified basis for this peer's keypair */
   get seed() {
     return utils.formatToStr(this._swarmOpts.seed);
   }
 
-  /** Read-only Corestore path (path to all the internal networking storage) */
+  /** @readonly Corestore path (path to all the internal networking storage) */
   get corestorePath() {
     return this._corestorePath;
   }
 
   /**
-   * Read-only logging options
+   * @readonly logging options
    *
    * @returns {Object} - Logger options
    */
@@ -277,13 +284,13 @@ export default class PearDrive extends ReadyResource {
     return { ...this._logOpts };
   }
 
-  /** Read-only index options */
+  /** @readonly index options */
   get indexOpts() {
     return { ...this._indexOpts };
   }
 
   /**
-   * Read-only public key Buffer for RPC connections to the network
+   * @readonly public key Buffer for RPC connections to the network
    *
    * @returns {ArrayBuffer} - Public key as ArrayBuffer
    *
@@ -381,7 +388,28 @@ export default class PearDrive extends ReadyResource {
   }
 
   /**
-   * Join or create a network.
+   * Create a new network.
+   *
+   * @returns {Promise<void>}
+   */
+  async createNetwork() {
+    this.#log.info(
+      "Creating new network with key",
+      utils.formatToStr(this.networkKey)
+    );
+    const discovery = this._swarm.join(this._networkKey, {
+      server: true,
+      client: true,
+    });
+    await discovery.flushed();
+
+    // TODO: Set up PDBase
+    this.connected = true;
+    this.#emitSaveDataUpdate();
+  }
+
+  /**
+   * Join an existing network.
    *
    * @param {string|Uint8Array|ArrayBuffer} [networkKey] - Optional network
    *  topic key.
@@ -606,6 +634,38 @@ export default class PearDrive extends ReadyResource {
   }
 
   /**
+   * Send PDBASE_BOOTSTRAP_REQUEST to peer
+   *
+   * @param {string | Uint8Array | ArrayBuffer} peerId - Peer ID to send request
+   *
+   * @returns {Promise<string>} - Peer bootstrap key hex
+   *
+   * @private
+   */
+  async _sendPDBaseBootstrapRequest(peerId) {
+    try {
+      const peerIdStr = utils.formatToStr(peerId);
+      this.#log.info(`Sending PDBASE_BOOTSTRAP_REQUEST to peer ${peerIdStr}`);
+
+      const response = await this._sendInternalMessageToPeer(
+        peerIdStr,
+        C.RPC.PDBASE_BOOTSTRAP_REQUEST
+      );
+      if (response.status !== C.MESSAGE_STATUS.SUCCESS)
+        throw new Error(`PDBASE_BOOTSTRAP_REQUEST failed on peer ${peerIdStr}`);
+      const bootstrap = response.data;
+
+      return bootstrap;
+    } catch (err) {
+      this.#log.error(
+        `Error sending PDBASE_BOOTSTRAP_REQUEST to peer ${peerId}`,
+        err
+      );
+      throw err;
+    }
+  }
+
+  /**
    * Send FILE_REQUEST to peer
    *
    * @param {string |Uint8Array | ArrayBuffer} peerId - Peer ID to send request
@@ -717,6 +777,14 @@ export default class PearDrive extends ReadyResource {
       );
       return safeResponse(() => this._onLocalIndexKeyRequest(conn));
     });
+    rpc.respond(C.RPC.PDBASE_BOOTSTRAP_REQUEST, async () => {
+      this.#log.info(
+        `Handling PDBASE_BOOTSTRAP_REQUEST from ${utils.formatToStr(
+          conn.remotePublicKey
+        )}`
+      );
+      return safeResponse(() => this._onPDBaseBootstrapRequest(conn));
+    });
     rpc.respond(C.RPC.FILE_REQUEST, async (payload) => {
       this.#log.info(
         `Handling FILE_REQUEST from ${utils.formatToStr(conn.remotePublicKey)}`
@@ -775,6 +843,41 @@ export default class PearDrive extends ReadyResource {
   }
 
   /**
+   * Handle RPC.PDBASE_BOOTSTRAP_REQUEST
+   *
+   * @param {Connection} conn – Hyperswarm connection
+   * @param {any} _payload – Ignored
+   *
+   * @returns {Promise<string>} - Hex-encoded bootstrap key
+   *
+   * @private
+   */
+  async _onPDBaseBootstrapRequest(conn) {
+    const peerId = utils.formatToStr(conn.remotePublicKey);
+    this.#log.info("Handling PDBASE_BOOTSTRAP_REQUEST from", peerId);
+
+    try {
+      const bootstrap = this.#base.bootstrap;
+      if (!bootstrap) {
+        throw new Error("No bootstrap key available");
+      }
+
+      this.#log.info(`Sending PDBase bootstrap key to ${peerId}:`, bootstrap);
+      return {
+        status: C.MESSAGE_STATUS.SUCCESS,
+        data: bootstrap,
+      };
+    } catch (err) {
+      this.#log.error(`Error in PDBASE_BOOTSTRAP_REQUEST for ${peerId}`, err);
+      this.emit(C.EVENT.ERROR, err);
+      return {
+        status: C.MESSAGE_STATUS.ERROR,
+        data: `Error retrieving PDBase bootstrap key: ${err.message}`,
+      };
+    }
+  }
+
+  /**
    * Handle a new peer connection: replicate cores and notify managers.
    *
    * @param {Connection} conn - Hyperswarm connection
@@ -827,6 +930,31 @@ export default class PearDrive extends ReadyResource {
     } catch (err) {
       this.#log.error(`Error registering remote index for ${peerId}`, err);
       return;
+    }
+
+    // Retrieve PDBase bootstrap from peer (if local has no bootstrap)
+    if (!this.#base.bootstrap) {
+      try {
+        const bootstrap = await this._sendPDBaseBootstrapRequest(peerId);
+        this.#base.bootstrap = bootstrap;
+        this.#log.info(
+          `Updated local PDBase bootstrap key from peer ${peerId}`
+        );
+      } catch (err) {
+        this.#log.error(
+          `Failed to retrieve PDBase bootstrap key from peer ${peerId}`,
+          err
+        );
+      }
+    }
+
+    // Start PDBase (if not already started)
+    if (this.#base.bootstrap && !this.#base.started) {
+      try {
+        // TODO
+      } catch (error) {
+        this.#log.error("Failed to start PDBase", error);
+      }
     }
 
     // Emit peer update event

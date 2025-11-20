@@ -1,6 +1,5 @@
 /*!
  * Copyright (C) 2025 PearDrive
- * Copyright (C) 2025 Jenna Baudelaire
  * SPDX-License-Identifier: AGPL-3.0-only
  *
  * This program is free software: you can redistribute it and/or modify
@@ -18,62 +17,265 @@
 
 import ReadyResource from "ready-resource";
 import Autobase from "autobase";
+import Hyperbee from "hyperbee";
+import Logger from "@hopets/logger";
 import c from "compact-encoding";
+
+import * as utils from "./utils/index.js";
 
 export class PDBase extends ReadyResource {
   /** @private {Logger} Logger */
   #log;
   /** @private {Corestore} Corestore namespace */
   #store;
-  /** @private {Autobase} Autobase instance */
+  /** @private {Autobase | null} Autobase instance */
   #base;
+  /** @private {boolean} Whether this instance is an indexer */
+  #isIndexer;
+  /** @private {string | null} Bootstrap key */
+  #bootstrap;
+  /** @private {Uint8Array | ArrayBuffer} Writer key buffer */
+  #writerKey;
+  /** @private {Hypercore} Writer core */
+  #writerCore;
+  /** @private {string | null} The current network nickname */
+  #networkName;
+  /** @private {string | null} The current peer's nickname */
+  #nickname;
+  /** @private {Map} Map of all peer's current nicknames */
+  #nicknames;
+  /** @private {boolean} PDBase connected flag */
+  #connected;
 
   /**
    * @param {Object} opts Options
    * @param {Logger} opts.log Logger instance
    * @param {Corestore} opts.store Corestore namespace
+   * @param {Uint8Array | ArrayBuffer | string} [opts.writer] Writer key
+   * @param {boolean} [opts.indexer=true] Whether or not to connect as an
+   * indexer (defaults to true).
+   * @param {string} [opts.bootstrap] Autobase bootstrap key
    */
-  constructor({ log, store }) {
+  constructor({ log, store, writer = null, bootstrap = null, indexer = true }) {
     super();
 
     this.#log = log;
     this.#store = store;
+    this.#isIndexer = indexer;
+    this.#writerKey = writer
+      ? utils.formatToBuffer(writer)
+      : utils.generateKey();
+    this.#writerCore = this.#store.get(this.#writerKey);
+    this.#bootstrap = bootstrap;
 
-    // There won't be a writer key if this is the first time initializing, so
-    // generate one if the arg is missing.
-    this.#base = new Autobase(this.#store, null, {
-      valueEncoding: c.json,
-      open: () => {},
-      apply: () => {},
-    });
+    this.#connected = false;
+    this.#networkName = null;
+    this.#nickname = null;
+    this.#nicknames = new Map();
+
+    this.#base = null;
   }
 
   //////////////////////////////////////////////////////////////////////////////
   // Getters
   //////////////////////////////////////////////////////////////////////////////
 
-  /** Get this peer's nickname */
+  /** @readonly Get this peer's nickname */
   get nickname() {
-    return "TODO";
+    return this.#nickname;
   }
 
-  /** Get the network's name */
+  /** @readonly Get the network's name */
   get networkName() {
-    return "TODO";
+    return this.#networkName;
+  }
+
+  /** @readonly Get nicknames map */
+  get nicknames() {
+    return this.#nicknames;
+  }
+
+  /** @readonly Get relevant information as JSON object for save data */
+  get saveData() {
+    return {
+      indexer: this.#isIndexer,
+      writerKey: utils.bufferToStr(this.#writerKey),
+    };
+  }
+
+  /** @readonly Get stringified writer key */
+  get writerKey() {
+    return utils.bufferToStr(this.#writerKey);
+  }
+
+  /** @readonly Get connected flag */
+  get connected() {
+    return this.#connected;
+  }
+
+  /** @readonly Autobase bootstrap key hex */
+  get bootstrap() {
+    return this.#bootstrap;
   }
 
   /** Get the raw Autobase view */
-  get view() {
+  get _view() {
     return this.#base.view;
+  }
+
+  /** Get the nicknames Hyperbee core */
+  get _nicknameCore() {
+    return this.#base.view.nicknames;
+  }
+
+  /** Get the networkName Hypercore */
+  get _networkNameCore() {
+    return this.#base.view.networkName;
   }
 
   //////////////////////////////////////////////////////////////////////////////
   // Public methods
   //////////////////////////////////////////////////////////////////////////////
 
-  setNickname() {}
+  /**
+   * Connect PDBase as root node to PearDrive network
+   *
+   * @returns {Promise<void>}
+   */
+  async connectAsRoot() {
+    // Noop if already connected
+    if (this.#connected) {
+      this.#log.warn("PDBase is already connected.");
+      return;
+    }
 
-  setNetworkName() {}
+    // Since this will be the root node, the writer core will become the
+    // bootstrap node
+    this.#bootstrap = utils.bufferToStr(this.#writerKey);
+
+    try {
+      // TODO initialize Autobase connection as root
+    } catch (error) {
+      this.#log.error("Error connecting PDBase as root:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Connect PDBase to PearDrive network
+   *
+   * @param {string | Uint8Array | ArrayBuffer} [bootstrap] - Autobase bootstrap
+   *   key
+   *
+   * @returns {Promise<void>}
+   */
+  async connect(bootstrap) {
+    // Noop if already connected
+    if (this.#connected) {
+      this.#log.warn("PDBase is already connected.");
+      return;
+    }
+
+    try {
+      // Set bootstrap key if provided
+      if (bootstrap) {
+        this.#bootstrap = utils.formatToStr(bootstrap);
+      }
+
+      // Ensure a bootstrap key exists
+      if (!this.#bootstrap) {
+        this.#log.error("No bootstrap key provided for PDBase connection.");
+        throw new Error("No bootstrap key provided for PDBase connection.");
+      }
+
+      // TODO initialize Autobase connection
+    } catch (error) {
+      this.#log.error("Error connecting PDBase:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Set a new nickname for this peer
+   *
+   * @param {string} newName - New peer nickname
+   */
+  setNickname(newName) {
+    // TODO
+  }
+
+  /**
+   * Set a new name for the network
+   *
+   * @param {string} newName - New network nickname
+   */
+  setNetworkName(newName) {
+    // TODO
+  }
+
+  /**
+   * Add an input autobase key to autobase
+   *
+   * @param {string | Uint8Array | ArrayBuffer} peerKey - Peer public key
+   * @param {string | Uint8Array | ArrayBuffer} inputKey - Peer's writer key
+   */
+  addInput(peerKey, inputKey) {
+    const peerKeyBuf = utils.formatToBuffer(peerKey);
+    const peerKeyStr = utils.formatToStr(peerKey);
+    // TODO
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Private methods
+  //////////////////////////////////////////////////////////////////////////////
+
+  /** Create the Autobase instance */
+  #createAutobase() {
+    // If no bootstrap key exists, this shouldn't be called.
+    if (!this.#bootstrap) {
+      this.#log.error("No bootstrap key provided for Autobase connection.");
+      throw new Error("No bootstrap key provided for Autobase connection.");
+    }
+
+    this.#base = new Autobase(this.#store, null, {
+      valueEncoding: c.json,
+
+      open(store) {
+        return {
+          nicknames: new Hyperbee(store.get("nicknames"), {
+            valueEncoding: c.json,
+          }),
+          networkName: store.get("networkName", {
+            valueEncoding: c.json,
+          }),
+        };
+      },
+
+      async apply(nodes, view, host) {
+        for (const { value } of nodes) {
+          // Handle addWriter
+          if (value && typeof value.addWriter === "string") {
+            const writerKey = Buffer.from(value.addWriter, "hex");
+            await host.addWriter(writerKey, { indexer: false });
+            continue;
+          }
+
+          // Peer nickname update
+          if (value && value.stream === "nicknames") {
+            // TODO: Handle nickname updates
+            continue;
+          }
+
+          // Network name update
+          if (value && value.stream === "networkName") {
+            // TODO: Handle network name updates
+            continue;
+          }
+          await view.append(value);
+        }
+      },
+    });
+  }
 
   //////////////////////////////////////////////////////////////////////////////
   // Lifecycle methods
@@ -81,6 +283,9 @@ export class PDBase extends ReadyResource {
 
   async _open() {
     this.#log.info("Opening PDBase...");
+
+    // Ready hypercores
+    await this.#writerCore.ready();
 
     this.#log.info("PDBase opened.");
   }

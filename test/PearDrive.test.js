@@ -1116,3 +1116,42 @@ test("PearDrive: File archiving", async (t) => {
     subtest.ok(success, "Files downloaded successfully with archive");
   });
 });
+
+test("PearDrive: PDBase connection", async (t) => {
+  const { bootstrap } = await createTestnet();
+
+  // Create peers and connect manually, add event hooks for save data updates
+  // to detect updated pdbase bootstrap key to ensure autobase consistency
+  const pd1 = await utils.createPearDrive({
+    name: "pdbase-conn-1",
+    bootstrap,
+    onError: (err) => t.fail("onError called", err),
+    indexOpts: { disableWatching: true },
+  });
+  await pd1.pd.ready();
+  const pd2 = await utils.createPearDrive({
+    name: "pdbase-conn-2",
+    bootstrap,
+    onError: (err) => t.fail("onError called", err),
+    indexOpts: { disableWatching: true },
+  });
+  await pd2.pd.ready();
+  t.teardown(async () => {
+    await pd1.pd.close();
+    await pd2.pd.close();
+  });
+
+  await t.test(
+    "PDBase bootstrap key present on pd1 update",
+    async (subtest) => {
+      pd2.pd.on(C.EVENT.SAVE_DATA_UPDATE, (data) => {
+        subtest.ok(
+          data.pdbaseBootstrapKey,
+          "PDBase bootstrap key present on pd2 update"
+        );
+      });
+
+      await pd1.pd.joinNetwork();
+    }
+  );
+});
