@@ -154,7 +154,7 @@ export class PDBase extends ReadyResource {
     this.#bootstrap = utils.bufferToStr(this.#writerKey);
 
     try {
-      // TODO initialize Autobase connection as root
+      this.#createAutobase();
     } catch (error) {
       this.#log.error("Error connecting PDBase as root:", error);
       throw error;
@@ -188,7 +188,7 @@ export class PDBase extends ReadyResource {
         throw new Error("No bootstrap key provided for PDBase connection.");
       }
 
-      // TODO initialize Autobase connection
+      this.#createAutobase();
     } catch (error) {
       this.#log.error("Error connecting PDBase:", error);
       throw error;
@@ -253,25 +253,30 @@ export class PDBase extends ReadyResource {
 
       async apply(nodes, view, host) {
         for (const { value } of nodes) {
+          if (!value) continue;
+
           // Handle addWriter
-          if (value && typeof value.addWriter === "string") {
+          if (typeof value.addWriter === "string") {
             const writerKey = Buffer.from(value.addWriter, "hex");
+            const peerPublicKey = Buffer.from(value.peerPublicKey, "hex");
             await host.addWriter(writerKey, { indexer: false });
             continue;
           }
 
-          // Peer nickname update
-          if (value && value.stream === "nicknames") {
-            // TODO: Handle nickname updates
-            continue;
-          }
+          switch (value.stream) {
+            case "nicknames":
+              // TODO, every peer nickname update updates it's own entry in the
+              // nicknames Hyperbee
+              view.break;
 
-          // Network name update
-          if (value && value.stream === "networkName") {
-            // TODO: Handle network name updates
-            continue;
+            case "networkName":
+              // TODO
+              break;
+
+            default:
+              break;
           }
-          await view.append(value);
+          //await view.append(value);
         }
       },
     });
