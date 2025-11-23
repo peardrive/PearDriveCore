@@ -35,7 +35,7 @@ export async function createNetwork({
     });
     await peer.pd.ready();
     if (i === 0) {
-      await peer.pd.joinNetwork();
+      await peer.pd.createNetwork();
     } else {
       await peer.pd.joinNetwork(peers[0].pd.networkKey);
     }

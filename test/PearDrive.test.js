@@ -94,9 +94,9 @@ test("PearDrive: Initialization", async (t) => {
     }
   });
 
-  await t.test("Join a single-node network", async (subtest) => {
+  await t.test("Create a single-node network", async (subtest) => {
     try {
-      await pd1.joinNetwork();
+      await pd1.createNetwork();
       await utils.waitFor(() => pd1.connected, 5000, 50);
       subtest.ok(pd1.connected, "PearDrive connected to single-node network");
     } catch (err) {
@@ -466,7 +466,7 @@ test("PearDrive: Peer connection events", async (t) => {
   await pdA.ready();
 
   // Create network with peer A
-  await pdA.joinNetwork();
+  await pdA.createNetwork();
   const topic = pdA.networkKey;
 
   // Ready Peer B
@@ -1151,7 +1151,7 @@ test("PearDrive: PDBase connection", async (t) => {
         );
       });
 
-      await pd1.pd.joinNetwork();
+      await pd1.pd.createNetwork();
     }
   );
 });

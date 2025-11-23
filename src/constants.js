@@ -73,6 +73,11 @@ export const EVENT = {
   DOWNLOAD_FAILED: "[PD]: in_progress_download_failed",
   /** Download completed  */
   DOWNLOAD_COMPLETED: "[PD]: in_progress_download_completed",
+
+  /** Network name change detected */
+  NETWORK_NAME_CHANGED: "[PD]: network_name_changed",
+  /** Nickname change detected */
+  NICKNAME_CHANGED: "[PD]: nickname_changed",
 };
 
 /**

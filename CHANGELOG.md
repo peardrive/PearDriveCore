@@ -1,6 +1,7 @@
 # 🚧 PearDrive Core Changelog
 
 - Replace event forwarding
+- **Breaking**: Separating createNetwork and joinNetwork, new networks must be created with createNetwork now. (joinNetwork will not properly create a new network.)
 
 ## 3.0.0
 

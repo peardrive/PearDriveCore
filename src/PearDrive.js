@@ -225,12 +225,17 @@ export default class PearDrive extends ReadyResource {
 
   /** @readonly Nickname for this peer */
   get nickname() {
-    return "TODO";
+    return this.#base.nickname;
   }
 
   /** @readonly Nickname for the network */
   get networkName() {
-    return "TODO";
+    return this.#base.networkName;
+  }
+
+  /** @readonly Get all peer nicknames */
+  get nicknames() {
+    return this.#base.nicknames;
   }
 
   /** @readonly Whether or not 'archive' mode is enabled */
@@ -301,7 +306,8 @@ export default class PearDrive extends ReadyResource {
   }
 
   /**
-   * Returns JSON object for all data needed to re-instantiate PearDrive
+   * @readonly Returns JSON object for all data needed to re-instantiate
+   * PearDrive
    *
    * @returns {Object} - Save data
    */
@@ -384,7 +390,19 @@ export default class PearDrive extends ReadyResource {
    * @param {string} networkName - New network name
    */
   setNetworkName(networkName) {
-    // TODO: Implement network name setting
+    this.#log.info(`Setting network name to "${networkName}"...`);
+
+    // Noop if PDBase not connected
+    if (!this.#base.connected) {
+      this.#log.warn("PDBase is not connected, can't set network name.");
+      return;
+    }
+
+    try {
+      this.#base.setNetworkName(networkName);
+    } catch (error) {
+      this.#log.error("Error setting network name:", error);
+    }
   }
 
   /**
@@ -397,13 +415,14 @@ export default class PearDrive extends ReadyResource {
       "Creating new network with key",
       utils.formatToStr(this.networkKey)
     );
+
     const discovery = this._swarm.join(this._networkKey, {
       server: true,
       client: true,
     });
     await discovery.flushed();
 
-    // TODO: Set up PDBase
+    await this.#base.connectAsRoot();
     this.connected = true;
     this.#emitSaveDataUpdate();
   }
@@ -951,7 +970,7 @@ export default class PearDrive extends ReadyResource {
     // Start PDBase (if not already started)
     if (this.#base.bootstrap && !this.#base.started) {
       try {
-        // TODO
+        await this.#base.connect();
       } catch (error) {
         this.#log.error("Failed to start PDBase", error);
       }

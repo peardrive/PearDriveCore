@@ -21,6 +21,7 @@ import Hyperbee from "hyperbee";
 import Logger from "@hopets/logger";
 import c from "compact-encoding";
 
+import * as C from "./constants.js";
 import * as utils from "./utils/index.js";
 
 export class PDBase extends ReadyResource {
@@ -229,7 +230,12 @@ export class PDBase extends ReadyResource {
   // Private methods
   //////////////////////////////////////////////////////////////////////////////
 
-  /** Create the Autobase instance */
+  /**
+   * Create the Autobase instance
+   *
+   * @throws {Error} If no bootstrap key is set, or any other error occurs
+   * creating the Autobase
+   */
   #createAutobase() {
     // If no bootstrap key exists, this shouldn't be called.
     if (!this.#bootstrap) {
@@ -254,23 +260,37 @@ export class PDBase extends ReadyResource {
       async apply(nodes, view, host) {
         for (const { value } of nodes) {
           if (!value) continue;
+          this.#log.debug("PDBase applying autobase entry:", value);
 
           // Handle addWriter
           if (typeof value.addWriter === "string") {
+            this.#log.debug("Adding new writer to Autobase:", value.addWriter);
             const writerKey = Buffer.from(value.addWriter, "hex");
-            const peerPublicKey = Buffer.from(value.peerPublicKey, "hex");
+            const peerPublicKey = Buffer.from(value.peerKey, "hex");
             await host.addWriter(writerKey, { indexer: false });
             continue;
           }
 
           switch (value.stream) {
             case "nicknames":
+              this.#log.debug(
+                "Updating peer nickname:",
+                value.peerKey,
+                value.nickname
+              );
               // TODO, every peer nickname update updates it's own entry in the
               // nicknames Hyperbee
-              view.break;
+
+              // Emit change event
+              this.emit(C.EVENT.NICKNAME_CHANGED);
+              break;
 
             case "networkName":
-              // TODO
+              this.#log.debug("Updating network name:", value.networkName);
+              // TODO update network name
+
+              // Emit change event
+              this.emit(C.EVENT.NETWORK_NAME_CHANGED);
               break;
 
             default:
@@ -280,6 +300,18 @@ export class PDBase extends ReadyResource {
         }
       },
     });
+  }
+
+  /**
+   * Get peer key from writer key
+   *
+   * @param {Uint8Array | ArrayBuffer | string} writerKey - Writer key
+   * @returns {string | null} Peer public key
+   */
+  #getPeerKeyFromWriter(writerKey) {
+    const writerKeyStr = utils.formatToStr(writerKey);
+    // TODO
+    return null;
   }
 
   //////////////////////////////////////////////////////////////////////////////
