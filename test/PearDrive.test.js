@@ -1144,14 +1144,66 @@ test("PearDrive: PDBase connection", async (t) => {
   await t.test(
     "PDBase bootstrap key present on pd1 update",
     async (subtest) => {
-      pd2.pd.on(C.EVENT.SAVE_DATA_UPDATE, (data) => {
+      let hookFired = false;
+      pd2.pd.on(C.EVENT.PDBASE_CONNECTED, (data) => {
+        hookFired = true;
         subtest.ok(
-          data.pdbaseBootstrapKey,
+          data.bootstrapKey,
           "PDBase bootstrap key present on pd2 update"
         );
       });
 
+      // Create network on pd1, join on pd2
       await pd1.pd.createNetwork();
+      await pd2.pd.joinNetwork(pd1.pd.networkKey);
+
+      // 5 second timeout
+      await utils.wait(5);
+      if (!hookFired)
+        subtest.fail("PDBase connected event did not fire on pd2");
     }
   );
+
+  await t.test("PDBase bootstrap consistency", async (subtest) => {
+    subtest.is(
+      pd1.pd.saveData.base.bootstrap,
+      pd2.pd.saveData.base.bootstrap,
+      "PDBase network keys match between peers"
+    );
+  });
+
+  await t.test("Network name update propagation", async (subtest) => {
+    subtest.plan(2);
+
+    let hook1Fired = false;
+    let hook2Fired = false;
+    const newNickname = "NewNickname";
+
+    // Listen on both peers for network name change
+    pd1.pd.on(C.EVENT.NETWORK_NAME_CHANGED, (data) => {
+      hook1Fired = true;
+      subtest.is(
+        data.networkName,
+        newNickname,
+        "Nickname update observed on pd1"
+      );
+    });
+    pd2.pd.on(C.EVENT.NETWORK_NAME_CHANGED, (data) => {
+      hook2Fired = true;
+      subtest.is(
+        data.networkName,
+        newNickname,
+        "Nickname update propagated to pd2"
+      );
+    });
+
+    await pd1.pd.setNetworkName(newNickname);
+
+    // 5 second timeout
+    await utils.wait(5);
+    if (!hook1Fired)
+      subtest.fail("NETWORK_NAME_CHANGED event did not fire on pd1");
+    if (!hook2Fired)
+      subtest.fail("NETWORK_NAME_CHANGED event did not fire on pd2");
+  });
 });
