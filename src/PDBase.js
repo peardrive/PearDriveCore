@@ -119,6 +119,11 @@ export class PDBase extends ReadyResource {
     return this.#bootstrap;
   }
 
+  /** @readonly Whether or not this base is set as an indexer */
+  get isIndexer() {
+    return this.#isIndexer;
+  }
+
   /** Get the raw Autobase view */
   get _view() {
     return this.#base.view;
@@ -154,8 +159,15 @@ export class PDBase extends ReadyResource {
     // bootstrap node
     this.#bootstrap = utils.bufferToStr(this.#writerKey);
 
+    // Init and connect autobase
     try {
       this.#createAutobase();
+      await this.#base.ready();
+      this.#connected = true;
+      this.emit(C.EVENT.PDBASE_CONNECTED, {
+        bootstrapKey: this.#bootstrap,
+        writerKey: utils.bufferToStr(this.#writerKey),
+      });
     } catch (error) {
       this.#log.error("Error connecting PDBase as root:", error);
       throw error;
@@ -190,6 +202,13 @@ export class PDBase extends ReadyResource {
       }
 
       this.#createAutobase();
+      await this.#base.ready();
+      this.#connected = true;
+
+      this.emit(C.EVENT.PDBASE_CONNECTED, {
+        bootstrapKey: this.#bootstrap,
+        writerKey: utils.bufferToStr(this.#writerKey),
+      });
     } catch (error) {
       this.#log.error("Error connecting PDBase:", error);
       throw error;
@@ -201,8 +220,12 @@ export class PDBase extends ReadyResource {
    *
    * @param {string} newName - New peer nickname
    */
-  setNickname(newName) {
-    // TODO
+  async setNickname(newName) {
+    await this.#base.append({
+      stream: "nicknames",
+      peerKey: utils.bufferToStr(this.#writerKey),
+      nickname: newName,
+    });
   }
 
   /**
@@ -210,8 +233,11 @@ export class PDBase extends ReadyResource {
    *
    * @param {string} newName - New network nickname
    */
-  setNetworkName(newName) {
-    // TODO
+  async setNetworkName(newName) {
+    await this.#base.append({
+      stream: "networkName",
+      networkName: newName,
+    });
   }
 
   /**

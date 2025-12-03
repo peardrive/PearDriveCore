@@ -47,10 +47,16 @@ export default class PearDrive extends ReadyResource {
   #store;
   /** @private {IndexManager} Index manager for watching network/local files */
   #im;
-  /** @private {PDBase} PDBase for interfacing with shared network info */
+  /**
+   * @private {PDBase | null} PDBase for interfacing with shared network info
+   */
   #base;
   /** @private {Array} - Holds disposers for forwarded event listeners */
   #forwardDisposers = [];
+  /** @private {boolean} - Whether PDBase is currently initializing */
+  #isBaseInitializing = false;
+  /** @private {Object | null} - Hold base opts for PDBase (for reloading) */
+  #initBaseOpts = null;
   /** @private {Hyperswarm} Hyperswarm for all nodes on network */
   _swarm;
   /** @private {Map<string, RPC>} RPC PearDrive connections */
@@ -125,7 +131,7 @@ export default class PearDrive extends ReadyResource {
     },
     indexOpts = {},
     networkKey,
-    baseOpts = {},
+    baseOpts = null,
     unfinishedDownloads = [],
   }) {
     super();
@@ -176,6 +182,11 @@ export default class PearDrive extends ReadyResource {
     this._downloads = new Map();
     this._inProgress = {};
 
+    // PDBase isn't initialized until the network connect process
+    this.#base = null;
+    this.#isBaseInitializing = false;
+    this.#initBaseOpts = baseOpts;
+
     // Save data
     this._corestorePath = corestorePath;
     this._watchPath = watchPath;
@@ -195,12 +206,6 @@ export default class PearDrive extends ReadyResource {
         return await this._sendFileRelease(peerId, filePath);
       },
       unfinishedDownloads,
-    });
-
-    // Set up PearDriveBase
-    this.#base = new PDBase({
-      store: this.#store.namespace("peardrive:pdbase"),
-      log: this.#log,
     });
 
     // Set up event forwarding
@@ -292,6 +297,15 @@ export default class PearDrive extends ReadyResource {
   /** @readonly index options */
   get indexOpts() {
     return { ...this._indexOpts };
+  }
+
+  /** @readonly base opts */
+  get baseOpts() {
+    return {
+      bootstrap: this.#base.bootstrap,
+      writerKey: this.#base.writerKey,
+      indexer: this.#base.isIndexer,
+    };
   }
 
   /**
@@ -425,6 +439,8 @@ export default class PearDrive extends ReadyResource {
     await this.#base.connectAsRoot();
     this.connected = true;
     this.#emitSaveDataUpdate();
+
+    this.#log.info("New network created.");
   }
 
   /**
@@ -452,6 +468,13 @@ export default class PearDrive extends ReadyResource {
     await discovery.flushed();
     this.connected = true;
     this.#emitSaveDataUpdate();
+
+    // If given init baseOpts in PearDrive constructor, connect to PDBase now
+    if (this.#initBaseOpts && !this.#base) {
+      // TODO connect PDBase
+    }
+
+    this.#log.info("Joined network.");
   }
 
   /**
@@ -952,6 +975,7 @@ export default class PearDrive extends ReadyResource {
     }
 
     // Retrieve PDBase bootstrap from peer (if local has no bootstrap)
+    // Unless creating a new network, this is where PDBase should be initialized
     if (!this.#base.bootstrap) {
       try {
         const bootstrap = await this._sendPDBaseBootstrapRequest(peerId);
@@ -1240,6 +1264,7 @@ export default class PearDrive extends ReadyResource {
       archive: this.archive,
       indexOpts: this.indexOpts,
       queuedDownloads: this.#buildUnfinishedDownloads(),
+      baseOpts: this.#base ? this.baseOpts : undefined,
     };
   }
 
@@ -1304,7 +1329,6 @@ export default class PearDrive extends ReadyResource {
     // Ready resources
     await this.#store.ready();
     await this.#im.ready();
-    await this.#base.ready();
 
     // Wire up IM event listeners
     this.#im.on(C.EVENT.SAVE_DATA_UPDATE, () => {
@@ -1344,7 +1368,7 @@ export default class PearDrive extends ReadyResource {
     }
     this.#forwardDisposers.length = 0;
 
-    await this.#base.close();
+    this.#base && (await this.#base.close());
     await this.#im.close();
     this._swarm.destroy();
     await this.#store.close();
