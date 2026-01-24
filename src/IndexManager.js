@@ -273,11 +273,12 @@ export class IndexManager extends ReadyResource {
 
   /** Close IndexManager gracefully */
   async close() {
-    this.#log.info("Closing IndexManager...");
-    await this.localIndex.close();
-
-    // TODO finish closing hyperdrives
-    this.#log.info("IndexManager closed.");
+    this.#log.info("Closing IndexManager via public API...");
+    
+    // Use the ReadyResource superclass close() which calls our _close() method
+    await super.close();
+    
+    this.#log.info("IndexManager closed via public API.");
   }
 
   async getLocalIndexInfo() {
@@ -641,15 +642,35 @@ export class IndexManager extends ReadyResource {
     }
 
     try {
+      // Clear blob data with retry logic
       if (download.id && download.blobs) {
-        await download.blobs.clear(download.id).catch((err) => {
-          this.#log.debug(`Failed to clear blob data for ${path}`, err);
-        });
+        let blobCleared = false;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            await download.blobs.clear(download.id);
+            this.#log.info(`Successfully cleared blob data for ${path} (attempt ${attempt}/3)`);
+            blobCleared = true;
+            break;
+          } catch (err) {
+            this.#log.error(`Blob clear attempt ${attempt}/3 failed for ${path}:`, err);
+            if (attempt < 3) {
+              // Wait before retry: 1s, 2s, then give up
+              await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            }
+          }
+        }
+        
+        if (!blobCleared) {
+          this.#log.error(`CRITICAL: Blob data cleanup failed after 3 attempts for ${path} - manual cleanup may be required`);
+          this.emit(C.EVENT.ERROR, new Error(`Cleanup failed for ${path}: blob data not cleared`));
+        }
       }
 
+      // Close hypercore handle
       if (download.core) {
         await download.core.close();
       }
+      
       this.#log.info(`Download blob closed for file: ${path}`);
     } catch (err) {
       this.#log.error(`Failed to close download blob for file: ${path}`, err);
@@ -686,15 +707,35 @@ export class IndexManager extends ReadyResource {
     }
 
     try {
+      // Clear blob data with retry logic
       if (upload.id && upload.blobs) {
-        await upload.blobs.clear(upload.id).catch((err) => {
-          this.#log.debug(`Failed to clear upload blob data for ${path}`, err);
-        });
+        let blobCleared = false;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            await upload.blobs.clear(upload.id);
+            this.#log.info(`Successfully cleared upload blob data for ${path} (attempt ${attempt}/3)`);
+            blobCleared = true;
+            break;
+          } catch (err) {
+            this.#log.error(`Upload blob clear attempt ${attempt}/3 failed for ${path}:`, err);
+            if (attempt < 3) {
+              // Wait before retry: 1s, 2s, then give up
+              await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            }
+          }
+        }
+        
+        if (!blobCleared) {
+          this.#log.error(`CRITICAL: Upload blob data cleanup failed after 3 attempts for ${path} - manual cleanup may be required`);
+          this.emit(C.EVENT.ERROR, new Error(`Upload cleanup failed for ${path}: blob data not cleared`));
+        }
       }
 
+      // Close hypercore handle
       if (upload.core) {
         await upload.core.close();
       }
+      
       this.#log.info(`Upload blob closed for file: ${path}`);
     } catch (err) {
       this.#log.error(`Failed to close upload blob for file: ${path}`, err);
@@ -1276,14 +1317,36 @@ export class IndexManager extends ReadyResource {
       this.remoteIndexes.delete(peerId);
     }
 
-    for (const [dPath, { drive }] of this._uploads.entries()) {
-      this.#log.debug(`Closing upload drive for ${dPath}`);
-      await drive.close();
+    // Close all upload blobs and their corestore namespaces
+    for (const [dPath, { store, core, blobs }] of this._uploads.entries()) {
+      this.#log.debug(`Closing upload blob for ${dPath}`);
+      try {
+        if (core) {
+          await core.close();
+        }
+        if (store) {
+          await store.close();
+        }
+        this.#log.debug(`Upload blob closed successfully for ${dPath}`);
+      } catch (err) {
+        this.#log.error(`Failed to close upload blob for ${dPath}:`, err);
+      }
     }
 
-    for (const [dPath, { drive }] of this._downloads.entries()) {
-      this.#log.debug(`Closing download drive for ${dPath}`);
-      await drive.close();
+    // Close all download blobs and their corestore namespaces
+    for (const [dPath, { store, core, blobs }] of this._downloads.entries()) {
+      this.#log.debug(`Closing download blob for ${dPath}`);
+      try {
+        if (core) {
+          await core.close();
+        }
+        if (store) {
+          await store.close();
+        }
+        this.#log.debug(`Download blob closed successfully for ${dPath}`);
+      } catch (err) {
+        this.#log.error(`Failed to close download blob for ${dPath}:`, err);
+      }
     }
 
     this.#log.info("IndexManager closed successfully!");
