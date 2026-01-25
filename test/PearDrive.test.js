@@ -479,12 +479,16 @@ test("PearDrive: Peer connection events", async (t) => {
   const pdB = B.pd;
   await pdB.ready();
 
+  // Track which instances have been closed to avoid double-closing
+  let pdAClosed = false;
+  let pdBClosed = false;
+
   t.teardown(async () => {
     try {
-      await pdB.close();
+      if (!pdBClosed && pdB) await pdB.close();
     } catch {}
     try {
-      await pdA.close();
+      if (!pdAClosed && pdA) await pdA.close();
     } catch {}
   });
 
@@ -545,6 +549,7 @@ test("PearDrive: Peer connection events", async (t) => {
 
       // Leave by closing peer B
       await pdB.close();
+      pdBClosed = true;
 
       await utils.wait(5);
       if (!aSawDisconnect)
@@ -595,6 +600,7 @@ test("PearDrive: Peer connection events", async (t) => {
 
       // Now have A leave
       await pdA.close();
+      pdAClosed = true;
 
       // 5 second timeout before fail
       await utils.wait(5);

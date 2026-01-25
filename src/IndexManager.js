@@ -18,11 +18,13 @@ import Hyperbee from "hyperbee";
 import Hyperblobs from "hyperblobs";
 import fs from "fs";
 import ReadyResource from "ready-resource";
+import NamespaceCleanup from "./NamespaceCleanup.js";
 import forward from "@hopets/forward";
 
 import * as C from "./constants.js";
 import * as utils from "./utils/index.js";
 import LocalFileIndex from "./LocalFileIndex.js";
+
 
 /*******************************************************************************
  * IndexManager
@@ -106,6 +108,9 @@ export class IndexManager extends ReadyResource {
     this._sendFileRequest = sendFileRequest;
     this._sendFileRelease = sendFileRelease;
     this.#queuedDownloads = new Set(queuedDownloads);
+
+    // Initialize cleanup utility for namespace management
+    this._cleanup = new NamespaceCleanup(this._store, watchPath, log, this._uploads, this._downloads);
 
     // Set up event forwarding
     this.#forwardDisposers.push(
@@ -385,7 +390,7 @@ export class IndexManager extends ReadyResource {
 
     const blobs = new Hyperblobs(core);
 
-    // Stream file into blobs (no buffering entire file)
+    // Stream file into blobs using native Hyperblobs approach
     const absPath = utils.createAbsPath(filePath, this.watchPath);
     const rs = fs.createReadStream(absPath);
     const ws = blobs.createWriteStream();
@@ -603,9 +608,27 @@ export class IndexManager extends ReadyResource {
       this.#log.debug(`All transfers for ${path} completed, closing drive`);
       if (direction === "download") {
         await this.closeDownloadBlob(path, true);
+        // Targeted cleanup: clean up namespace for completed download
+        try {
+          await this._cleanup.performCleanup(path, { 
+            cleanupUploads: false, 
+            cleanupDownloads: true 
+          });
+        } catch (err) {
+          this.#log.error(`Failed to cleanup download namespace for ${path}:`, err);
+        }
       }
       if (direction === "upload") {
         await this.closeUploadBlob(path, true);
+        // Targeted cleanup: clean up namespace for completed upload
+        try {
+          await this._cleanup.performCleanup(path, { 
+            cleanupUploads: true, 
+            cleanupDownloads: false 
+          });
+        } catch (err) {
+          this.#log.error(`Failed to cleanup upload namespace for ${path}:`, err);
+        }
       }
     } else {
       this.#log.debug(`Transfers still in progress for ${path}`);
@@ -808,7 +831,7 @@ export class IndexManager extends ReadyResource {
    * @returns {Promise<void>}
    */
   async #executeDownloadBlob(filePath, id) {
-    this.#log.info(`Executing Hyperblobs download for: ${filePath}`);
+    this.#log.info(`Executing chunked Hyperblobs download for: ${filePath}`);
 
     const download = this._downloads.get(utils.asDrivePath(filePath));
     const { blobs } = download;
@@ -817,7 +840,7 @@ export class IndexManager extends ReadyResource {
       throw new Error(`No download blob found for file: ${filePath}`);
     }
 
-    // Ensure parent folder exists
+    // Ensure parent folder exists (PRESERVED)
     try {
       const absPath = utils.createAbsPath(filePath, this.watchPath);
       utils.createParentFolder(absPath);
@@ -829,98 +852,75 @@ export class IndexManager extends ReadyResource {
       throw err;
     }
 
-    // Create read/write streams
-    const rs = blobs.createReadStream(id, {
-      wait: true,
-      timeout: 0,
-    });
-    const ws = fs.createWriteStream(
-      utils.createAbsPath(filePath, this.watchPath)
-    );
-
-    // Monitor progress
+    const outputPath = utils.createAbsPath(filePath, this.watchPath);
     const totalBytes = id.byteLength;
-    let downloadedBytes = 0;
-
-    // Activity timer for managing timeouts
-    let inactivityTimer = null;
-    let INACTIVITY_TIMEOUT = 30000;
-
-    /** Reset inactivity timer (on data) */
-    const resetInactivityTimer = () => {
-      if (inactivityTimer) {
-        clearTimeout(inactivityTimer);
+    
+    // Check for existing partial file to enable resumption
+    let startOffset = 0;
+    let writeFlags = 'w'; // Default: write new file
+    
+    try {
+      const stats = await fs.stat(outputPath);
+      if (stats.size < totalBytes) {
+        // Partial file exists - resume from where we left off
+        startOffset = stats.size;
+        writeFlags = 'a'; // Append mode to continue existing file
+        this.#log.info(`Resuming download from byte ${startOffset} of ${totalBytes} for ${filePath}`);
+      } else if (stats.size === totalBytes) {
+        // File already complete
+        this.#log.info(`File already complete: ${filePath}`);
+        return;
+      } else {
+        // File is larger than expected - corrupted, restart
+        this.#log.warn(`File size mismatch for ${filePath}, restarting download`);
+        startOffset = 0;
+        writeFlags = 'w';
       }
-      inactivityTimer = setTimeout(() => {
-        const error = new Error(
-          "Download timed out due to inactivity" +
-            `(${downloadedBytes}/${totalBytes} bytes received)`
-        );
-        rs.destroy(error);
-        ws.destroy(error);
-      }, INACTIVITY_TIMEOUT);
-    };
+    } catch (err) {
+      // No existing file - start fresh
+      startOffset = 0;
+      writeFlags = 'w';
+    }
 
-    // Configure read/write stream events, execute download
+    // Create streams that cooperate with Hypercore's built-in resumption
+    const rs = blobs.createReadStream(id, { 
+      start: startOffset,  // Tell Hypercore where to start reading
+      wait: true,          // Wait for blocks to be downloaded from peers
+      timeout: 0           // Let Hypercore handle timeouts and retries
+    });
+    
+    const ws = fs.createWriteStream(outputPath, { flags: writeFlags });
+    
+    let downloadedBytes = startOffset;
+    
+    // Track progress as data flows through
+    rs.on('data', (chunk) => {
+      downloadedBytes += chunk.length;
+      
+      const currentPercent = Math.floor((downloadedBytes / totalBytes) * 100);
+      const mbDownloaded = Math.round(downloadedBytes / (1024 * 1024));
+      const mbTotal = Math.round(totalBytes / (1024 * 1024));
+      
+      this.emit(C.EVENT.DOWNLOAD_PROGRESS, {
+        filePath,
+        mbDownloaded,
+        mbTotal,
+      });
+    });
+    
+    // Let Hypercore handle all the complexity (peers, retries, network changes)
     await new Promise((resolve, reject) => {
-      // Start the inactivity timer
-      resetInactivityTimer();
-
-      ws.once("error", (err) => {
-        if (inactivityTimer) clearTimeout(inactivityTimer);
-        reject(err);
-      });
-
-      rs.once("error", (err) => {
-        if (inactivityTimer) clearTimeout(inactivityTimer);
-        reject(err);
-      });
-
-      let prevPercent = 0;
-
-      rs.on("data", (chunk) => {
-        downloadedBytes += chunk.length;
-
-        // Reset inactivity timer on every data chunk
-        resetInactivityTimer();
-
-        // Handle download progress tick
-        const curPercent = Math.floor((downloadedBytes / totalBytes) * 100);
-        if (curPercent >= prevPercent + 1) {
-          // Log every 1% by checking against lastLoggedPercent
-          const mbDownloaded = Math.round(downloadedBytes / 1024 / 1024);
-          const mbTotal = Math.round(totalBytes / 1024 / 1024);
-          this.#log.debug(
-            `Download progress: ${curPercent}% (${mbDownloaded}MB/${mbTotal}MB)`
-          );
-          prevPercent = curPercent;
-
-          // Emit progress event
-          this.emit(C.EVENT.DOWNLOAD_PROGRESS, {
-            filePath,
-            mbDownloaded,
-            mbTotal,
-          });
-        }
-      });
-
-      ws.once("close", () => {
-        if (inactivityTimer) clearTimeout(inactivityTimer);
-
+      ws.once('close', () => {
         if (downloadedBytes !== totalBytes) {
-          reject(
-            new Error(
-              `Incomplete download: ${downloadedBytes}/${totalBytes} bytes`
-            )
-          );
+          reject(new Error(`Incomplete download: ${downloadedBytes}/${totalBytes} bytes`));
         } else {
-          this.#log.info(
-            `Download complete and verified: ${downloadedBytes} bytes`
-          );
+          this.#log.info(`Download complete with resumption support: ${downloadedBytes} bytes`);
           resolve();
         }
       });
-
+      
+      ws.once('error', reject);
+      rs.once('error', reject);
       rs.pipe(ws);
     });
   }
