@@ -8,8 +8,11 @@
  * (at your option) any later version.
  */
 
-const fs = require("fs").promises;
-const utils = require("./utils.js");
+import fs from "fs";
+import * as utils from "./utils/index.js";
+
+// Use fs.promises for async file operations
+const fsPromises = fs.promises;
 
 /**
  * Utility class for cleaning up corestore namespaces to prevent storage bloat.
@@ -213,8 +216,8 @@ class NamespaceCleanup {
       }
       
       // Import the streams utility from hypercore-storage
-      const streams = require('hypercore-storage/lib/streams');
-      const stream = streams.createAliasStream(db, view, prefix);
+      const { createAliasStream } = await import('hypercore-storage/lib/streams.js');
+      const stream = createAliasStream(db, view, prefix);
       
       for await (const entry of stream) {
         if (entry.alias && entry.alias.startsWith(prefix)) {
@@ -248,7 +251,7 @@ class NamespaceCleanup {
     // Check file system state to determine cleanup eligibility
     try {
       const absPath = utils.createAbsPath(filePath, this._watchPath);
-      const stats = await fs.stat(absPath);
+      const stats = await fsPromises.stat(absPath);
       
       if (type === "upload:blobs") {
         // For uploads: cleanup if file is old enough
@@ -297,4 +300,4 @@ class NamespaceCleanup {
   }
 }
 
-module.exports = NamespaceCleanup;
+export default NamespaceCleanup;
